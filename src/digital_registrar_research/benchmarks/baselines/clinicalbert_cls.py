@@ -58,6 +58,22 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 SPLITS_PATH = SPLITS_JSON
 
+# Cases counted as "included" in the study scope: true cancer excision
+# reports whose top-level cancer_category is one of the implemented organs.
+# Everything else ("others", null, non-excision) has empty cancer_data and
+# provides no signal for per-field classification heads.
+INCLUDED_CATEGORIES = {
+    "breast", "lung", "colorectal", "prostate", "esophagus",
+    "pancreas", "thyroid", "cervix", "liver", "stomach",
+}
+
+
+def is_included(annotation: dict) -> bool:
+    return (
+        bool(annotation.get("cancer_excision_report"))
+        and annotation.get("cancer_category") in INCLUDED_CATEGORIES
+    )
+
 
 # --- Dataset ------------------------------------------------------------------
 
@@ -140,10 +156,19 @@ def build_field_vocab() -> tuple[dict[str, dict[str, int]], dict[str, int]]:
     return field_to_idx, card
 
 
-def load_cases(split_name: str) -> list[dict]:
+def load_cases(split_name: str, included_only: bool = False) -> list[dict]:
     with SPLITS_PATH.open(encoding="utf-8") as f:
         split = json.load(f)
-    return split[split_name]
+    cases = split[split_name]
+    if not included_only:
+        return cases
+    kept = []
+    for c in cases:
+        with open(c["annotation_path"], encoding="utf-8") as f:
+            ann = json.load(f)
+        if is_included(ann):
+            kept.append(c)
+    return kept
 
 
 def train(args) -> None:
@@ -153,8 +178,11 @@ def train(args) -> None:
     opt = torch.optim.AdamW(model.parameters(), lr=2e-5)
     loss_fn = nn.CrossEntropyLoss()
 
+    cases = load_cases("train", included_only=args.included_only)
+    print(f"Training on {len(cases)} cases"
+          f"{' (included-only)' if args.included_only else ''}")
     train_loader = DataLoader(
-        PathologyCases(load_cases("train"), tok, field_to_idx),
+        PathologyCases(cases, tok, field_to_idx),
         batch_size=4, shuffle=True, collate_fn=collate,
     )
 
@@ -179,7 +207,9 @@ def train(args) -> None:
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     torch.save({"state": model.state_dict(),
                 "field_to_idx": field_to_idx,
-                "card": card}, args.ckpt)
+                "card": card,
+                "included_only": args.included_only,
+                "n_train_cases": len(cases)}, args.ckpt)
     print(f"Saved checkpoint to {args.ckpt}")
 
 
@@ -229,6 +259,13 @@ def main() -> None:
     ap.add_argument("--epochs", type=int, default=5)
     ap.add_argument("--ckpt", default="ckpts/clinicalbert_cls.pt")
     ap.add_argument("--out", default="../results/clinicalbert_cls")
+    ap.add_argument(
+        "--included-only", action="store_true",
+        help="Train only on cases where cancer_excision_report is True "
+             "and cancer_category is one of the implemented organs "
+             "(drops 'others' / null / non-excision cases that have "
+             "empty cancer_data).",
+    )
     args = ap.parse_args()
 
     if args.phase == "train":
