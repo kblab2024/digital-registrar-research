@@ -1,0 +1,914 @@
+{
+  "train": [
+    {
+      "id": "tcga1_10",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_10_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_10.txt",
+      "cancer_category": "others"
+    },
+    {
+      "id": "tcga1_16",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_16_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_16.txt",
+      "cancer_category": "others"
+    },
+    {
+      "id": "tcga1_22",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_22_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_22.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_9",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_9_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_9.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_25",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_25_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_25.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_27",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_27_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_27.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_48",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_48_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_48.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_30",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_30_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_30.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_23",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_23_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_23.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_37",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_37_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_37.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_15",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_15_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_15.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_29",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_29_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_29.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_24",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_24_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_24.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_12",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_12_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_12.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_5",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_5_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_5.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_43",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_43_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_43.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_44",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_44_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_44.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_6",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_6_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_6.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_19",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_19_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_19.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_2",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_2_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_2.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_14",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_14_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_14.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_47",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_47_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_47.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_38",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_38_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_38.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_36",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_36_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_36.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_13",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_13_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_13.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_31",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_31_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_31.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_33",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_33_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_33.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_21",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_21_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_21.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_46",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_46_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_46.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_26",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_26_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_26.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_40",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_40_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_40.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_3",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_3_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_3.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_55",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_55_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_55.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_32",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_32_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_32.txt",
+      "cancer_category": "null"
+    },
+    {
+      "id": "tcga2_6",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_6_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_6.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_46",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_46_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_46.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_5",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_5_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_5.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_50",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_50_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_50.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_8",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_8_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_8.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_11",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_11_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_11.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_19",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_19_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_19.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_48",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_48_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_48.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_18",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_18_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_18.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_42",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_42_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_42.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_10",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_10_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_10.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_22",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_22_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_22.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_36",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_36_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_36.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_4",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_4_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_4.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_47",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_47_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_47.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_26",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_26_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_26.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_39",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_39_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_39.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_29",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_29_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_29.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_31",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_31_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_31.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_9",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_9_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_9.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_12",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_12_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_12.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_43",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_43_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_43.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_27",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_27_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_27.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_21",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_21_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_21.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_45",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_45_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_45.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_23",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_23_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_23.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_20",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_20_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_20.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_30",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_30_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_30.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_41",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_41_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_41.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_37",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_37_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_37.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_25",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_25_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_25.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_3",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_3_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_3.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_33",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_33_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_33.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga3_43",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_43_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_43.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_26",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_26_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_26.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_37",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_37_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_37.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_38",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_38_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_38.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_10",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_10_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_10.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_23",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_23_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_23.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_30",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_30_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_30.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_15",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_15_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_15.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_40",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_40_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_40.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_46",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_46_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_46.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_31",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_31_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_31.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_3",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_3_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_3.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_57",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_57_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_57.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_12",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_12_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_12.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_51",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_51_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_51.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_7",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_7_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_7.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_48",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_48_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_48.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_16",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_16_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_16.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_28",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_28_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_28.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_49",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_49_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_49.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_6",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_6_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_6.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_44",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_44_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_44.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_9",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_9_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_9.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_20",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_20_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_20.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_42",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_42_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_42.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_45",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_45_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_45.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_32",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_32_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_32.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_22",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_22_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_22.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_35",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_35_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_35.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_36",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_36_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_36.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_17",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_17_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_17.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_39",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_39_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_39.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_33",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_33_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_33.txt",
+      "cancer_category": "stomach"
+    }
+  ],
+  "test": [
+    {
+      "id": "tcga1_7",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_7_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_7.txt",
+      "cancer_category": "others"
+    },
+    {
+      "id": "tcga1_49",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_49_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_49.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_35",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_35_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_35.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_50",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_50_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_50.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_45",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_45_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_45.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_18",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_18_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_18.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_39",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_39_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_39.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_34",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_34_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_34.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_1",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_1_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_1.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_20",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_20_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_20.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_17",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_17_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_17.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_41",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_41_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_41.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_4",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_4_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_4.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_28",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_28_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_28.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_11",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_11_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_11.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_8",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_8_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_8.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga1_42",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\1\\tcga1_42_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga1\\tcga1_42.txt",
+      "cancer_category": "breast"
+    },
+    {
+      "id": "tcga2_40",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_40_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_40.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_24",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_24_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_24.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_13",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_13_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_13.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_34",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_34_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_34.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_35",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_35_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_35.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_17",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_17_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_17.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_49",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_49_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_49.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_32",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_32_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_32.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_16",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_16_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_16.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_44",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_44_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_44.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_7",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_7_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_7.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_28",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_28_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_28.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_2",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_2_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_2.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_14",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_14_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_14.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_15",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_15_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_15.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_38",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_38_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_38.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga2_1",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\2\\tcga2_1_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga2\\tcga2_1.txt",
+      "cancer_category": "colorectal"
+    },
+    {
+      "id": "tcga3_5",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_5_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_5.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_27",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_27_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_27.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_14",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_14_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_14.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_52",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_52_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_52.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_53",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_53_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_53.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_19",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_19_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_19.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_8",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_8_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_8.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_25",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_25_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_25.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_56",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_56_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_56.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_29",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_29_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_29.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_50",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_50_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_50.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_34",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_34_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_34.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_41",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_41_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_41.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_18",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_18_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_18.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_54",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_54_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_54.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_4",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_4_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_4.txt",
+      "cancer_category": "esophagus"
+    },
+    {
+      "id": "tcga3_24",
+      "annotation_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_annotation_20251117\\3\\tcga3_24_annotation.json",
+      "report_path": "D:\\localcode\\digital-registrar-research\\data\\tcga_dataset_20251117\\tcga3\\tcga3_24.txt",
+      "cancer_category": "esophagus"
+    }
+  ],
+  "seed": 20251117,
+  "total": 151
+}
