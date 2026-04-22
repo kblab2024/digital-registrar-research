@@ -29,6 +29,10 @@ import torch
 from digital_registrar_research import paths
 from digital_registrar_research.benchmarks.baselines import clinicalbert_cls
 from digital_registrar_research.benchmarks.data import split as splits_builder
+from digital_registrar_research.benchmarks.eval.metrics import (
+    aggregate_to_csv,
+    summary_table,
+)
 
 
 def pick_device() -> str:
@@ -45,6 +49,22 @@ def rebuild_splits(annotations: Path, dataset: Path) -> None:
     splits_builder.GOLD_ROOT = annotations
     splits_builder.REPORT_ROOT = dataset
     splits_builder.main()
+
+
+def compute_metrics(preds_dir: Path, gold_root: Path, splits_path: Path,
+                    method: str = "clinicalbert_cls") -> None:
+    """Score the predictions under `preds_dir` against the gold annotations
+    and write `by_method.csv` + `summary.csv` next to the prediction folder."""
+    out_csv = preds_dir.parent / f"{method}_by_method.csv"
+    summary_csv = preds_dir.parent / f"{method}_summary.csv"
+
+    df = aggregate_to_csv({method: preds_dir}, gold_root, splits_path, out_csv)
+    print(f"[mac-predict] wrote {out_csv} ({len(df)} rows)")
+
+    summary = summary_table(df)
+    summary.to_csv(summary_csv, index=False)
+    print(f"[mac-predict] wrote {summary_csv}")
+    print(summary.to_string(index=False))
 
 
 def main() -> None:
@@ -78,6 +98,14 @@ def main() -> None:
     predict_args = SimpleNamespace(ckpt=str(ckpt_path), out=args.out)
     clinicalbert_cls.predict(predict_args)
     print(f"[mac-predict] wrote predictions to {args.out}")
+
+    preds_dir = Path(args.out)
+    compute_metrics(
+        preds_dir=preds_dir,
+        gold_root=args.annotations.resolve(),
+        splits_path=paths.SPLITS_JSON,
+        method=preds_dir.name,
+    )
 
 
 if __name__ == "__main__":
