@@ -1,0 +1,80 @@
+# =============================================================================
+# Frozen protocol for the gpt-oss multi-run accuracy study (Part B of the
+# CMUH statistical plan).
+#
+# This file IS the pre-registration. Any change after runs begin invalidates
+# the headline CI — bump `experiment_id` and treat it as a new protocol.
+# The orchestrator (scripts/run_gpt_oss_multirun.py) hashes this file at
+# run time and stores the hash in every per-case log entry.
+#
+# Placeholders marked `<FILL_IN>` must be populated before launching the
+# headline sweep (the orchestrator refuses to start with them present).
+# =============================================================================
+
+experiment_id: gpt_oss_multirun_cmuh_v1
+
+model:
+  # Full Hugging Face / vLLM model identifier.
+  name: gpt-oss-20b                       # or gpt-oss-120b
+  checkpoint_hash: <FILL_IN>              # sha256 of resolved checkpoint dir
+  serving: vllm                           # one of: vllm, transformers, openai_compatible
+  serving_version: <FILL_IN>              # pinned package version, e.g. vllm==0.6.3
+
+endpoint:
+  # OpenAI-compatible HTTP endpoint exposing the model. vLLM's default
+  # launcher speaks this protocol; fill api_base accordingly.
+  api_base: http://localhost:8000/v1
+  api_key: EMPTY                          # vLLM ignores the value but requires something
+  timeout_s: 120
+
+decoding:
+  temperature: 0.7                        # headline T*. Ablation sweep uses its own config.
+  top_p: 1.0
+  max_tokens: 2048
+  stop: []
+
+runs:
+  k: 10                                   # K >= 8 recommended for tight run-CI
+  seeds: [42, 43, 44, 45, 46, 47, 48, 49, 50, 51]
+
+prompt:
+  # Paths are interpreted relative to the repo root.
+  template_path: prompts/gpt_oss_pathology_v1.jinja
+  template_hash: <FILL_IN>
+  few_shot:
+    path: prompts/few_shot_v1.json
+    ordering: fixed_order_v1              # label referenced in the paper — do not permute
+    hash: <FILL_IN>
+
+schema:
+  # Scope = FAIR_SCOPE + margins + regional_lymph_node + breast biomarkers.
+  # Reference: src/digital_registrar_research/benchmarks/eval/scope.py
+  scope: fair_plus_nested_plus_biomarkers_v1
+  scope_hash: <FILL_IN>
+
+data:
+  cases_glob: data/cmuh_dataset_<FILL_IN>/**/*.txt
+  gold_glob: data/cmuh_annotation_<FILL_IN>/**/*_gold.json
+
+retry:
+  # Parse-failure retry policy. Retries re-submit the same prompt with a
+  # seed bump (seed + 10_000 * retry_idx) so the runtime still logs each
+  # attempt; Part C can optionally sensitivity-exclude cases that
+  # required a retry.
+  max_parse_retries: 2
+  max_transient_retries: 3
+  transient_backoff_s: [5, 15, 45]
+
+acceptance:
+  # A run is flagged invalid in _manifest.yaml and excluded from the
+  # headline CI if it exceeds either threshold.
+  parse_error_rate_max: 0.05
+  missing_case_rate_max: 0.01
+
+parallelism:
+  # Runs are SERIALIZED to keep decoding stochasticity clean. Within a
+  # run, cases are batched by the serving layer (vLLM handles this).
+  # If multiple GPUs are available, dispatch by run-index (run_k on
+  # GPU_k mod G), never by case-index.
+  runs_in_parallel: 1
+  cases_batch_size: 32
