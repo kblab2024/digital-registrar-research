@@ -47,6 +47,7 @@ registrar-pipeline --input data/tcga_dataset_20251117/tcga1 --model gpt
 
 ```
 gemma1b, gemma4b, gemma12b, gemma27b      → ollama_chat/gemma3:*
+gemma4e2b                                  → ollama_chat/gemma4:e2b
 gpt                                       → ollama_chat/gpt-oss:20b
 phi4, qwen30b, med8b, med70b              → ollama_chat/*
 ```

@@ -17,6 +17,7 @@ from typing import Literal
 
 model_list = {"gemma4b": "ollama_chat/gemma3:4b",
           "gemma1b": "ollama_chat/gemma3:1b",
+          "gemma4e2b": "ollama_chat/gemma4:e2b",
           "med8b": "ollama_chat/thewindmom/llama3-med42-8b",
           "gemma12b": "ollama_chat/gemma3:12b", 
           "gemma27b": "ollama_chat/gemma3:27b", 
