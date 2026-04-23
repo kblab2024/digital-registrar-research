@@ -41,6 +41,9 @@ results/**/*.pt
 results/**/*.ckpt
 !results/**/.gitkeep
 
+# Annotation tool — per-deployment annotator list (rebuilt from DEFAULTS)
+src/digital_registrar_research/annotation/annotators.json
+
 # API keys / secrets
 .env
 .env.local

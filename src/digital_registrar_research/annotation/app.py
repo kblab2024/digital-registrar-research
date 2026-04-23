@@ -25,6 +25,7 @@ from .io import (
     save_annotation,
     strip_meta,
 )
+from .annotator_config import add_annotator, load_annotators
 from .ui import pick_folder
 
 st.set_page_config(page_title="Digital Registrar", layout="wide")
@@ -45,6 +46,9 @@ def _init_state():
         "stem_filter": "all",
         "last_sample_id": "",
         "save_message": "",
+        "annotators": load_annotators(),
+        "current_annotator": None,  # dict {"name": ..., "suffix": ...}
+        "add_annotator_message": "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -57,10 +61,13 @@ _init_state()
 # ── Folder / sample loading ────────────────────────────────────────────────────
 
 def _reload_from_base(base_dir: str) -> tuple[bool, str]:
+    annotator = st.session_state.current_annotator
+    if not annotator:
+        return False, "請先在上方選擇 annotator。"
     folders = discover_folders(base_dir)
     if not folders:
         return False, "找不到符合 `{prefix}_{dataset|result|annotation}_{date}` 格式的子資料夾。"
-    samples = list_samples(folders)
+    samples = list_samples(folders, annotator["suffix"])
     if not samples:
         return False, f"在 {folders.result_dir} 下找不到任何 *_output.json。"
     st.session_state.base_dir = base_dir
@@ -70,6 +77,21 @@ def _reload_from_base(base_dir: str) -> tuple[bool, str]:
     st.session_state.stem_filter = "all"
     _on_file_change()
     return True, f"載入 {len(samples)} 個樣本（{folders.prefix}_{folders.date}）。"
+
+
+def _on_annotator_change():
+    """Rebuild sample list with new suffix, keeping base_dir/folders."""
+    folders: FolderSet | None = st.session_state.folders
+    annotator = st.session_state.current_annotator
+    if not folders or not annotator:
+        st.session_state.samples = []
+        st.session_state.sample_idx = 0
+        _on_file_change()
+        return
+    st.session_state.samples = list_samples(folders, annotator["suffix"])
+    st.session_state.sample_idx = 0
+    st.session_state.stem_filter = "all"
+    _on_file_change()
 
 
 def _visible_samples() -> list[tuple[int, SampleRef]]:
@@ -316,11 +338,73 @@ def render_section(section: SectionSpec, tab_index: int, sample_id: str):
 
 # ── Sidebar: folder picker + sample list ───────────────────────────────────────
 
+def _render_annotator_picker():
+    annotators: list[dict] = st.session_state.annotators
+    current = st.session_state.current_annotator
+
+    labels = [f"{a['name']} ({a['suffix']})" for a in annotators]
+    suffixes = [a["suffix"] for a in annotators]
+    current_idx = (
+        suffixes.index(current["suffix"])
+        if current and current["suffix"] in suffixes
+        else None
+    )
+
+    selected = st.sidebar.selectbox(
+        "Annotator",
+        options=list(range(len(annotators))),
+        index=current_idx,
+        format_func=lambda i: labels[i],
+        placeholder="— 選擇 annotator —",
+        key="annotator_select",
+    )
+
+    new_annotator = annotators[selected] if selected is not None else None
+    current_suffix = current["suffix"] if current else None
+    new_suffix = new_annotator["suffix"] if new_annotator else None
+    if new_suffix != current_suffix:
+        st.session_state.current_annotator = new_annotator
+        _on_annotator_change()
+        st.rerun()
+
+    with st.sidebar.expander("➕ 新增 annotator", expanded=False):
+        name = st.text_input("全名", key="new_annotator_name")
+        suffix = st.text_input("縮寫 (1–6 小寫英數)", key="new_annotator_suffix")
+        if st.button("新增", key="btn_add_annotator", use_container_width=True):
+            ok, msg = add_annotator(name, suffix)
+            if ok:
+                st.session_state.annotators = load_annotators()
+                added = next(
+                    (a for a in st.session_state.annotators
+                     if a["suffix"] == suffix.strip().lower()),
+                    None,
+                )
+                if added:
+                    st.session_state.current_annotator = added
+                    _on_annotator_change()
+                st.session_state.add_annotator_message = ("success", msg)
+                st.rerun()
+            else:
+                st.session_state.add_annotator_message = ("error", msg)
+        msg_pair = st.session_state.add_annotator_message
+        if msg_pair:
+            level, text = msg_pair
+            (st.success if level == "success" else st.error)(text)
+
+
 def render_sidebar():
     st.sidebar.title("📋 標註清單")
 
+    _render_annotator_picker()
+
     folders: FolderSet | None = st.session_state.folders
     samples: list[SampleRef] = st.session_state.samples
+
+    if not st.session_state.current_annotator:
+        st.sidebar.info("請先選擇 annotator 再載入資料夾。")
+        return
+
+    st.sidebar.divider()
 
     if st.sidebar.button("📂 選擇資料夾", use_container_width=True):
         picked = pick_folder(initial=st.session_state.base_dir or "")
@@ -558,7 +642,10 @@ def main():
 
     if not st.session_state.samples:
         st.title("Cancer Pathology Report Annotator")
-        st.info("👈 從左側選擇 base 資料夾開始標註。")
+        if not st.session_state.current_annotator:
+            st.info("👈 請先在左側選擇 annotator。")
+        else:
+            st.info("👈 從左側選擇 base 資料夾開始標註。")
         return
 
     st.title("Cancer Pathology Report Annotator")

@@ -17,7 +17,8 @@ class SampleRef:
     n: str                  # e.g. "1" (numeric suffix of stem)
     result_path: str        # ...{prefix}_result_{date}/{n}/{sample_id}_output.json
     dataset_path: str       # ...{prefix}_dataset_{date}/{stem}/{sample_id}.txt
-    annotation_path: str    # ...{prefix}_annotation_{date}/{n}/{sample_id}_annotation.json
+    annotation_path: str    # ...{prefix}_annotation_{date}/{n}/{sample_id}_annotation_{suffix}.json
+    annotator_suffix: str   # e.g. "nhc"
 
 
 @dataclass
@@ -83,8 +84,12 @@ def discover_folders(base_dir: str) -> FolderSet | None:
 _FILENAME_RE = re.compile(r"^(?P<stem>[A-Za-z]+\d+)_(?P<idx>\d+)_output\.json$")
 
 
-def list_samples(folders: FolderSet) -> list[SampleRef]:
-    """Walk result_dir/*/{stem}_{idx}_output.json and build SampleRef list."""
+def list_samples(folders: FolderSet, annotator_suffix: str) -> list[SampleRef]:
+    """Walk result_dir/*/{stem}_{idx}_output.json and build SampleRef list.
+
+    annotation_path is built with the given annotator suffix so each annotator
+    has a fully independent set of files.
+    """
     samples: list[SampleRef] = []
     pattern = os.path.join(folders.result_dir, "*", "*_output.json")
     for path in glob.glob(pattern):
@@ -103,7 +108,7 @@ def list_samples(folders: FolderSet) -> list[SampleRef]:
 
         dataset_path = os.path.join(folders.dataset_dir, stem, f"{sample_id}.txt")
         annotation_path = os.path.join(
-            folders.annotation_dir, n, f"{sample_id}_annotation.json"
+            folders.annotation_dir, n, f"{sample_id}_annotation_{annotator_suffix}.json"
         )
         samples.append(SampleRef(
             sample_id=sample_id,
@@ -112,6 +117,7 @@ def list_samples(folders: FolderSet) -> list[SampleRef]:
             result_path=path,
             dataset_path=dataset_path,
             annotation_path=annotation_path,
+            annotator_suffix=annotator_suffix,
         ))
 
     samples.sort(key=_sample_sort_key)
