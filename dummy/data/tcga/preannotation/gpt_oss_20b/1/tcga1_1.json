@@ -8,7 +8,7 @@
     "cancer_clock": null,
     "cancer_laterality": "right",
     "histology": "invasive_carcinoma_no_special_type",
-    "tumor_size": 18,
+    "tumor_size": 17,
     "lymphovascular_invasion": false,
     "perineural_invasion": null,
     "distant_metastasis": null,
@@ -17,11 +17,11 @@
     "dcis_size": null,
     "dcis_comedo_necrosis": null,
     "dcis_grade": null,
-    "nuclear_grade": 1,
+    "nuclear_grade": 2,
     "tubule_formation": 2,
     "mitotic_rate": 2,
-    "total_score": 5,
-    "grade": 1,
+    "total_score": 6,
+    "grade": 2,
     "tnm_descriptor": null,
     "pt_category": "t1c",
     "pn_category": "n0",
@@ -31,9 +31,57 @@
     "ajcc_version": null,
     "margins": [
       {
+        "margin_category": "12_3_clock",
+        "margin_involved": false,
+        "distance": null,
+        "description": null
+      },
+      {
+        "margin_category": "3_6_clock",
+        "margin_involved": false,
+        "distance": null,
+        "description": null
+      },
+      {
+        "margin_category": "6_9_clock",
+        "margin_involved": false,
+        "distance": null,
+        "description": null
+      },
+      {
+        "margin_category": "9_12_clock",
+        "margin_involved": false,
+        "distance": null,
+        "description": null
+      },
+      {
+        "margin_category": "12_clock",
+        "margin_involved": false,
+        "distance": null,
+        "description": null
+      },
+      {
+        "margin_category": "3_clock",
+        "margin_involved": false,
+        "distance": null,
+        "description": null
+      },
+      {
+        "margin_category": "6_clock",
+        "margin_involved": false,
+        "distance": null,
+        "description": null
+      },
+      {
+        "margin_category": "9_clock",
+        "margin_involved": false,
+        "distance": null,
+        "description": null
+      },
+      {
         "margin_category": "superficial",
         "margin_involved": false,
-        "distance": 5,
+        "distance": null,
         "description": null
       },
       {
@@ -43,15 +91,7 @@
         "description": "negative"
       }
     ],
-    "regional_lymph_node": [
-      {
-        "lymph_node_side": "right",
-        "lymph_node_category": "sentinel",
-        "involved": 0,
-        "examined": 2,
-        "station_name": "sentinel #1"
-      }
-    ],
+    "regional_lymph_node": null,
     "extranodal_extension": null,
     "maximal_ln_size": null,
     "biomarkers": [

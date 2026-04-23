@@ -4,11 +4,11 @@
   "cancer_category_others_description": null,
   "cancer_data": {
     "procedure": "wide_excision",
-    "cancer_quadrant": "upper_outer_quadrant",
+    "cancer_quadrant": null,
     "cancer_clock": null,
     "cancer_laterality": "right",
     "histology": "invasive_carcinoma_no_special_type",
-    "tumor_size": 18,
+    "tumor_size": 17,
     "lymphovascular_invasion": false,
     "perineural_invasion": null,
     "distant_metastasis": null,
@@ -17,11 +17,11 @@
     "dcis_size": null,
     "dcis_comedo_necrosis": null,
     "dcis_grade": null,
-    "nuclear_grade": 1,
+    "nuclear_grade": 2,
     "tubule_formation": 2,
     "mitotic_rate": 2,
-    "total_score": 5,
-    "grade": 1,
+    "total_score": 6,
+    "grade": 2,
     "tnm_descriptor": null,
     "pt_category": "t1c",
     "pn_category": "n0",
@@ -31,25 +31,56 @@
     "ajcc_version": null,
     "margins": [
       {
-        "margin_category": "superficial",
+        "margin_category": "others",
         "margin_involved": false,
-        "distance": 5,
-        "description": null
+        "distance": null,
+        "description": "medial"
       },
       {
-        "margin_category": "base",
+        "margin_category": "others",
         "margin_involved": false,
-        "distance": 8,
-        "description": "negative"
+        "distance": null,
+        "description": "lateral"
+      },
+      {
+        "margin_category": "others",
+        "margin_involved": false,
+        "distance": null,
+        "description": "superior"
+      },
+      {
+        "margin_category": "others",
+        "margin_involved": false,
+        "distance": null,
+        "description": "inferior"
+      },
+      {
+        "margin_category": "others",
+        "margin_involved": false,
+        "distance": null,
+        "description": "anterior"
+      },
+      {
+        "margin_category": "others",
+        "margin_involved": false,
+        "distance": null,
+        "description": "posterior"
       }
     ],
     "regional_lymph_node": [
       {
         "lymph_node_side": "right",
-        "lymph_node_category": "sentinel",
+        "lymph_node_category": "nonsentinel",
         "involved": 0,
         "examined": 2,
-        "station_name": "sentinel #1"
+        "station_name": "nonsentinel #1"
+      },
+      {
+        "lymph_node_side": "right",
+        "lymph_node_category": "nonsentinel",
+        "involved": 0,
+        "examined": 2,
+        "station_name": "nonsentinel #2"
       }
     ],
     "extranodal_extension": null,
