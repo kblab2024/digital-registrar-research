@@ -29,6 +29,7 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+digital-registrar-research.code-workspace
 
 # OS
 .DS_Store
