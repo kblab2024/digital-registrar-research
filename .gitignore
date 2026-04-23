@@ -49,6 +49,7 @@ src/digital_registrar_research/annotation/annotators.json
 .env
 .env.local
 *.pem
+/secrets/
 
 # Jupyter
 .ipynb_checkpoints/
