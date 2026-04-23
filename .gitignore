@@ -48,6 +48,11 @@ dummy/results/
 # Live annotator workspace — real patient data, never pushed
 /workspace/
 
+# Windows-bundle build artifacts — packaging/ scripts are tracked, outputs are not
+/packaging/_downloads/
+/packaging/build/
+/packaging/dist/
+
 # Annotation tool — per-deployment annotator list (rebuilt from DEFAULTS)
 src/digital_registrar_research/annotation/annotators.json
 

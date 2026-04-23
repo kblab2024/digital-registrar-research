@@ -6,8 +6,12 @@ import json
 import re
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ..paths import SCHEMAS_DATA as SCHEMAS_DIR
+
+_PRECOMPUTED_GROUPS_PATH = Path(__file__).resolve().parent / "_section_groups.json"
+_PRECOMPUTED_GROUPS: dict | None = None
 
 DISPLAY_NAMES = {
     "Nonnested": "General",
@@ -215,8 +219,30 @@ def _is_nested_layout(schema_props: dict) -> bool:
     return isinstance(first, dict) and "properties" in first and first.get("type") == "object"
 
 
+def _load_precomputed_groups() -> dict:
+    """Load the build-time-generated {organ: [[section_name, [field_names]]]} map.
+
+    Shipped in the standalone Windows bundle so the annotation UI does not
+    need to import DSPy/pydantic-derived case-models at runtime. Returns
+    an empty dict if the file is absent (dev source tree) — callers fall
+    back to the dynamic lookup via `..models.modellist`.
+    """
+    global _PRECOMPUTED_GROUPS
+    if _PRECOMPUTED_GROUPS is None:
+        if _PRECOMPUTED_GROUPS_PATH.exists():
+            try:
+                _PRECOMPUTED_GROUPS = json.loads(
+                    _PRECOMPUTED_GROUPS_PATH.read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                _PRECOMPUTED_GROUPS = {}
+        else:
+            _PRECOMPUTED_GROUPS = {}
+    return _PRECOMPUTED_GROUPS
+
+
 def _section_field_groups(cancer_type: str, props: dict) -> list[tuple[str, list[str]]]:
-    """Return [(section_name, [field_names])] by walking `organmodels[cancer_type]`.
+    """Return [(section_name, [field_names])] for the flat-schema layout.
 
     Each DSPy signature contributes its OutputField names as one section.
     Fields are assigned first-wins across signatures — matching the
@@ -225,7 +251,25 @@ def _section_field_groups(cancer_type: str, props: dict) -> list[tuple[str, list
     Any leftover schema property (unlikely, but possible if a field exists
     in the schema without a sibling DSPy signature) lands in a trailing
     "Other" section so it still renders.
+
+    Prefers a precomputed map bundled alongside this module (used by the
+    standalone Windows package so the runtime stays DSPy-free); falls back
+    to introspecting the live signature classes in-process.
     """
+    precomputed = _load_precomputed_groups().get(cancer_type)
+    if precomputed is not None:
+        groups: list[tuple[str, list[str]]] = []
+        assigned: set[str] = set()
+        for sig_name, field_names in precomputed:
+            filtered = [n for n in field_names if n not in assigned and n in props]
+            assigned.update(filtered)
+            if filtered:
+                groups.append((sig_name, filtered))
+        leftover = [n for n in props if n not in assigned]
+        if leftover:
+            groups.append((f"{cancer_type.capitalize()}CancerOther", leftover))
+        return groups
+
     try:
         from ..models.modellist import organmodels
         from ..schemas.pydantic import _builder
@@ -235,13 +279,13 @@ def _section_field_groups(cancer_type: str, props: dict) -> list[tuple[str, list
     sig_names = organmodels.get(cancer_type, [])
     module_globals = sys.modules[_builder.__name__].__dict__
 
-    groups: list[tuple[str, list[str]]] = []
-    assigned: set[str] = set()
+    groups = []
+    assigned = set()
     for sig_name in sig_names:
         cls = module_globals.get(sig_name)
         if cls is None:
             continue
-        field_names: list[str] = []
+        field_names = []
         for name, _type, _fi in _builder._iter_signature_output_fields(cls):
             if name in assigned or name not in props:
                 continue
