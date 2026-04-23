@@ -87,6 +87,28 @@ Keep `main` code-only. Real annotation JSONs live on `experiment_cmuh_pilot`.
   merges — keeps history linear.
 - **`experiment_cmuh_pilot` receives merges** from `main` (one-way).
 
+## One-time setup per clone — install the pre-commit hook
+
+CI runs `ruff check src/ tests/` on every push. To catch lint issues
+**before** they hit CI, install the local git hook:
+
+```bash
+bash scripts/install_git_hooks.sh
+```
+
+This drops a `.git/hooks/pre-commit` script that runs
+`python -m ruff check --fix` on the staged Python files and re-stages
+anything ruff auto-fixed. If ruff hits an error it can't auto-fix,
+the commit aborts so you see it locally instead of in CI.
+
+Skip the hook for an emergency commit with `git commit --no-verify`
+(but expect CI to be red).
+
+The framework `pre-commit` was deliberately **not** used — its
+per-hook virtualenv layout exceeds Windows MAX_PATH on Microsoft
+Store Python. The plain shell hook above works on Git Bash, macOS,
+and Linux without extra setup.
+
 ## Branch creation recipes
 
 ```bash

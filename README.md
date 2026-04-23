@@ -24,6 +24,12 @@ Extras are split by concern — install only what you need:
 
 The core install (no extras) gives you the DSPy extraction pipeline plus the canonical Pydantic schemas.
 
+After cloning, install the local pre-commit hook so lint errors are caught before they hit CI:
+
+```bash
+bash scripts/install_git_hooks.sh
+```
+
 ## What's in the box
 
 ```
