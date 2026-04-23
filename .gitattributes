@@ -9,6 +9,7 @@
 *.json  text eol=lf
 *.md    text eol=lf
 *.cff   text eol=lf
+*.sh    text eol=lf
 
 # Binary assets (none currently, but future-proof)
 *.png   binary
