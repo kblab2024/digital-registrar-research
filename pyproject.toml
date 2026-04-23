@@ -23,7 +23,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 dependencies = [
-  "dspy-ai",
+  "dspy>=2.6",
   "pydantic>=2",
   "numpy",
   "pandas",

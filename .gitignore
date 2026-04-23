@@ -42,6 +42,9 @@ results/**/*.pt
 results/**/*.ckpt
 !results/**/.gitkeep
 
+# Dummy experiment root — smoke outputs, never pushed
+dummy/results/
+
 # Annotation tool — per-deployment annotator list (rebuilt from DEFAULTS)
 src/digital_registrar_research/annotation/annotators.json
 
