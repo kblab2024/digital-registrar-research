@@ -1,0 +1,16 @@
+experiment_id: multirun_qwen3_30b_cmuh_v1
+dataset: cmuh
+model: qwen3_30b
+k: 2
+created_at: 2026-04-23
+config_hash: 461898228a63
+runs:
+  - run: run01
+    seed: 42
+    valid: true
+    parse_error_rate: 0.0
+  - run: run02
+    seed: 43
+    valid: true
+    parse_error_rate: 0.0
+note: dummy skeleton — real sweeps use k=10 per configs/experiments/

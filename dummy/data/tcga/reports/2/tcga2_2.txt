@@ -1,0 +1,7 @@
+SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=tcga, id=tcga2_2, organ=colorectal
+FINAL DIAGNOSIS:
+  Procedure: segmental_colectomy
+  Histology: adenocarcinoma
+  Grade 2, LVI=True
+  pTNM: t3 n0 mx, stage iia
+  Lymph nodes: 0/22 involved (mesenteric)

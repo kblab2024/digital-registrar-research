@@ -1,0 +1,13 @@
+{
+  "seed": 20251117,
+  "train": [
+    "tcga1_1",
+    "tcga1_2",
+    "tcga1_3"
+  ],
+  "test": [
+    "tcga2_1",
+    "tcga2_2",
+    "tcga2_3"
+  ]
+}

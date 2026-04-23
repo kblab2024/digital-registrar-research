@@ -1,0 +1,6 @@
+{"case_id": "cmuh1_1", "organ": "1", "run": "run02", "seed": 43, "tokens": 580, "parse_success": true, "latency_s": 0.63}
+{"case_id": "cmuh1_2", "organ": "1", "run": "run02", "seed": 43, "tokens": 1050, "parse_success": true, "latency_s": 0.465}
+{"case_id": "cmuh1_3", "organ": "1", "run": "run02", "seed": 43, "tokens": 970, "parse_success": true, "latency_s": 2.266}
+{"case_id": "cmuh2_1", "organ": "2", "run": "run02", "seed": 43, "tokens": 699, "parse_success": true, "latency_s": 2.444}
+{"case_id": "cmuh2_2", "organ": "2", "run": "run02", "seed": 43, "tokens": 624, "parse_success": true, "latency_s": 0.857}
+{"case_id": "cmuh2_3", "organ": "2", "run": "run02", "seed": 43, "tokens": 1142, "parse_success": true, "latency_s": 0.599}

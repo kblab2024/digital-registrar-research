@@ -1,0 +1,12 @@
+{
+  "run": "run01",
+  "model": "qwen3_30b",
+  "seed": 42,
+  "dataset": "tcga",
+  "n_cases": 6,
+  "total_tokens": 5895,
+  "parse_errors": 0,
+  "parse_error_rate": 0.0,
+  "wall_time_s": 42.8,
+  "created_at": "2026-04-23T03:59:00+00:00"
+}

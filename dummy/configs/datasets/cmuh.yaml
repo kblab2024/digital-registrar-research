@@ -1,0 +1,11 @@
+name: cmuh
+reports_dir: data/cmuh/reports
+annotations_dir: data/cmuh/annotations
+preannotation_dir: data/cmuh/preannotation
+splits_path: data/cmuh/splits.json
+manifest_path: data/cmuh/dataset_manifest.yaml
+organs:
+  - n: 1
+    name: breast
+  - n: 2
+    name: colorectal

@@ -1,0 +1,6 @@
+{"case_id": "tcga1_1", "organ": "1", "run": "run02", "seed": 43, "tokens": 767, "parse_success": true, "latency_s": 1.542}
+{"case_id": "tcga1_2", "organ": "1", "run": "run02", "seed": 43, "tokens": 816, "parse_success": true, "latency_s": 2.2}
+{"case_id": "tcga1_3", "organ": "1", "run": "run02", "seed": 43, "tokens": 1100, "parse_success": true, "latency_s": 2.153}
+{"case_id": "tcga2_1", "organ": "2", "run": "run02", "seed": 43, "tokens": 737, "parse_success": true, "latency_s": 1.337}
+{"case_id": "tcga2_2", "organ": "2", "run": "run02", "seed": 43, "tokens": 1057, "parse_success": true, "latency_s": 1.575}
+{"case_id": "tcga2_3", "organ": "2", "run": "run02", "seed": 43, "tokens": 565, "parse_success": true, "latency_s": 2.0}

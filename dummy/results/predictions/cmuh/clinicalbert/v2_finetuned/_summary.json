@@ -1,0 +1,7 @@
+{
+  "model": "clinicalbert_v2_finetuned",
+  "dataset": "cmuh",
+  "n_cases": 6,
+  "checkpoint": "models/clinicalbert/v2_finetuned/checkpoint.pt",
+  "created_at": "2026-04-23T03:58:59+00:00"
+}

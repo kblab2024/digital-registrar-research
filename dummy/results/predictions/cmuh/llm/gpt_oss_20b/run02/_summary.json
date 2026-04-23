@@ -1,0 +1,12 @@
+{
+  "run": "run02",
+  "model": "gpt_oss_20b",
+  "seed": 43,
+  "dataset": "cmuh",
+  "n_cases": 6,
+  "total_tokens": 5065,
+  "parse_errors": 0,
+  "parse_error_rate": 0.0,
+  "wall_time_s": 82.7,
+  "created_at": "2026-04-23T03:58:59+00:00"
+}

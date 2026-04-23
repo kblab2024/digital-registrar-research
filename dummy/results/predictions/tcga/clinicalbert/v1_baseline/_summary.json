@@ -1,0 +1,7 @@
+{
+  "model": "clinicalbert_v1_baseline",
+  "dataset": "tcga",
+  "n_cases": 6,
+  "checkpoint": "models/clinicalbert/v1_baseline/checkpoint.pt",
+  "created_at": "2026-04-23T03:59:00+00:00"
+}

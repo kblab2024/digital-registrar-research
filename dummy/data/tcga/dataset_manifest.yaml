@@ -1,0 +1,11 @@
+dataset: tcga
+created_at: 2026-04-23
+n_cases: 6
+organs:
+  - n: 1
+    name: breast
+  - n: 2
+    name: colorectal
+cases_per_organ: 3
+source: synthetic_dummy_skeleton
+schema_version: fair_plus_nested_plus_biomarkers_v1
