@@ -22,7 +22,6 @@ makes the ClinicalBERT / rules comparison honest.
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
@@ -95,8 +94,10 @@ def match_nested_list(gold_annotation: dict, pred_annotation: dict,
 
     tp = fp = fn = 0
     if key is None:
-        # Fallback: just match by position.
-        for g, p in zip(gold_list, pred_list):
+        # Fallback: just match by position. Lists may differ in length — the
+        # loop covers the overlap and the two sum() calls below account for the
+        # leftover on each side; strict=False is required here.
+        for g, p in zip(gold_list, pred_list, strict=False):
             tp += _item_eq(g, p)
             fp += len(p) - _item_eq(g, p)
             fn += len(g) - _item_eq(g, p)

@@ -4,7 +4,7 @@
     This module provides functions to convert model predictions into a structured format
     that can be easily serialized and saved for later analysis.
 
-    Copyright 2025, Kai-Po Chang at Med NLP Lab, China Medical University, with aid from chatGPT. 
+    Copyright 2025, Kai-Po Chang at Med NLP Lab, China Medical University, with aid from chatGPT.
 """
 __version__ = "0.1.0"
 __date__ = "2025-10-05"
@@ -13,11 +13,12 @@ __copyright__ = "Copyright 2025, Med NLP Lab, China Medical University"
 __license__ = "MIT"
 
 import json
-from typing import Any, Iterable, Callable, Optional
-from dataclasses import is_dataclass, asdict
-from datetime import datetime, date
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import asdict, is_dataclass
+from datetime import date, datetime
 from decimal import Decimal
-from collections.abc import Mapping
+from typing import Any
+
 
 # --- helpers to make everything JSON-safe ---
 def _to_json_safe(x: Any):
@@ -83,7 +84,7 @@ def dump_prediction(
     *,
     exclude_private: bool = True,
     exclude_keys: tuple[str, ...] = ("_lm_usage", "_inputs", "_completions"),
-    custom_predicate: Optional[Callable[[str, Any], bool]] = None,
+    custom_predicate: Callable[[str, Any], bool] | None = None,
 ) -> Any:
     """
     Recursively convert a DSPy Prediction (or arbitrary nested structure)
@@ -202,7 +203,7 @@ def dump_prediction(
 def dump_many_predictions(
     preds: Iterable[Any],
     *,
-    key_fn: Optional[Callable[[Any, int], Optional[str]]] = None,
+    key_fn: Callable[[Any, int], str | None] | None = None,
     **dump_kwargs
 ) -> str:
     """
@@ -217,7 +218,7 @@ def dump_many_predictions(
 
     if key_fn:
         mapping = {}
-        for i, (p, d) in enumerate(zip(preds, dumped_list)):
+        for i, (p, d) in enumerate(zip(preds, dumped_list, strict=True)):
             k = key_fn(p, i)
             if k is not None:
                 mapping[k] = d

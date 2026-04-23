@@ -1,10 +1,11 @@
 """UI helpers — native OS folder picker with cross-platform fallbacks."""
 
 from __future__ import annotations
+
 import os
-import sys
 import shlex
 import subprocess
+import sys
 
 
 def pick_folder(initial: str = "") -> str:

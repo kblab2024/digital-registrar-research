@@ -65,7 +65,7 @@ def main() -> None:
         drifted = _check_all()
         if drifted:
             print(f"[schemas] DRIFT detected in: {', '.join(drifted)}", file=sys.stderr)
-            print(f"[schemas] Run `python -m digital_registrar_research.schemas.generate` to regenerate.", file=sys.stderr)
+            print("[schemas] Run `python -m digital_registrar_research.schemas.generate` to regenerate.", file=sys.stderr)
             sys.exit(1)
         print(f"[schemas] OK — all {len(ALL_MODELS)} schemas match their Pydantic models.")
         return

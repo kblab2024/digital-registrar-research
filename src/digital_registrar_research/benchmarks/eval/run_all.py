@@ -14,8 +14,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .metrics import aggregate_to_csv, summary_table
 from ...paths import BENCHMARKS_RESULTS, GOLD_ANNOTATIONS, SPLITS_JSON
+from .metrics import aggregate_to_csv, summary_table
 
 RESULTS = BENCHMARKS_RESULTS
 SPLITS = SPLITS_JSON

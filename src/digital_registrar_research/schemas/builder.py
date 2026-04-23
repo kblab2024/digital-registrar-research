@@ -21,8 +21,7 @@ post-validation on the LLM's raw output.
 from __future__ import annotations
 
 import json
-from functools import lru_cache
-from pathlib import Path
+from functools import cache
 
 try:
     import jsonschema
@@ -45,7 +44,7 @@ SUBSECTION_KEYS_FALLBACK = {
 }
 
 
-@lru_cache(maxsize=None)
+@cache
 def load_organ_schema(organ: str) -> dict:
     """Return the raw JSON-Schema dict for the organ."""
     path = SCHEMA_ROOT / f"{organ}.json"
@@ -72,7 +71,7 @@ def flatten_schema_for_prompt(schema: dict) -> dict:
     """
     merged_props: dict = {}
     subsection_props = schema.get("properties", {})
-    for subsection_name, subsection_schema in subsection_props.items():
+    for _subsection_name, subsection_schema in subsection_props.items():
         if not isinstance(subsection_schema, dict):
             continue
         fields = subsection_schema.get("properties", {})

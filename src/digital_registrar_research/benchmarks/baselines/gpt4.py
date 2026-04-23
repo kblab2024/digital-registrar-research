@@ -24,8 +24,8 @@ from pathlib import Path
 
 import dspy
 
-from ...pipeline import CancerPipeline
 from ...paths import SPLITS_JSON
+from ...pipeline import CancerPipeline
 
 DEFAULT_MODEL = "openai/gpt-4-turbo"  # swap to "openai/gpt-4o" if preferred
 SPLITS_PATH = SPLITS_JSON

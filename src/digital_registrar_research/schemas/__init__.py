@@ -32,7 +32,7 @@ def list_organs() -> list[str]:
     return sorted(CASE_MODELS.keys())
 
 
-def load_pydantic_model(organ: str) -> "type[BaseModel]":
+def load_pydantic_model(organ: str) -> type[BaseModel]:
     """Return the canonical Pydantic case-model for `organ`."""
     try:
         return CASE_MODELS[organ]

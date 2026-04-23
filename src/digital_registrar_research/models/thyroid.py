@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 models/thyroid.py
 This script sets up a series of data extraction models using the dspy library for pathology reports, specifically focusing on thyroid cancer. It includes model loading, signature definitions for various cancer types, and functions to convert model predictions into structured JSON formats.
@@ -14,9 +13,11 @@ __license__ = "MIT"
 __ajcc_version__ = 8
 __cap_version__ = "4.4.0.0"
 
-import dspy
 from typing import Literal
+
+import dspy
 from pydantic import BaseModel, Field
+
 
 class ThyroidMargin (BaseModel):
     margin_category: Literal["outmost", "anterior_outmost", "posterior_outmost", "isthmus", "others"]|None = Field(None, description="acceptable value for surgical margins in thyroid cancer. If not included in these standard margins, should be classified as others.")
@@ -60,7 +61,7 @@ class ThyroidCancerStaging(dspy.Signature):
     pm_category: Literal["mx", "m0", "m1"]|None = dspy.OutputField(desc = 'identify the pm category of the tumor. if you see cM0 or cM1, etc., code as mx, since pathological M category is not available')
     overall_stage: Literal["i", "ii", "iii", "iva", "ivb", "ivc"]|None = dspy.OutputField(desc = 'identify the overall stage of the tumor')
     ajcc_version: int|None = dspy.OutputField(desc = 'identify the ajcc version of the pathological staging')
-    
+
 class ThyroidCancerMargins(dspy.Signature):
     """you need to extract the value of the specified items below from the given thyroid cancer excision report. DO NOT JUST RETURN NULL. IF SOME ITEM IS NOT PRESENT, RETURN NULL FOR THAT ITEM, BUT TRY YOUR BEST TO FILL IN THE OTHERS."""
 

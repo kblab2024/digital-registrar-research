@@ -111,7 +111,7 @@ class RawJSONRunner:
                 response_format={"type": "json_object"},
                 temperature=0.0,
             )
-        except Exception as e:
+        except Exception:
             # Some backends (older Ollama versions) reject response_format.
             # Retry without the constraint.
             resp = self.client.chat.completions.create(
@@ -140,7 +140,7 @@ class RawJSONRunner:
         if errors and len(errors) < 20:
             self.validation_retries += 1
             repair_user = (
-                f"The previous output had these schema errors:\n"
+                "The previous output had these schema errors:\n"
                 + "\n".join(f"  - {e}" for e in errors[:20])
                 + f"\n\nFix them and return the corrected JSON only.\n\n"
                 f"Original report:\n{report}"

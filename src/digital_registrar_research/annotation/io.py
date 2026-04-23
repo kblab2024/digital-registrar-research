@@ -1,10 +1,11 @@
 """Folder discovery, sample indexing, and annotation load/save (flat on-disk format)."""
 
 from __future__ import annotations
+
+import glob
 import json
 import os
 import re
-import glob
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path

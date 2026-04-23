@@ -22,13 +22,15 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import defaultdict
+import sys
 from pathlib import Path
 
 import pandas as pd
 
 from ...benchmarks.eval.metrics import (
     aggregate_to_csv as _bench_aggregate,
+)
+from ...benchmarks.eval.metrics import (
     summary_table,
 )
 from ...paths import ABLATIONS_RESULTS, GOLD_ANNOTATIONS, SPLITS_JSON
@@ -116,7 +118,7 @@ def compute_cell_deltas(long_df: pd.DataFrame,
         df = df[df["attempted"] == True]  # noqa: E712
         df["accuracy"] = pd.to_numeric(df["correct"], errors="coerce")
 
-        def mean_accuracy(cell_name: str, field: str) -> float | None:
+        def mean_accuracy(cell_name: str, field: str, df=df, model=model) -> float | None:
             sub = df[(df["method"] == _method_key(cell_name, model))
                      & (df["field"] == field)]
             if sub.empty:

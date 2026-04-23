@@ -34,7 +34,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 
 import torch
@@ -46,8 +45,8 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
-from ..eval.scope import SPAN_FIELDS, get_field_value
 from ...paths import SPLITS_JSON
+from ..eval.scope import SPAN_FIELDS, get_field_value
 
 MODEL_ID = "emilyalsentzer/Bio_ClinicalBERT"
 MAX_LEN = 512

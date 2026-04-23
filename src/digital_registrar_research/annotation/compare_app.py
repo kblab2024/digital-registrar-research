@@ -8,32 +8,14 @@ Reuses annotation.io, annotation.parser, annotation.annotator_config, annotation
 """
 
 from __future__ import annotations
+
 import copy
 import os
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
 
-from .parser import (
-    CANCER_CATEGORIES,
-    CANCER_TO_FILE,
-    FieldSpec,
-    SectionSpec,
-    parse_cancer_schema,
-)
-from .io import (
-    FolderSet,
-    SampleRef,
-    build_save_payload,
-    discover_folders,
-    list_samples,
-    load_json,
-    load_report_text,
-    save_annotation,
-    strip_meta,
-)
 from .annotator_config import RESERVED_SUFFIXES, load_annotators
 from .diff_utils import (
     ARRAY_KEY_FIELDS,
@@ -43,8 +25,24 @@ from .diff_utils import (
     diff_flat_fields,
     values_differ,
 )
+from .io import (
+    FolderSet,
+    build_save_payload,
+    discover_folders,
+    list_samples,
+    load_json,
+    load_report_text,
+    save_annotation,
+    strip_meta,
+)
+from .parser import (
+    CANCER_CATEGORIES,
+    CANCER_TO_FILE,
+    FieldSpec,
+    SectionSpec,
+    parse_cancer_schema,
+)
 from .ui import pick_folder
-
 
 st.set_page_config(page_title="Compare / Consensus", layout="wide")
 
@@ -572,7 +570,7 @@ def _render_array_eval(section: SectionSpec) -> None:
             bi = b_list[i] if i < len(b_list) else None
             slots.append((ai, bi, f"#{i + 1}"))
 
-    for slot_idx, (item_a, item_b, key_val) in enumerate(slots):
+    for _slot_idx, (item_a, item_b, key_val) in enumerate(slots):
         both = item_a is not None and item_b is not None
         if both:
             inner_differ = any(
@@ -736,7 +734,7 @@ def _render_cancer_sections(mode: str) -> None:
         return
     tab_names = [s.display_name for s in sections]
     tabs = st.tabs(tab_names)
-    for i, (tab, section) in enumerate(zip(tabs, sections)):
+    for i, (tab, section) in enumerate(zip(tabs, sections, strict=True)):
         with tab:
             _render_section(section, tab_index=i, mode=mode)
 

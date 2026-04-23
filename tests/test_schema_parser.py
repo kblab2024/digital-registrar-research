@@ -1,7 +1,7 @@
 """The annotation-side schema parser (consumes the JSON schemas from data/)."""
 from digital_registrar_research.annotation.parser import (
-    CANCER_TO_FILE,
     CANCER_CATEGORIES,
+    CANCER_TO_FILE,
     parse_cancer_schema,
 )
 

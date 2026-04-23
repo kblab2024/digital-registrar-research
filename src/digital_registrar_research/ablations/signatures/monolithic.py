@@ -16,26 +16,25 @@ Usage:
 """
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 
 import dspy
 
-from ...models.modellist import organmodels
+from ...models.breast import *  # noqa: F401, F403
+from ...models.cervix import *  # noqa: F401, F403
+from ...models.colon import *  # noqa: F401, F403
 
 # Wildcard import every organ module so all signature classes are in
 # this namespace — mirrors how pipeline.py resolves them.
-from ...models.common import *       # noqa: F401, F403
-from ...models.breast import *       # noqa: F401, F403
-from ...models.lung import *         # noqa: F401, F403
-from ...models.colon import *        # noqa: F401, F403
-from ...models.prostate import *     # noqa: F401, F403
-from ...models.esophagus import *    # noqa: F401, F403
-from ...models.pancreas import *     # noqa: F401, F403
-from ...models.thyroid import *      # noqa: F401, F403
-from ...models.cervix import *       # noqa: F401, F403
-from ...models.liver import *        # noqa: F401, F403
-from ...models.stomach import *      # noqa: F401, F403
-
+from ...models.common import *  # noqa: F401, F403
+from ...models.esophagus import *  # noqa: F401, F403
+from ...models.liver import *  # noqa: F401, F403
+from ...models.lung import *  # noqa: F401, F403
+from ...models.modellist import organmodels
+from ...models.pancreas import *  # noqa: F401, F403
+from ...models.prostate import *  # noqa: F401, F403
+from ...models.stomach import *  # noqa: F401, F403
+from ...models.thyroid import *  # noqa: F401, F403
 
 MONOLITHIC_DOCSTRING = (
     "You are a cancer registrar. Extract ALL structured fields listed "
@@ -64,7 +63,7 @@ def _iter_output_fields(cls: type) -> list[tuple[str, object, object]]:
     return out
 
 
-@lru_cache(maxsize=None)
+@cache
 def get_monolithic_signature(organ: str) -> type[dspy.Signature]:
     """Return a dynamically-built dspy.Signature class that contains
     every output field declared by the per-subsection signatures for

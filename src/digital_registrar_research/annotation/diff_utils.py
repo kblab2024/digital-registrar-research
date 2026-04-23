@@ -1,8 +1,8 @@
 """Pure helpers for comparing two annotations. No Streamlit imports."""
 
 from __future__ import annotations
-from dataclasses import dataclass
 
+from dataclasses import dataclass
 
 # ── Scalar equality ────────────────────────────────────────────────────────────
 

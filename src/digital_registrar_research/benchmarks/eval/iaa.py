@@ -47,10 +47,10 @@ from __future__ import annotations
 
 import json
 import math
-from collections import Counter, defaultdict
+from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -67,7 +67,6 @@ from .metrics import (
     is_attempted,
     match_nested_list,
     normalize,
-    score_case,
 )
 from .nested_metrics import score_lymph_nodes, score_margins
 from .scope import (
@@ -258,7 +257,7 @@ def cohen_kappa(
         k = len(ordinal_order)
         if k <= 1:
             return float("nan")
-        a_vals, b_vals = zip(*data)
+        a_vals, b_vals = zip(*data, strict=True)
         n = len(data)
         # Observed disagreement (weighted)
         denom = (k - 1) ** 2
@@ -320,7 +319,7 @@ def kendall_tau_b(pairs: Sequence[Pair], ordinal_order: Sequence) -> dict:
             if p.a in rank and p.b in rank]
     if len(data) < 4:
         return {"tau": float("nan"), "ci_lo": float("nan"), "ci_hi": float("nan")}
-    a_vals, b_vals = zip(*data)
+    a_vals, b_vals = zip(*data, strict=True)
     tau, _p = sstats.kendalltau(a_vals, b_vals, variant="b", nan_policy="omit")
     lo, hi = fisher_z_ci_for_corr(float(tau), len(data))
     return {"tau": float(tau), "ci_lo": lo, "ci_hi": hi, "n": len(data)}
@@ -809,7 +808,7 @@ def whole_report_stats(
     fields = _default_field_list()
     n_cases = 0
     n_exact = 0
-    for cid, e in cases.items():
+    for _cid, e in cases.items():
         a_ann, b_ann = e.annotations.get(ann_a), e.annotations.get(ann_b)
         if a_ann is None or b_ann is None:
             continue
@@ -838,7 +837,7 @@ def whole_report_stats(
     ]:
         units: list[list] = []
         all_values: list = []
-        for cid, e in cases.items():
+        for _cid, e in cases.items():
             a_ann, b_ann = e.annotations.get(ann_a), e.annotations.get(ann_b)
             if a_ann is None or b_ann is None:
                 continue
@@ -893,7 +892,7 @@ def disagreement_resolution(
             if organ is not None and not _field_applies_to_organ(field, organ):
                 continue
             ma = mb = mn = 0
-            for cid, e in cases.items():
+            for _cid, e in cases.items():
                 if organ is not None and e.organ != organ:
                     continue
                 if not all(x in e.annotations for x in (ann_a, ann_b, gold)):

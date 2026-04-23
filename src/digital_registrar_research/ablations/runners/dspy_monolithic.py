@@ -31,10 +31,10 @@ from pathlib import Path
 
 import dspy
 
-from ...models.common import autoconf_dspy, is_cancer, ReportJsonize, model_list
+from ...models.common import ReportJsonize, autoconf_dspy, is_cancer, model_list
 from ...models.modellist import organmodels
-from ...util.predictiondump import dump_prediction_plain
 from ...paths import SPLITS_JSON
+from ...util.predictiondump import dump_prediction_plain
 from ..signatures.monolithic import get_monolithic_signature
 
 SPLITS_PATH = SPLITS_JSON

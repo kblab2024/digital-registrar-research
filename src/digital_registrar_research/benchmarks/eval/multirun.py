@@ -36,14 +36,13 @@ from __future__ import annotations
 import json
 import math
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import numpy as np
 import pandas as pd
 
 from .ci import (
-    BootstrapResult,
     bootstrap_ci,
     paired_bootstrap_diff,
     t_ci,
@@ -51,16 +50,13 @@ from .ci import (
     wilson_ci,
 )
 from .metrics import (
-    is_attempted,
     normalize,
     score_case,
 )
-from .nested_metrics import score_lymph_nodes, score_margins
 from .scope import (
     BREAST_BIOMARKERS,
     FAIR_SCOPE,
     NESTED_LIST_FIELDS,
-    get_field_value,
 )
 
 __all__ = [
@@ -214,7 +210,6 @@ def _glmm_marginal_accuracy(sub: pd.DataFrame) -> tuple[float, float, float, dic
         return (p, lo, hi, {"degenerate": True})
 
     try:
-        import statsmodels.formula.api as smf  # type: ignore
         sub = sub.copy()
         sub["correct_int"] = sub["correct"].astype(int)
         # BinomialBayesMixedGLM with random intercepts keyed by case_id
@@ -241,7 +236,7 @@ def _glmm_marginal_accuracy(sub: pd.DataFrame) -> tuple[float, float, float, dic
         # Variance components
         vc_sd = fit.vcp_mean  # posterior mean of log(sd) per VC
         var_components = {
-            k: float(math.exp(2 * v)) for k, v in zip(fit.model.vc_names, vc_sd)
+            k: float(math.exp(2 * v)) for k, v in zip(fit.model.vc_names, vc_sd, strict=True)
         }
         return (point, lo, hi, var_components)
     except Exception:
@@ -438,7 +433,7 @@ def _vote_nested_list(values: Sequence[list], field: str) -> list:
     # Require majority support before including an item.
     n_runs = len(values)
     min_support = max(1, (n_runs // 2) + 1)
-    for bk, items in buckets.items():
+    for _bk, items in buckets.items():
         if len(items) < min_support:
             continue
         merged: dict = {}

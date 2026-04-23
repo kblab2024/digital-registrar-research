@@ -21,7 +21,7 @@ These are intentionally light dependencies — only numpy and scipy.stats.
 from __future__ import annotations
 
 import math
-from typing import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 
 import numpy as np
 from scipy import stats as sstats

@@ -15,27 +15,27 @@ pins this contract so any future drift surfaces loudly.
 """
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Any, Optional
+from functools import cache
+from typing import Any
 
 from pydantic import BaseModel, Field, create_model
 
-from ...models.modellist import organmodels
+from ...models.breast import *  # noqa: F401, F403
+from ...models.cervix import *  # noqa: F401, F403
+from ...models.colon import *  # noqa: F401, F403
 
 # Wildcard-import every per-organ DSPy signature module so signature
 # classes are discoverable by name — mirrors how `pipeline.py` resolves
 # them through `globals().get(name)`.
-from ...models.common import *       # noqa: F401, F403
-from ...models.breast import *       # noqa: F401, F403
-from ...models.lung import *         # noqa: F401, F403
-from ...models.colon import *        # noqa: F401, F403
-from ...models.prostate import *     # noqa: F401, F403
-from ...models.esophagus import *    # noqa: F401, F403
-from ...models.pancreas import *     # noqa: F401, F403
-from ...models.thyroid import *      # noqa: F401, F403
-from ...models.cervix import *       # noqa: F401, F403
-from ...models.liver import *        # noqa: F401, F403
-from ...models.stomach import *      # noqa: F401, F403
+from ...models.common import *  # noqa: F401, F403
+from ...models.esophagus import *  # noqa: F401, F403
+from ...models.liver import *  # noqa: F401, F403
+from ...models.lung import *  # noqa: F401, F403
+from ...models.modellist import organmodels
+from ...models.pancreas import *  # noqa: F401, F403
+from ...models.prostate import *  # noqa: F401, F403
+from ...models.stomach import *  # noqa: F401, F403
+from ...models.thyroid import *  # noqa: F401, F403
 
 INPUT_FIELD_NAMES = {"report", "report_jsonized"}
 
@@ -95,7 +95,7 @@ def _merge_fields_for_organ(organ: str) -> dict[str, tuple[Any, Any]]:
     return merged
 
 
-@lru_cache(maxsize=None)
+@cache
 def build_case_model(organ: str) -> type[BaseModel]:
     """Return (and cache) the canonical Pydantic case-model for `organ`.
 

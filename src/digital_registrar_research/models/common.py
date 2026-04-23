@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 models/common.py
 This script sets up a series of data extraction models using the dspy library for pathology reports. Common model includes basic dspy functionality, cancer examination, and json handling. It includes model loading, signature definitions for various cancer types, and functions to convert model predictions into structured JSON formats.
@@ -12,15 +11,16 @@ __author__ = ["Hong-Kai (Walther) Chen", "Po-Yen Tzeng", "Kai-Po Chang"]
 __copyright__ = "Copyright 2025, Med NLP Lab, China Medical University"
 __license__ = "MIT"
 
-import dspy
 from typing import Literal
+
+import dspy
 
 model_list = {"gemma4b": "ollama_chat/gemma3:4b",
           "gemma1b": "ollama_chat/gemma3:1b",
           "gemma4e2b": "ollama_chat/gemma4:e2b",
           "med8b": "ollama_chat/thewindmom/llama3-med42-8b",
-          "gemma12b": "ollama_chat/gemma3:12b", 
-          "gemma27b": "ollama_chat/gemma3:27b", 
+          "gemma12b": "ollama_chat/gemma3:12b",
+          "gemma27b": "ollama_chat/gemma3:27b",
           "med70b": "ollama_chat/thewindmom/llama3-med42-70b",
           "gpt": "ollama_chat/gpt-oss:20b",
           "phi4": "ollama_chat/phi4",
@@ -56,7 +56,7 @@ def autoconf_dspy (model_name: str):
 
 class is_cancer(dspy.Signature):
     """You are a cancer registrar, you need to identify whether or not this report belongs to PRIMARY cancer excision eligible for cancer registry, and if so, which organ the cancer belongs to. If no viable tumor is present after excision, you should not register this case. If only carcinoma in situ or high-grade dysplasia, you should not register this case."""
-    
+
     report: list = dspy.InputField(desc = 'this is a pathologic report, separated into paragraphs. you should determine whether or not this report belongs to cancer excision eligible for cancer registry')
 
     cancer_excision_report: bool = dspy.OutputField(desc= 'identify whether or not this report belongs to PRIMARY cancer excision eligible for registry for cancer excision. If no viable tumor is present after excision, you should not register this case. If only carcinoma in situ or high-grade dysplasia, you should not register this case.')#a point

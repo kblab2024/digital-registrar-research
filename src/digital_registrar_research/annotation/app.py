@@ -1,19 +1,14 @@
 """Digital Registrar Annotation Tool — Streamlit app."""
 
 from __future__ import annotations
+
 import copy
 import os
 from pathlib import Path
 
 import streamlit as st
 
-from .parser import (
-    CANCER_CATEGORIES,
-    CANCER_TO_FILE,
-    FieldSpec,
-    SectionSpec,
-    parse_cancer_schema,
-)
+from .annotator_config import add_annotator, load_annotators
 from .io import (
     FolderSet,
     SampleRef,
@@ -25,7 +20,13 @@ from .io import (
     save_annotation,
     strip_meta,
 )
-from .annotator_config import add_annotator, load_annotators
+from .parser import (
+    CANCER_CATEGORIES,
+    CANCER_TO_FILE,
+    FieldSpec,
+    SectionSpec,
+    parse_cancer_schema,
+)
 from .ui import pick_folder
 
 st.set_page_config(page_title="Digital Registrar", layout="wide")
@@ -551,7 +552,7 @@ def render_annotation_panel():
             tab_names = [s.display_name for s in sections]
             tabs = st.tabs(tab_names)
             sample_id = st.session_state.last_sample_id
-            for i, (tab, section) in enumerate(zip(tabs, sections)):
+            for i, (tab, section) in enumerate(zip(tabs, sections, strict=True)):
                 with tab:
                     render_section(section, tab_index=i, sample_id=sample_id)
 

@@ -24,7 +24,7 @@ import random
 from datetime import datetime
 from pathlib import Path
 
-from .pipeline import setup_pipeline, run_cancer_pipeline
+from .pipeline import run_cancer_pipeline, setup_pipeline
 from .util.logger import setup_logger
 
 
@@ -41,14 +41,14 @@ def read_random_report(file_path: str) -> tuple[str, str]:
     if not files:
         return "", ""
     random_file = random.choice(files)
-    with open(random_file, "r", encoding="utf-8") as f:
+    with open(random_file, encoding="utf-8") as f:
         return f.read(), random_file.stem
 
 
 def run_folder(input_folder: str, output_folder: str, logger: logging.Logger, timingfile: str = "timing.csv"):
     for file in Path(input_folder).glob("*.txt"):
         logger.info(f"Processing file: {file.name}")
-        with open(file, "r", encoding="utf-8") as f:
+        with open(file, encoding="utf-8") as f:
             report = f.read()
         output, elapsed_time = run_cancer_pipeline(report=report, fname=file.stem)
         logger.log(logging.INFO, f"Processed {file.name} in {elapsed_time} seconds.")

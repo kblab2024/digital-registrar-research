@@ -20,7 +20,7 @@ Accessors:
 """
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 
 from .scope_organs import (
     ORGAN_BOOL,
@@ -143,7 +143,7 @@ BREAST_BIOMARKERS: list[str] = ["er", "pr", "her2"]
 
 # --- Accessors ---------------------------------------------------------------
 
-@lru_cache(maxsize=None)
+@cache
 def get_allowed_values(field: str, organ: str | None = None) -> list[str] | None:
     """Return the allowed option list for a categorical field.
 

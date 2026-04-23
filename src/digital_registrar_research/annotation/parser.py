@@ -1,10 +1,10 @@
 """Parse JSON Schema 2020-12 files into flat Python data structures for Streamlit rendering."""
 
 from __future__ import annotations
+
 import json
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from ..paths import SCHEMAS_DATA as SCHEMAS_DIR
 

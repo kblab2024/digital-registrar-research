@@ -267,7 +267,7 @@
         }
       ],
       "default": null,
-      "description": "return all of the examined immunoreceptors using immunohistochemistry techniques,like er, pr, her2, ki67, etc. in a list of pydantic structures, \n    example: [{\"biomarker_category\": \"er\", \"expression\": true, \"percentage\": 90, \"score\": null, \"biomarker_name\": \"estrogen receptor\"}, \n    {\"biomarker_category\": \"pr\", \"expression\": false, \"percentage\": 0, \"score\": null, \"biomarker_name\": \"progesterone receptor\"}, \n    {\"biomarker_category\": \"her2\", \"expression\": null, \"percentage\": 0, \"score\": 2, \"biomarker_name\": \"human epidermal growth factor receptor 2\"}, \n    {\"biomarker_category\": \"ki67\", \"expression\": null, \"percentage\": 30, \"score\": null, \"biomarker_name\": \"ki67 proliferation index\"}]. If not present, just output null for every biomarker",
+      "description": "return all of the examined immunoreceptors using immunohistochemistry techniques,like er, pr, her2, ki67, etc. in a list of pydantic structures,\n    example: [{\"biomarker_category\": \"er\", \"expression\": true, \"percentage\": 90, \"score\": null, \"biomarker_name\": \"estrogen receptor\"},\n    {\"biomarker_category\": \"pr\", \"expression\": false, \"percentage\": 0, \"score\": null, \"biomarker_name\": \"progesterone receptor\"},\n    {\"biomarker_category\": \"her2\", \"expression\": null, \"percentage\": 0, \"score\": 2, \"biomarker_name\": \"human epidermal growth factor receptor 2\"},\n    {\"biomarker_category\": \"ki67\", \"expression\": null, \"percentage\": 30, \"score\": null, \"biomarker_name\": \"ki67 proliferation index\"}]. If not present, just output null for every biomarker",
       "title": "Biomarkers"
     },
     "cancer_clock": {

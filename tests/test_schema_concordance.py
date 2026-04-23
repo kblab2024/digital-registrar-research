@@ -42,9 +42,6 @@ def test_pydantic_to_json_parity(organ):
 def test_dspy_signature_coverage(organ):
     """Union of OutputField names across signatures should equal the case-model's fields."""
     import sys
-    from digital_registrar_research.schemas.pydantic._builder import (
-        _iter_signature_output_fields,
-    )
     builder_globals = sys.modules[
         "digital_registrar_research.schemas.pydantic._builder"
     ].__dict__

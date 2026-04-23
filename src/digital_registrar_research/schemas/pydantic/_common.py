@@ -6,7 +6,7 @@ These mirror the shared signatures defined in `models/common.py`:
 """
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -22,17 +22,14 @@ class IsCancerCase(BaseModel):
             "no viable tumor remains after excision."
         ),
     )
-    cancer_category: Optional[Literal[
-        "stomach", "colorectal", "breast", "esophagus", "lung",
-        "prostate", "thyroid", "pancreas", "cervix", "liver", "others",
-    ]] = Field(
+    cancer_category: Literal["stomach", "colorectal", "breast", "esophagus", "lung", "prostate", "thyroid", "pancreas", "cervix", "liver", "others"] | None = Field(
         None,
         description=(
             "Which organ the primary cancer arises from. Ten standard organs are "
             "implemented; anything outside the list is 'others'."
         ),
     )
-    cancer_category_others_description: Optional[str] = Field(
+    cancer_category_others_description: str | None = Field(
         None,
         description="Free-text organ name when cancer_category == 'others'.",
     )

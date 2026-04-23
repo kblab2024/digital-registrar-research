@@ -34,8 +34,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
-from collections import defaultdict
 from pathlib import Path
 
 import torch
@@ -44,13 +42,14 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
+from ...paths import SPLITS_JSON
+
 # Reuse scope definitions from the eval module.
 from ..eval.scope import (
-    CATEGORICAL_FIELDS,     # dict[field_name, list[str]] — option lists
-    CANCER_CATEGORIES,      # list[str] — top-level cancer_category options
-    get_field_value,        # helper to read a field out of a gold annotation
+    CANCER_CATEGORIES,  # list[str] — top-level cancer_category options
+    CATEGORICAL_FIELDS,  # dict[field_name, list[str]] — option lists
+    get_field_value,  # helper to read a field out of a gold annotation
 )
-from ...paths import SPLITS_JSON
 
 MODEL_ID = "emilyalsentzer/Bio_ClinicalBERT"
 MAX_LEN = 512
@@ -233,8 +232,8 @@ def predict(args) -> None:
                   truncation=True, return_tensors="pt").to(DEVICE)
         with torch.no_grad():
             logits = model(enc["input_ids"], enc["attention_mask"])
-        preds = {f: idx_to_field[f][l.argmax(dim=-1).item()]
-                 for f, l in logits.items()}
+        preds = {f: idx_to_field[f][logit.argmax(dim=-1).item()]
+                 for f, logit in logits.items()}
 
         # Shape output like the gold schema.
         cancer_category = preds.pop("cancer_category", None)

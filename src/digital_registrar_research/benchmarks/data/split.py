@@ -59,7 +59,7 @@ def stratified_split(cases: list[dict], test_size: int, seed: int) -> dict:
 
     total = len(cases)
     train, test = [], []
-    for cat, items in by_cat.items():
+    for _cat, items in by_cat.items():
         rng.shuffle(items)
         # proportional allocation to test
         n_test_cat = max(1, round(len(items) * test_size / total)) if len(items) >= 2 else 0

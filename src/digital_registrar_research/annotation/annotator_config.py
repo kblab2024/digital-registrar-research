@@ -1,6 +1,7 @@
 """Annotator list persistence — lives next to app.py as annotators.json."""
 
 from __future__ import annotations
+
 import json
 import re
 from pathlib import Path
