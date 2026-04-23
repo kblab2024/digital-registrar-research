@@ -100,6 +100,12 @@ def _utc_now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _split_report_rows(report_text: str) -> list[str]:
+    """Normalize raw report text into non-empty paragraph rows."""
+    rows = report_text.split("\n\n")
+    return [row.strip() for row in rows if row.strip()]
+
+
 def _git_sha(repo_root: Path) -> str | None:
     try:
         out = subprocess.run(
@@ -171,9 +177,10 @@ def process_case(
         return row
 
     report = report_path.read_text(encoding="utf-8")
+    report_rows = _split_report_rows(report)
     t0 = time.perf_counter()
     try:
-        output, _elapsed_s = run_cancer_pipeline(report=report, fname=case_id)
+        output, _elapsed_s = run_cancer_pipeline(report=report_rows, fname=case_id)
         wall_ms = int((time.perf_counter() - t0) * 1000)
         _atomic_write_json(out_path, output)
         row = {

@@ -60,7 +60,7 @@ class CancerPipeline(dspy.Module):
         self.analyzer_is_cancer = dspy.Predict(is_cancer)
         self.jsonize = dspy.Predict(ReportJsonize)
 
-    def forward(self, report: str, logger: logging.Logger, fname: str = "") -> dict:
+    def forward(self, report: str | list[str], logger: logging.Logger, fname: str = "") -> dict:
         """
         Process the full report to determine if it is a cancer excision and extract margins if applicable.
         Args:
@@ -68,8 +68,11 @@ class CancerPipeline(dspy.Module):
         """
         print(f"Processing report: {fname}")
         logger.info(f"Processing report: {fname}")
-        paragraphs = report.split('\n\n')
-        paragraphs = [p.strip() for p in paragraphs if p.strip()]
+        if isinstance(report, list):
+            paragraphs = [p.strip() for p in report if isinstance(p, str) and p.strip()]
+        else:
+            paragraphs = report.split('\n\n')
+            paragraphs = [p.strip() for p in paragraphs if p.strip()]
         context_response = self.analyzer_is_cancer(report=paragraphs)
         if context_response.cancer_excision_report:
             output_report = {
@@ -98,7 +101,7 @@ class CancerPipeline(dspy.Module):
                 logger.info(f"Processing organ-specific model: {cls.__name__} at {time.strftime('%Y-%m-%d %H:%M:%S')} for {context_response.cancer_category} cancer for {fname}")
                 organ_analyzer = dspy.Predict(cls)
                 try:
-                    organ_response = organ_analyzer(report=report, report_jsonized=json_report)
+                    organ_response = organ_analyzer(report=paragraphs, report_jsonized=json_report)
                     organ_data = dump_prediction_plain(organ_response)
                     output_report["cancer_data"].update(organ_data)
                 except Exception as e:
@@ -130,7 +133,7 @@ def run_pipeline(experiment_model: dspy.Module, **kwargs):
 
 
 
-def run_cancer_pipeline(report: str, fname: str = "") -> Tuple[dict, str]:
+def run_cancer_pipeline(report: str | list[str], fname: str = "") -> Tuple[dict, str]:
     """
     Run the cancer pipeline on the provided report.
     
