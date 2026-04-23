@@ -16,8 +16,11 @@ from pathlib import Path
 
 import streamlit as st
 
-from .annotator_config import RESERVED_SUFFIXES, load_annotators
-from .diff_utils import (
+from digital_registrar_research.annotation.annotator_config import (
+    RESERVED_SUFFIXES,
+    load_annotators,
+)
+from digital_registrar_research.annotation.diff_utils import (
     ARRAY_KEY_FIELDS,
     FieldDiff,
     aggregate_stats,
@@ -25,7 +28,7 @@ from .diff_utils import (
     diff_flat_fields,
     values_differ,
 )
-from .io import (
+from digital_registrar_research.annotation.io import (
     FolderSet,
     build_save_payload,
     discover_folders,
@@ -35,14 +38,14 @@ from .io import (
     save_annotation,
     strip_meta,
 )
-from .parser import (
+from digital_registrar_research.annotation.parser import (
     CANCER_CATEGORIES,
     CANCER_TO_FILE,
     FieldSpec,
     SectionSpec,
     parse_cancer_schema,
 )
-from .ui import pick_folder
+from digital_registrar_research.annotation.ui import pick_folder
 
 st.set_page_config(page_title="Compare / Consensus", layout="wide")
 

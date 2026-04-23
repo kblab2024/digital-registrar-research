@@ -19,8 +19,11 @@ from pathlib import Path
 
 import streamlit as st
 
-from .annotator_config import add_annotator, load_annotators
-from .io_canonical import (
+from digital_registrar_research.annotation.annotator_config import (
+    add_annotator,
+    load_annotators,
+)
+from digital_registrar_research.annotation.io_canonical import (
     MODES,
     SampleRef,
     WorkspaceSet,
@@ -33,14 +36,14 @@ from .io_canonical import (
     save_annotation,
     strip_meta,
 )
-from .parser import (
+from digital_registrar_research.annotation.parser import (
     CANCER_CATEGORIES,
     CANCER_TO_FILE,
     FieldSpec,
     SectionSpec,
     parse_cancer_schema,
 )
-from .ui import pick_folder
+from digital_registrar_research.annotation.ui import pick_folder
 
 st.set_page_config(page_title="Digital Registrar (Canonical)", layout="wide")
 

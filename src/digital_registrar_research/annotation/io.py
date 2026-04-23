@@ -159,7 +159,11 @@ def build_save_payload(annotation: dict, filename: str) -> dict:
     Session state mirrors the on-disk layout:
       - top-level: cancer_excision_report, cancer_category, cancer_category_others_description
       - cancer_data: {all cancer-specific fields; includes arrays margins/biomarkers/etc.}
-    Preserves False/0/None; converts empty strings and empty lists to None.
+
+    Every schema-declared field for the chosen cancer is written, defaulting
+    to null when the annotator left it at "— 尚未設定 —". Explicit nulls
+    beat omissions so downstream consumers can distinguish "unset" from
+    "missing field" without cross-referencing the schema.
     """
     output: dict = {
         "_meta": {
@@ -167,10 +171,35 @@ def build_save_payload(annotation: dict, filename: str) -> dict:
             "annotated_at": datetime.now().isoformat(timespec="seconds"),
         }
     }
-    for key, val in annotation.items():
-        if key.startswith("_"):
-            continue
-        output[key] = _clean_value(val)
+
+    excision = annotation.get("cancer_excision_report")
+    category = annotation.get("cancer_category")
+    output["cancer_excision_report"] = _clean_value(excision)
+    output["cancer_category"] = _clean_value(category)
+    output["cancer_category_others_description"] = _clean_value(
+        annotation.get("cancer_category_others_description")
+    )
+
+    if excision is False:
+        return output
+
+    cancer_data = annotation.get("cancer_data") or {}
+    if category and category != "others":
+        from .parser import parse_cancer_schema
+        sections = parse_cancer_schema(category)
+        expanded: dict = {}
+        for sec in sections:
+            for fspec in sec.flat_fields:
+                expanded[fspec.name] = cancer_data.get(fspec.name)
+            if sec.array_field_name:
+                expanded[sec.array_field_name] = cancer_data.get(sec.array_field_name)
+        for k, v in cancer_data.items():
+            if k not in expanded:
+                expanded[k] = v
+        output["cancer_data"] = {k: _clean_value(v) for k, v in expanded.items()}
+    elif cancer_data:
+        output["cancer_data"] = _clean_value(cancer_data)
+
     return output
 
 
