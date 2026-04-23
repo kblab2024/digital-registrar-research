@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Smoke-test the DSPy + Ollama cancer-extraction stack on 5 random reports.
+"""Smoke-test the DSPy + Ollama cancer-extraction stack on a few reports.
 
 Purpose
 -------
 Before committing to a multi-hour full run, verify end-to-end that:
   * Ollama is reachable and the requested model key resolves to a pulled model
   * DSPy signatures still bind to the pipeline code
-  * Reports under ``{experiment_root}/cmuh_dataset/*/`` are discoverable
+  * Reports under ``{experiment_root}/data/{dataset}/reports/{organ_n}/``
+    are discoverable
   * JSON predictions are written where the full-run script would write them
 
 Unlike the full driver, this script fails loudly: the process exits non-zero
@@ -17,16 +18,20 @@ Usage
 -----
     python scripts/run_dspy_ollama_smoke.py \\
         --experiment-root /path/to/exp \\
+        --dataset cmuh \\
         --model gpt \\
-        [--n 5] [--seed 0]
+        [--n 5] [--seed 0] [--organs 1 2]
 
 Output
 ------
-    {experiment_root}/output/{model}/_smoke_{date}/
-        <case_id>.json        prediction (one per sampled case)
-        _log.jsonl            one row per case
-        _summary.json         aggregate
-        _run.log              full-verbosity log
+    {experiment_root}/results/predictions/{dataset}/llm/{model_slug}/_smoke_{date}/
+        {organ_n}/<case_id>.json   prediction (one per sampled case)
+        _log.jsonl                  one row per case
+        _summary.json               aggregate
+        _run.log                    full-verbosity log
+
+The output dir starts with ``_`` so downstream eval globs that filter
+``not name.startswith('_')`` skip it — smoke runs never pollute real sweeps.
 """
 from __future__ import annotations
 
@@ -40,17 +45,23 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from digital_registrar_research.models.common import model_list  # noqa: E402
-from digital_registrar_research.pipeline import setup_pipeline  # noqa: E402
-from digital_registrar_research.util.logger import setup_logger  # noqa: E402
-
 # Reuse the low-level helpers from the full-run script so the two stay in
 # lockstep w/r/t output format and atomic-write semantics.
 from run_dspy_ollama_single import (  # noqa: E402
+    DATASETS,
     PIPELINE_LOGGER_NAME,
     _atomic_write_json,
+    discover_organs,
+    model_slug,
     process_case,
 )
+
+from digital_registrar_research.models.common import (  # noqa: E402
+    load_model,
+    model_list,
+)
+from digital_registrar_research.pipeline import setup_pipeline  # noqa: E402
+from digital_registrar_research.util.logger import setup_logger  # noqa: E402
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -59,13 +70,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     ap.add_argument("--experiment-root", type=Path, required=True,
-                    help="Root directory containing cmuh_dataset/.")
+                    help="Root containing data/ and results/ "
+                         "(the dummy-skeleton layout).")
+    ap.add_argument("--dataset", required=True, choices=DATASETS,
+                    help="Dataset name under data/ (cmuh or tcga).")
     ap.add_argument("--model", required=True,
                     help=f"Model key (one of: {', '.join(model_list.keys())}).")
     ap.add_argument("--n", type=int, default=5,
                     help="Number of random cases to run (default: 5).")
     ap.add_argument("--seed", type=int, default=0,
                     help="Sampling seed for reproducibility (default: 0).")
+    ap.add_argument("--organs", nargs="*", default=None,
+                    help="Restrict sampling to these numeric organ dirs.")
     ap.add_argument("-v", "--verbose", action="store_true")
     return ap.parse_args(argv)
 
@@ -78,22 +94,36 @@ def main(argv: list[str] | None = None) -> int:
               f"Valid keys: {', '.join(model_list.keys())}", file=sys.stderr)
         return 2
 
-    dataset_root = args.experiment_root / "cmuh_dataset"
-    if not dataset_root.is_dir():
-        print(f"error: dataset not found at {dataset_root}", file=sys.stderr)
+    reports_root = args.experiment_root / "data" / args.dataset / "reports"
+    if not reports_root.is_dir():
+        print(f"error: reports not found at {reports_root}", file=sys.stderr)
         return 2
 
-    all_reports = sorted(dataset_root.glob("*/*.txt"))
+    organs = discover_organs(reports_root, args.organs)
+    if not organs:
+        suffix = f" matching {args.organs}" if args.organs else ""
+        print(f"error: no organ dirs with *.txt found under {reports_root}"
+              f"{suffix}", file=sys.stderr)
+        return 2
+
+    # Flatten to (organ_n, report_path) pairs so the sample carries the
+    # organ alongside the file — we need it to build {organ}/{case_id}.json.
+    all_reports: list[tuple[str, Path]] = [
+        (organ_n, p)
+        for organ_n, organ_dir in organs
+        for p in sorted(organ_dir.glob("*.txt"))
+    ]
     if len(all_reports) < args.n:
-        print(f"error: only {len(all_reports)} reports under {dataset_root}, "
+        print(f"error: only {len(all_reports)} reports under {reports_root}, "
               f"cannot sample {args.n}", file=sys.stderr)
         return 2
 
     sampled = random.Random(args.seed).sample(all_reports, args.n)
 
+    slug = model_slug(args.model)
     date_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = (args.experiment_root / "output" / args.model
-               / f"_smoke_{date_str}")
+    out_dir = (args.experiment_root / "results" / "predictions"
+               / args.dataset / "llm" / slug / f"_smoke_{date_str}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     logger = setup_logger(
@@ -103,25 +133,35 @@ def main(argv: list[str] | None = None) -> int:
         json_format=False,
     )
     logger.info("smoke dir: %s", out_dir)
-    logger.info("model: %s (%s)", args.model, model_list[args.model])
+    logger.info("dataset: %s", args.dataset)
+    logger.info("model: %s (%s) → slug=%s",
+                args.model, model_list[args.model], slug)
     logger.info("sampled %d / %d reports (seed=%d)",
                 len(sampled), len(all_reports), args.seed)
-    for p in sampled:
-        logger.info("  - %s (%s)", p.name, p.parent.name)
+    for organ_n, p in sampled:
+        logger.info("  - %s (organ=%s)", p.name, organ_n)
 
     setup_pipeline(args.model)
+    lm = load_model(args.model)
+    lm_seed = lm.kwargs.get("seed")
+
+    run_name = out_dir.name  # e.g. "_smoke_20260423_101530"
 
     summary = {
+        "run": run_name,
+        "model": slug,
+        "seed": lm_seed,
+        "dataset": args.dataset,
         "n_cases": 0, "n_ok": 0, "n_pipeline_error": 0,
         "cancer_positive": 0, "sampled": [],
     }
     with (out_dir / "_log.jsonl").open("a", encoding="utf-8") as log_fh:
-        for report_path in sampled:
-            # Tag the log row with the source subset name so users can trace
-            # the sample back to its subdir even though outputs are flat here.
+        for organ_n, report_path in sampled:
             row = process_case(
                 report_path,
-                subset=report_path.parent.name,
+                organ=organ_n,
+                run_name=run_name,
+                seed=lm_seed,
                 out_dir=out_dir,
                 log_fh=log_fh,
                 logger=logger,
@@ -129,8 +169,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             summary["n_cases"] += 1
             summary["sampled"].append({
-                "case_id": row["case_id"], "subset": row["subset"],
-                "status": row["status"], "wall_ms": row["wall_ms"],
+                "case_id": row["case_id"], "organ": row["organ"],
+                "status": row["status"], "latency_s": row["latency_s"],
             })
             if row["status"] == "ok":
                 summary["n_ok"] += 1
