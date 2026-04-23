@@ -11,7 +11,9 @@ This package wraps four research concerns around the slim production extractor:
 | [`digital_registrar_research.annotation`](annotation.md) | Streamlit UI for doctors to review GPT-OSS pre-annotations |
 | [`digital_registrar_research.benchmarks`](benchmarks.md) | Comparison vs GPT-4 / ClinicalBERT / rule-based |
 | [`digital_registrar_research.ablations`](ablations.md) | Modular vs monolithic DSPy × DSPy vs raw-JSON grid |
-| [example data](data.md) | TCGA gold set (151 doctor-validated annotations) |
+| [example data](data.md) | Datasets (cmuh, tcga), layout conventions, dummy skeleton |
+| [experiment protocol](experiment_protocol.md) | 2026-04 experiment cross-product, evaluation questions, invariants |
+| [branching strategy](branching_strategy.md) | 12-branch working model (testing / refactor / experiment state) |
 
 ## Why this exists
 

@@ -39,7 +39,12 @@ src/digital_registrar_research/
 └── ablations/                     # modular-vs-monolithic DSPy + raw-JSON grid
 ```
 
-Data (TCGA gold set, ~7 MB) ships in `data/tcga_20251117/` so benchmarks and ablations run out-of-the-box.
+Data and results use a flat, convention-driven layout covering
+`data/{dataset}/reports|preannotation|annotations/` and
+`results/predictions/{dataset}/{llm,clinicalbert,rule_based}/...` —
+see [docs/data.md](docs/data.md) for the full tree, and
+[scripts/gen_dummy_skeleton.py](scripts/gen_dummy_skeleton.py) to
+generate a runnable dummy under `dummy/`.
 
 ## Console scripts
 
@@ -60,7 +65,9 @@ registrar-schemas                                                 # regenerates 
 - [docs/schemas.md](docs/schemas.md) — canonical Pydantic pattern; regenerating JSON; concordance test
 - [docs/benchmarks.md](docs/benchmarks.md) — comparison methodology + literature review
 - [docs/ablations.md](docs/ablations.md) — ablation design rationale
-- [docs/data.md](docs/data.md) — TCGA gold-set provenance
+- [docs/data.md](docs/data.md) — datasets, layout, and naming conventions
+- [docs/experiment_protocol.md](docs/experiment_protocol.md) — the 2026-04 experiment cross-product, evaluation questions, and invariants
+- [docs/branching_strategy.md](docs/branching_strategy.md) — the 12-branch working model (testing / refactor / experiment state)
 
 ## Citation
 

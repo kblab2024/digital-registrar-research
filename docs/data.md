@@ -1,33 +1,135 @@
-# Example data — TCGA gold set
+# Datasets — layout and conventions
 
-Ships at `data/`:
+The repo holds two datasets and the outputs of every method / annotator /
+run that touches them. Layout covers the full cross-product so you never
+have to guess which file belongs to which condition.
+
+## Top-level layout
 
 ```
 data/
-├── tcga_dataset_20251117/      # raw pathology .txt reports
-│   ├── extract_tcga_ids.py     # provenance / case-id extraction script
-│   ├── tcga_case_ids.csv
-│   └── tcga{1..5}/             # report folders
-├── tcga_result_20251117/       # GPT-OSS pre-annotations (one *_output.json per case)
-│   └── tcga{1..5}/
-└── tcga_annotation_20251117/   # 151 doctor-validated final annotations
-    └── 1/                       (the gold set)
+├── cmuh/
+│   ├── reports/{organ_n}/{case_id}.txt              # raw pathology reports
+│   ├── preannotation/gpt_oss_20b/{organ_n}/{case_id}.json
+│   ├── annotations/
+│   │   ├── nhc_with_preann/{organ_n}/{case_id}.json
+│   │   ├── nhc_without_preann/{organ_n}/{case_id}.json
+│   │   ├── kpc_with_preann/{organ_n}/{case_id}.json
+│   │   ├── kpc_without_preann/{organ_n}/{case_id}.json
+│   │   └── gold/{organ_n}/{case_id}.json            # consensus
+│   ├── splits.json
+│   └── dataset_manifest.yaml
+└── tcga/                                             # mirrors cmuh/
+
+results/
+├── predictions/{dataset}/
+│   ├── llm/{model}/run{NN}/{organ_n}/{case_id}.json
+│   │                       + _summary.json, _log.jsonl
+│   │   {model}/_manifest.yaml
+│   ├── clinicalbert/{variant}/{organ_n}/{case_id}.json  + _summary.json
+│   └── rule_based/{organ_n}/{case_id}.json              + _summary.json
+└── evaluation/{dataset}/
+    ├── iaa/*.csv                                    # inter-annotator agreement
+    ├── accuracy/*.csv                               # method vs gold
+    ├── ensembles/{model}/{organ_n}/{case_id}.json   # majority-vote across runs
+    └── comparisons/*.csv
+
+configs/
+├── datasets/{cmuh,tcga}.yaml
+├── models/{gpt_oss_20b,gemma4_30b,qwen3_30b,gemma4_e2b,clinicalbert_v1,clinicalbert_v2,rule_based}.yaml
+└── annotators/annotators.yaml
+
+models/clinicalbert/{v1_baseline,v2_finetuned}/{checkpoint.pt,config.yaml}
 ```
 
-| Folder | Files | Size | Role |
-|---|--:|--:|---|
-| `tcga_dataset_20251117/`   | ~600 | ~3.2 MB | source TCGA pathology reports |
-| `tcga_result_20251117/`    | ~600 | ~3.4 MB | GPT-OSS:20b pre-annotations (run via `registrar-pipeline`) |
-| `tcga_annotation_20251117/` | 151 | ~628 KB | the **gold** set used by benchmarks + ablations |
+## Naming conventions
+
+| Thing | Pattern | Example |
+|---|---|---|
+| Dataset | lowercase, no date | `cmuh`, `tcga` |
+| Case ID | `{dataset}{N}_{idx}` | `tcga1_37`, `cmuh1_1` |
+| Organ partition | numeric dir | `1/` = breast, `2/` = colorectal (see `dataset_manifest.yaml`) |
+| LLM model | snake_case with size | `gpt_oss_20b`, `gemma4_e2b` |
+| Run directory | zero-padded | `run01`..`run10` |
+| Annotator-mode | `{annotator}_{with,without}_preann` | `nhc_with_preann` |
+| Sidecar files | leading underscore | `_summary.json`, `_manifest.yaml`, `_log.jsonl` |
+| Case files | `{case_id}.json` — annotator/run/model is encoded by the folder | `tcga1_1.json` |
+
+The **leading-underscore sidecar rule** lets any glob of `**/*.json` filter
+out metadata files: `[p for p in paths if not p.name.startswith("_")]`.
+
+## The four annotation modes
+
+Two annotators × two conditions = four files per case, plus gold:
+
+| Folder | Who | What they saw |
+|---|---|---|
+| `nhc_with_preann/` | Annotator NHC | gpt-oss:20b pre-annotation pre-filled, reviewer edits in place |
+| `nhc_without_preann/` | Annotator NHC | blank template, annotator fills from scratch |
+| `kpc_with_preann/` | Annotator KPC | gpt-oss:20b pre-annotation pre-filled |
+| `kpc_without_preann/` | Annotator KPC | blank template |
+| `gold/` | Consensus | produced by adjudication of the four above |
+
+This layout enables two comparisons:
+1. **Inter-annotator agreement** (`pairwise_nhc_vs_kpc_with_preann.csv`, `…_without_preann.csv`).
+2. **Pre-annotation effect** (`preann_effect_nhc.csv`, `preann_effect_kpc.csv`) — same annotator, with vs without the LLM draft.
+
+## Predictions layout — why per-run directories
+
+LLMs are run ≥10 times per model with fixed seeds (42..51) for
+stochastic confidence intervals. Each run gets its own directory so the
+per-run seed, token count, parse-error rate, and log stream are kept
+adjacent to the predictions they describe:
+
+```
+results/predictions/cmuh/llm/gpt_oss_20b/
+├── run01/
+│   ├── 1/cmuh1_1.json
+│   ├── ...
+│   ├── _summary.json                 # seed, total_tokens, parse_errors, wall_time
+│   └── _log.jsonl                    # one JSON per case: case_id, run, seed, tokens, latency
+├── run02/ ... run10/
+└── _manifest.yaml                    # lists all runs + config hash + validity flags
+```
+
+Majority-vote ensembles live under
+`results/evaluation/{dataset}/ensembles/{model}/` and are produced from
+the individual runs — they're a derived artifact, not a separate model.
+
+## Paths in code
+
+All hardcoded paths go through [`paths.py`](../src/digital_registrar_research/paths.py).
+Downstream code uses the resolver rather than string literals:
+
+```python
+from digital_registrar_research.paths import dataset, predictions_dir, evaluation_dir
+
+ds = dataset("cmuh")                            # -> DatasetPaths
+ds.reports, ds.annotations, ds.preannotation    # Path objects
+ds.gold_dir, ds.mode_dir("nhc", "with_preann")  # annotator helpers
+predictions_dir("cmuh", "llm/gpt_oss_20b", run="run03")
+evaluation_dir("cmuh", "iaa")
+```
+
+## Dummy skeleton
+
+`python scripts/gen_dummy_skeleton.py --out dummy --clean` writes the
+entire layout with schema-valid but trivial content — 2 datasets × 2 organs × 3 cases
+— so eval scripts can be smoke-tested before real data lands. Regenerate
+anytime; it is deterministic (seed = `20251117`).
+
+## Migration from the legacy TCGA layout
+
+The old convention — `data/tcga_{dataset,result,annotation}_20251117/`
+with `_{suffix}` annotator filename tags — is being retired. See
+[`testing_migration`](branching_strategy.md) branch and
+`scripts/migrate_tcga_layout.py` (to be added) for the byte-equal copy
+procedure.
 
 ## Provenance
 
-The TCGA (The Cancer Genome Atlas) cases were sampled to cover all ten currently-supported cancer organs. Pre-annotations were produced by the modular DSPy pipeline running gpt-oss:20b on a local Ollama instance. Doctors then reviewed and corrected each pre-annotation in the [annotation UI](annotation.md), saving the result to `tcga_annotation_20251117/`. Those 151 doctor-validated cases are the gold standard.
+- **TCGA**: public pathology reports sampled to cover ten organs. Initial 151 cases (100 breast + 51 colorectal) produced during the 2025-11 round.
+- **CMUH**: local hospital cohort; data collection for the 2026-04 experiment round begins on [`experiment_cmuh_pilot`](branching_strategy.md).
 
-## Three-folder layout (load-bearing)
-
-The folder naming `{prefix}_{kind}_{date}/` is the contract the annotation UI's `discover_folders` expects (see [annotation.md](annotation.md)). When adding new datasets, mirror this convention so the app picks them up automatically.
-
-## Splits
-
-`registrar-split` produces a deterministic 100/51 stratified split (stratified by `cancer_category`) at `src/digital_registrar_research/benchmarks/data/splits.json`. The split is checked into the repo so benchmark and ablation numbers are reproducible.
+Pre-annotations across both datasets are produced by a single gpt-oss:20b
+pass (Ollama / vLLM) so the "with_preann" condition is held constant across annotators.
