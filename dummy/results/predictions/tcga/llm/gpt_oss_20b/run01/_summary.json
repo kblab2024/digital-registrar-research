@@ -4,9 +4,9 @@
   "seed": 42,
   "dataset": "tcga",
   "n_cases": 6,
-  "total_tokens": 5226,
+  "total_tokens": 5015,
   "parse_errors": 0,
   "parse_error_rate": 0.0,
-  "wall_time_s": 75.2,
-  "created_at": "2026-04-23T03:59:00+00:00"
+  "wall_time_s": 91.9,
+  "created_at": "2026-04-23T23:54:44+00:00"
 }

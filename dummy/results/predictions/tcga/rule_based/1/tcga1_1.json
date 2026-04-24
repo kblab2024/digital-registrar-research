@@ -57,7 +57,7 @@
     "biomarkers": [
       {
         "biomarker_category": "er",
-        "expression": true,
+        "expression": false,
         "percentage": null,
         "score": null,
         "biomarker_name": "estrogen receptor"

@@ -2,6 +2,8 @@
 
 Reads datasets that follow the layout in :mod:`.io_canonical` (``dummy/``,
 ``workspace/`` and anything produced by ``scripts/gen_dummy_skeleton.py``).
+``with_preann`` and ``without_preann`` are fully independent subtrees
+under the base dir; the sidebar mode radio picks which one to browse.
 
 Chrome is in 繁體中文; schema/field names stay English because they come
 from the Pydantic schema.
@@ -93,23 +95,24 @@ _init_state()
 # ── Base-dir / dataset / samples loading ──────────────────────────────────────
 
 def _reload_from_base(base_dir: str) -> tuple[bool, str]:
-    """Index the base dir, pick the first available dataset, load samples."""
+    """Index the base dir under the current mode, pick a dataset, load samples."""
     annotator = st.session_state.current_annotator
     if not annotator:
         return False, "請先在上方選擇標註者。"
-    datasets = list_datasets(base_dir)
+    mode = st.session_state.mode
+    datasets = list_datasets(base_dir, mode)
     if not datasets:
-        return False, "此資料夾下找不到 data/<dataset>/reports/ 結構。"
+        return False, f"此資料夾下找不到 {mode}/data/<dataset>/reports/ 結構。"
     st.session_state.base_dir = base_dir
     st.session_state.available_datasets = datasets
     dataset = st.session_state.dataset if st.session_state.dataset in datasets else datasets[0]
     st.session_state.dataset = dataset
-    ws = load_workspace(base_dir, dataset)
+    ws = load_workspace(base_dir, dataset, mode)
     if ws is None:
-        return False, f"無法載入資料集「{dataset}」。"
+        return False, f"無法載入資料集「{dataset}」({mode})。"
     st.session_state.workspace = ws
     _rebuild_samples()
-    return True, f"已載入「{dataset}」({len(st.session_state.samples)} 筆樣本)。"
+    return True, f"已載入「{dataset}」({mode}, {len(st.session_state.samples)} 筆樣本)。"
 
 
 def _rebuild_samples():
@@ -120,7 +123,7 @@ def _rebuild_samples():
         st.session_state.sample_idx = 0
         _on_file_change()
         return
-    st.session_state.samples = list_samples(ws, annotator["suffix"], st.session_state.mode)
+    st.session_state.samples = list_samples(ws, annotator["suffix"])
     st.session_state.sample_idx = 0
     st.session_state.stem_filter = "all"
     _on_file_change()
@@ -131,13 +134,18 @@ def _on_annotator_change():
 
 
 def _on_mode_change():
-    _rebuild_samples()
+    # Mode changes the entire base subtree — re-discover datasets for the new mode.
+    base = st.session_state.base_dir
+    if base:
+        _reload_from_base(base)
+    else:
+        _rebuild_samples()
 
 
 def _on_dataset_change():
     base = st.session_state.base_dir
     dataset = st.session_state.dataset
-    ws = load_workspace(base, dataset)
+    ws = load_workspace(base, dataset, st.session_state.mode)
     if ws is None:
         st.session_state.workspace = None
         st.session_state.samples = []

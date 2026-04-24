@@ -6,10 +6,10 @@ data or the TCGA migration land.
 
 Layout produced mirrors the final design:
 
-    {out}/data/{cmuh,tcga}/
+    {out}/{with_preann,without_preann}/data/{cmuh,tcga}/
         reports/{organ}/{case_id}.txt
-        preannotation/gpt_oss_20b/{organ}/{case_id}.json
-        annotations/{nhc,kpc}_{with,without}_preann/{organ}/{case_id}.json
+        preannotation/gpt_oss_20b/{organ}/{case_id}.json   # with_preann only
+        annotations/{nhc,kpc}/{organ}/{case_id}.json
         annotations/gold/{organ}/{case_id}.json
         splits.json
         dataset_manifest.yaml
@@ -287,32 +287,43 @@ def case_ids(dataset: str, organ_n: str) -> list[str]:
 
 
 def build_dataset(root: Path, dataset: str, rng: random.Random) -> None:
+    """Build both mode subtrees for ``dataset``.
+
+    ``with_preann`` and ``without_preann`` are fully independent copies of
+    the data (same case IDs in dummy; production may subset
+    ``without_preann``). Only ``with_preann`` gets a ``preannotation/``
+    folder since the UI never reads pre-annotations in ``without_preann``
+    mode.
+    """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    ds_root = root / "data" / dataset
-    all_ids: list[str] = []
 
-    for organ_n, organ in ORGANS.items():
-        for idx in range(1, CASES_PER_ORGAN + 1):
-            case_id = f"{dataset}{organ_n}_{idx}"
-            all_ids.append(case_id)
-            gold = gold_for(dataset, organ_n, idx)
+    for mode in MODES:
+        ds_root = root / mode / "data" / dataset
+        mode_ids: list[str] = []
 
-            # Raw report
-            write_text(ds_root / "reports" / organ_n / f"{case_id}.txt",
-                       report_text(dataset, case_id, organ, gold))
+        for organ_n, organ in ORGANS.items():
+            for idx in range(1, CASES_PER_ORGAN + 1):
+                case_id = f"{dataset}{organ_n}_{idx}"
+                mode_ids.append(case_id)
+                gold = gold_for(dataset, organ_n, idx)
 
-            # Gold
-            write_json(ds_root / "annotations" / "gold" / organ_n / f"{case_id}.json", gold)
+                # Raw report
+                write_text(ds_root / "reports" / organ_n / f"{case_id}.txt",
+                           report_text(dataset, case_id, organ, gold))
 
-            # Pre-annotation (gpt-oss:20b, slightly noisy)
-            preann = noisify(gold, error_rate=0.15, rng=rng)
-            write_json(ds_root / "preannotation" / PREANN_MODEL / organ_n / f"{case_id}.json",
-                       preann)
+                # Gold
+                write_json(ds_root / "annotations" / "gold" / organ_n / f"{case_id}.json", gold)
 
-            # Human annotations: 4 modes, each slightly different
-            for annotator in ANNOTATORS:
-                for mode in MODES:
-                    # Annotators working WITH preann drift slightly less from gold
+                # Pre-annotation — only under with_preann
+                if mode == "with_preann":
+                    preann = noisify(gold, error_rate=0.15, rng=rng)
+                    write_json(
+                        ds_root / "preannotation" / PREANN_MODEL / organ_n / f"{case_id}.json",
+                        preann,
+                    )
+
+                # Human annotations — one folder per annotator (mode is in the parent path)
+                for annotator in ANNOTATORS:
                     err = 0.05 if mode == "with_preann" else 0.10
                     ann = noisify(gold, error_rate=err, rng=rng)
                     ann["_meta"] = {
@@ -322,28 +333,29 @@ def build_dataset(root: Path, dataset: str, rng: random.Random) -> None:
                         "annotated_at": datetime.now().isoformat(timespec="seconds"),
                     }
                     write_json(
-                        ds_root / "annotations" / f"{annotator}_{mode}" / organ_n / f"{case_id}.json",
+                        ds_root / "annotations" / annotator / organ_n / f"{case_id}.json",
                         ann,
                     )
 
-    # splits.json — simple train/test
-    split_idx = len(all_ids) // 2
-    write_json(ds_root / "splits.json", {
-        "seed": 20251117,
-        "train": all_ids[:split_idx],
-        "test": all_ids[split_idx:],
-    })
+        # splits.json — simple train/test (per mode, so production can diverge)
+        split_idx = len(mode_ids) // 2
+        write_json(ds_root / "splits.json", {
+            "seed": 20251117,
+            "train": mode_ids[:split_idx],
+            "test": mode_ids[split_idx:],
+        })
 
-    # dataset_manifest.yaml
-    write_yaml(ds_root / "dataset_manifest.yaml", {
-        "dataset": dataset,
-        "created_at": now,
-        "n_cases": len(all_ids),
-        "organs": [{"n": n, "name": ORGANS[n]} for n in ORGANS],
-        "cases_per_organ": CASES_PER_ORGAN,
-        "source": "synthetic_dummy_skeleton",
-        "schema_version": "fair_plus_nested_plus_biomarkers_v1",
-    })
+        # dataset_manifest.yaml (per mode)
+        write_yaml(ds_root / "dataset_manifest.yaml", {
+            "dataset": dataset,
+            "mode": mode,
+            "created_at": now,
+            "n_cases": len(mode_ids),
+            "organs": [{"n": n, "name": ORGANS[n]} for n in ORGANS],
+            "cases_per_organ": CASES_PER_ORGAN,
+            "source": "synthetic_dummy_skeleton",
+            "schema_version": "fair_plus_nested_plus_biomarkers_v1",
+        })
 
 
 def build_llm_predictions(root: Path, dataset: str, rng: random.Random) -> None:
@@ -466,11 +478,17 @@ def build_configs(root: Path) -> None:
     for ds in DATASETS:
         write_yaml(cfg / "datasets" / f"{ds}.yaml", {
             "name": ds,
-            "reports_dir": f"data/{ds}/reports",
-            "annotations_dir": f"data/{ds}/annotations",
-            "preannotation_dir": f"data/{ds}/preannotation",
-            "splits_path": f"data/{ds}/splits.json",
-            "manifest_path": f"data/{ds}/dataset_manifest.yaml",
+            "modes": {
+                mode: {
+                    "reports_dir": f"{mode}/data/{ds}/reports",
+                    "annotations_dir": f"{mode}/data/{ds}/annotations",
+                    **({"preannotation_dir": f"{mode}/data/{ds}/preannotation"}
+                       if mode == "with_preann" else {}),
+                    "splits_path": f"{mode}/data/{ds}/splits.json",
+                    "manifest_path": f"{mode}/data/{ds}/dataset_manifest.yaml",
+                }
+                for mode in MODES
+            },
             "organs": [{"n": n, "name": ORGANS[n]} for n in ORGANS],
         })
 
@@ -528,7 +546,8 @@ def write_readme(root: Path) -> None:
 
 This tree mirrors the canonical layout for the experiment:
 
-- `data/{cmuh,tcga}/` — reports, pre-annotation, human annotations (4 modes + gold)
+- `{with_preann,without_preann}/data/{cmuh,tcga}/` — fully independent per-mode datasets
+  (reports, annotations, splits, manifest). `preannotation/` exists only under `with_preann/`.
 - `results/predictions/{dataset}/{llm,clinicalbert,rule_based}/...` — per-method outputs
 - `results/evaluation/{dataset}/...` — (populated by eval scripts)
 - `configs/{datasets,models,annotators}/` — machine-readable experiment metadata
@@ -538,10 +557,11 @@ This tree mirrors the canonical layout for the experiment:
 
 | Thing | Pattern |
 |---|---|
+| Mode subtree | `with_preann/`, `without_preann/` |
 | Case ID | `{dataset}{N}_{idx}` (`tcga1_7`, `cmuh2_3`) |
 | Organ dir | numeric — `1/` = breast, `2/` = colorectal |
 | Run dir | `run01`..`run10` |
-| Annotator-mode dir | `{annotator}_{with,without}_preann` |
+| Annotator dir | `{annotator}/` (mode is already in the parent path) |
 | Sidecar files | leading underscore (`_summary.json`, `_manifest.yaml`, `_log.jsonl`) |
 | Case files | `{case_id}.json` — annotator/run/model is encoded by the folder |
 

@@ -20,18 +20,24 @@ The canonical launchers export `REGISTRAR_ANNOTATE_BASE_DIR` before spawning `st
 
 ```
 <base_dir>/
-└── data/
-    └── <dataset>/                                  # e.g. cmuh, tcga
+├── with_preann/
+│   └── data/<dataset>/                             # e.g. cmuh, tcga
+│       ├── reports/<n>/<case_id>.txt
+│       ├── preannotation/gpt_oss_20b/<n>/<case_id>.json
+│       └── annotations/<annotator>/<n>/<case_id>.json
+└── without_preann/
+    └── data/<dataset>/                             # independent subset (no preannotation/)
         ├── reports/<n>/<case_id>.txt
-        ├── preannotation/gpt_oss_20b/<n>/<case_id>.json
-        └── annotations/<annotator>_<mode>/<n>/<case_id>.json
+        └── annotations/<annotator>/<n>/<case_id>.json
 ```
+
+`with_preann` and `without_preann` are fully independent datasets — the mode picker in the sidebar switches between the two subtrees.
 
 Chrome is in 繁體中文. Sidebar selectors:
 
 - **標註者** — who is labelling (e.g. NHC, KPC).
-- **標註模式** — `含預標註 (with_preann)` loads `preannotation/gpt_oss_20b/` and pre-fills the form; `不含預標註 (without_preann)` hides the pre-annotation panel and starts from blank. Selection routes saves into the matching `{annotator}_{mode}/` directory.
-- **資料集** — dropdown of subfolders found under `<base_dir>/data/` that contain a `reports/` directory (so `cmuh` and `tcga` show up automatically in the bundled `dummy/`).
+- **標註模式** — `含預標註 (with_preann)` browses `with_preann/data/<dataset>/`, loads `preannotation/gpt_oss_20b/`, and pre-fills the form; `不含預標註 (without_preann)` browses `without_preann/data/<dataset>/`, hides the pre-annotation panel, and starts from blank. Switching modes re-discovers datasets and samples from scratch.
+- **資料集** — dropdown of subfolders found under `<base_dir>/<mode>/data/` that contain a `reports/` directory (so `cmuh` and `tcga` show up automatically in the bundled `dummy/`).
 
 Pre-annotation source is fixed to `gpt_oss_20b` today (only model present in `dummy/`).
 

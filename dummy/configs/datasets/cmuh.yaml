@@ -1,9 +1,16 @@
 name: cmuh
-reports_dir: data/cmuh/reports
-annotations_dir: data/cmuh/annotations
-preannotation_dir: data/cmuh/preannotation
-splits_path: data/cmuh/splits.json
-manifest_path: data/cmuh/dataset_manifest.yaml
+modes:
+  with_preann:
+    reports_dir: with_preann/data/cmuh/reports
+    annotations_dir: with_preann/data/cmuh/annotations
+    preannotation_dir: with_preann/data/cmuh/preannotation
+    splits_path: with_preann/data/cmuh/splits.json
+    manifest_path: with_preann/data/cmuh/dataset_manifest.yaml
+  without_preann:
+    reports_dir: without_preann/data/cmuh/reports
+    annotations_dir: without_preann/data/cmuh/annotations
+    splits_path: without_preann/data/cmuh/splits.json
+    manifest_path: without_preann/data/cmuh/dataset_manifest.yaml
 organs:
   - n: 1
     name: breast
