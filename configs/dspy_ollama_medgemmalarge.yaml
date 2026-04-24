@@ -1,0 +1,34 @@
+# Decoding + smoke overrides for --model medgemmalarge.
+# Read by scripts/run_dspy_ollama_single.py and scripts/run_dspy_ollama_smoke.py.
+#
+# Model: ollama_chat/medgemma:27b (Gemma-3 based medical fine-tune)
+# Profile defaults (models.common.MODEL_PROFILES):
+#   temperature=0.15  top_p=0.95  top_k=64
+#   num_ctx=8192  max_tokens=4096
+#   repeat_penalty=1.05  keep_alive="30m"  cache=false  seed=10
+#
+# Notes:
+#   - MedGemma inherits Gemma's sampler recommendations; defaults mirror the
+#     gemma3 27B profile.
+#   - If the model echoes boilerplate medical-disclaimer text into the JSON
+#     output, lower temperature further (0.05) before touching other params.
+#
+# Any key left null falls through to the profile above.
+
+decoding:
+  temperature: null
+  top_p: null
+  top_k: null
+  num_ctx: null
+  max_tokens: null
+  repeat_penalty: null
+  keep_alive: null
+  cache: null
+  # seed: int (fixed), null (use base default 10), or "random" / "auto"
+  # (fresh 31-bit int drawn at launch, logged into _run_meta.json so the
+  # run stays reproducible after the fact).
+  seed: null
+
+smoke:
+  n: 3
+  seed: 0

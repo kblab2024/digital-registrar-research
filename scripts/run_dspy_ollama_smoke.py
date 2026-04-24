@@ -17,10 +17,16 @@ go/no-go for the real run.
 Usage
 -----
     python scripts/run_dspy_ollama_smoke.py \\
-        --experiment-root /path/to/exp \\
-        --dataset cmuh \\
-        --model gpt \\
-        [--n 5] [--seed 0] [--organs 1 2]
+        --model gptoss \\
+        --folder dummy \\
+        --dataset tcga \\
+        [--n 3] [--seed 0] [--organs 1 2]
+
+``--model`` must be one of: gptoss, gemma3, gemma4, qwen3_5, medgemmalarge,
+medgemmasmall. Each alias auto-loads ``configs/dspy_ollama_{alias}.yaml`` for
+decoding overrides and smoke defaults (``smoke.n``, ``smoke.seed``). CLI
+``--n`` / ``--seed`` win when provided; otherwise the config's smoke
+section is used.
 
 Output
 ------
@@ -44,12 +50,19 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))  # for _config_loader
 
 # Reuse the low-level helpers from the full-run script so the two stay in
 # lockstep w/r/t output format and atomic-write semantics.
+from _config_loader import (  # noqa: E402
+    load_model_config,
+    resolve_folder,
+    split_decoding_overrides,
+)
 from run_dspy_ollama_single import (  # noqa: E402
     DATASETS,
     PIPELINE_LOGGER_NAME,
+    UNIFIED_MODELS,
     _atomic_write_json,
     discover_organs,
     model_slug,
@@ -69,26 +82,36 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--experiment-root", type=Path, required=True,
-                    help="Root containing data/ and results/ "
-                         "(the dummy-skeleton layout).")
+    ap.add_argument("--model", required=True, choices=UNIFIED_MODELS,
+                    help="Model alias: one of " + ", ".join(UNIFIED_MODELS) +
+                         ".")
+    ap.add_argument("--folder", dest="experiment_root", required=True,
+                    type=resolve_folder,
+                    help="Experiment root. Shorthand 'dummy' or 'workspace' "
+                         "resolves against the repo root.")
     ap.add_argument("--dataset", required=True, choices=DATASETS,
                     help="Dataset name under data/ (cmuh or tcga).")
-    ap.add_argument("--model", required=True,
-                    help=f"Model key (one of: {', '.join(model_list.keys())}).")
-    ap.add_argument("--n", type=int, default=5,
-                    help="Number of random cases to run (default: 5).")
-    ap.add_argument("--seed", type=int, default=0,
-                    help="Sampling seed for reproducibility (default: 0).")
+    # --n / --seed default to None so the per-model config's smoke section
+    # can supply them; CLI always wins when provided.
+    ap.add_argument("--n", type=int, default=None,
+                    help="Number of random cases to run "
+                         "(default: from config smoke.n, else 3).")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="Sampling seed for reproducibility "
+                         "(default: from config smoke.seed, else 0).")
     ap.add_argument("--organs", nargs="*", default=None,
                     help="Restrict sampling to these numeric organ dirs.")
     ap.add_argument("-v", "--verbose", action="store_true")
     return ap.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-
+def run_with_args(
+    args: argparse.Namespace, overrides: dict | None = None,
+) -> int:
+    """Execute the smoke loop given a prebuilt argparse.Namespace and an
+    optional decoding-overrides dict. Factored out of ``main`` so the
+    per-(model, tree) YAML wrappers in ``scripts/run_dspy_ollama_smoke_*.py``
+    can reuse the same body without re-invoking argparse."""
     if args.model not in model_list:
         print(f"error: unknown --model {args.model!r}. "
               f"Valid keys: {', '.join(model_list.keys())}", file=sys.stderr)
@@ -141,9 +164,11 @@ def main(argv: list[str] | None = None) -> int:
     for organ_n, p in sampled:
         logger.info("  - %s (organ=%s)", p.name, organ_n)
 
-    setup_pipeline(args.model)
-    lm = load_model(args.model)
+    setup_pipeline(args.model, overrides=overrides)
+    lm = load_model(args.model, overrides=overrides)
     lm_seed = lm.kwargs.get("seed")
+    if overrides:
+        logger.info("decoding overrides: %s", overrides)
 
     run_name = out_dir.name  # e.g. "_smoke_20260423_101530"
 
@@ -189,6 +214,19 @@ def main(argv: list[str] | None = None) -> int:
     print(f"smoke dir: {out_dir}")
 
     return 0 if summary["n_pipeline_error"] == 0 and summary["n_ok"] == args.n else 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    cfg = load_model_config(args.model)
+    overrides = split_decoding_overrides(cfg.get("decoding"))
+    # Fill --n / --seed from the config's smoke: section when CLI omitted them.
+    smoke = cfg.get("smoke") or {}
+    if args.n is None:
+        args.n = int(smoke.get("n", 3))
+    if args.seed is None:
+        args.seed = int(smoke.get("seed", 0))
+    return run_with_args(args, overrides)
 
 
 if __name__ == "__main__":
