@@ -41,6 +41,7 @@ results/**/*.json
 results/**/*.pt
 results/**/*.ckpt
 !results/**/.gitkeep
+workspace/ 
 
 # Dummy experiment root — smoke outputs, never pushed
 dummy/results/
