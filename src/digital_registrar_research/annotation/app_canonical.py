@@ -420,6 +420,13 @@ def render_section(section: SectionSpec, tab_index: int, sample_id: str):
 def _render_annotator_picker():
     annotators: list[dict] = st.session_state.annotators
     current = st.session_state.current_annotator
+    locked = bool(os.environ.get("REGISTRAR_ANNOTATE_LOCK_ANNOTATORS"))
+
+    # In locked mode with a single annotator, auto-select to skip the placeholder.
+    if locked and current is None and len(annotators) == 1:
+        st.session_state.current_annotator = annotators[0]
+        _on_annotator_change()
+        st.rerun()
 
     labels = [f"{a['name']} ({a['suffix']})" for a in annotators]
     suffixes = [a["suffix"] for a in annotators]
@@ -445,6 +452,9 @@ def _render_annotator_picker():
         st.session_state.current_annotator = new_annotator
         _on_annotator_change()
         st.rerun()
+
+    if locked:
+        return
 
     with st.sidebar.expander("➕ 新增標註者", expanded=False):
         name = st.text_input("全名", key="new_annotator_name")

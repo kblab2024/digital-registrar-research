@@ -11,15 +11,19 @@ if not exist "%USERPROFILE%\.streamlit\credentials.toml" (
     ) > "%USERPROFILE%\.streamlit\credentials.toml"
 )
 
-set "REGISTRAR_ANNOTATE_BASE_DIR=%~dp0dummy"
+set "REGISTRAR_ANNOTATE_BASE_DIR=%~dp0workspace"
+set "REGISTRAR_ANNOTATE_LOCK_ANNOTATORS=1"
 set "PYTHONPATH=%~dp0app"
 set "PYTHONDONTWRITEBYTECODE=1"
 set "STREAMLIT_BROWSER_GATHER_USAGE_STATS=false"
 
 echo ================================================================
-echo   Digital Registrar - Annotator (dummy dataset)
+echo   Digital Registrar - Annotator (workspace, locked to NHC)
 echo ================================================================
-echo   Starting Streamlit on http://localhost:8501
+echo   Data root : workspace\
+echo   Annotator : NHC (locked)
+echo   URL       : http://localhost:8501
+echo.
 echo   Keep this window open while annotating.
 echo   Close this window or press Ctrl+C to stop the server.
 echo ================================================================
