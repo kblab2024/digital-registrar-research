@@ -15,43 +15,69 @@ from typing import Literal
 
 import dspy
 
-model_list = {"gemma4b": "ollama_chat/gemma3:4b",
-          "gemma1b": "ollama_chat/gemma3:1b",
-          "gemma4e2b": "ollama_chat/gemma4:e2b",
-          "med8b": "ollama_chat/thewindmom/llama3-med42-8b",
-          "gemma12b": "ollama_chat/gemma3:12b",
-          "gemma27b": "ollama_chat/gemma3:27b",
-          "med70b": "ollama_chat/thewindmom/llama3-med42-70b",
-          "gpt": "ollama_chat/gpt-oss:20b",
-          "phi4": "ollama_chat/phi4",
-          "qwen30b": "ollama_chat/qwen3:30b"
+model_list = {
+    # --- Legacy keys (still used by pipeline.py __main__, ablations, existing
+    # experiment.py invocations). Do not remove without sweeping callers. ---
+    "gemma4b": "ollama_chat/gemma3:4b",
+    "gemma1b": "ollama_chat/gemma3:1b",
+    "gemma4e2b": "ollama_chat/gemma4:e2b",
+    "med8b": "ollama_chat/thewindmom/llama3-med42-8b",
+    "gemma12b": "ollama_chat/gemma3:12b",
+    "gemma27b": "ollama_chat/gemma3:27b",
+    "med70b": "ollama_chat/thewindmom/llama3-med42-70b",
+    "gpt": "ollama_chat/gpt-oss:20b",
+    "phi4": "ollama_chat/phi4",
+    "qwen30b": "ollama_chat/qwen3:30b",
+    # --- Unified aliases consumed by the consolidated runners
+    # scripts/run_dspy_ollama_{single,smoke}.py via --model <alias>. ---
+    "gptoss":         "ollama_chat/gpt-oss:20b",
+    "gemma3":         "ollama_chat/gemma3:27b",
+    "gemma4":         "ollama_chat/gemma4:26b",
+    "qwen3_5":        "ollama_chat/qwen3.5:27b",
+    "medgemmalarge":  "ollama_chat/medgemma:27b",
+    "medgemmasmall":  "ollama_chat/medgemma:4b",
 }
 
 localaddr = "http://localhost:11434"
 
-def load_model(model_name: str):
+# Per-model decoding profiles. Tuned for deterministic structured-JSON
+# extraction on Ollama. Seed / cache are in _BASE_KWARGS so profiles stay
+# focused on sampler choices.
+MODEL_PROFILES: dict[str, dict] = {
+    "ollama_chat/gpt-oss:20b":   {"temperature": 0.3,  "top_p": 1.0,  "top_k": 40, "num_ctx": 8192, "max_tokens": 4096},
+    "ollama_chat/gemma3:27b":    {"temperature": 0.15, "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
+    "ollama_chat/gemma4:26b":    {"temperature": 0.1,  "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
+    "ollama_chat/qwen3.5:27b":   {"temperature": 0.15, "top_p": 0.9,  "top_k": 40, "num_ctx": 8192, "max_tokens": 4096},
+    "ollama_chat/medgemma:27b":  {"temperature": 0.15, "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
+    "ollama_chat/medgemma:4b":   {"temperature": 0.2,  "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
+}
+_DEFAULT_PROFILE = {"temperature": 0.2, "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096}
+_BASE_KWARGS = {"repeat_penalty": 1.05, "keep_alive": "30m", "cache": False, "seed": 10}
+
+
+def load_model(model_name: str, overrides: dict | None = None):
     if model_name not in model_list:
         raise ValueError(f"Model {model_name} not found. Available models: {list(model_list.keys())}")
 
-    model = model_list[model_name]
+    model_id = model_list[model_name]
+    kwargs = {**_BASE_KWARGS, **MODEL_PROFILES.get(model_id, _DEFAULT_PROFILE)}
+    if overrides:
+        kwargs.update({k: v for k, v in overrides.items() if v is not None})
+
     lm = dspy.LM(
-        model=model,
+        model=model_id,
         api_base=localaddr,
         api_key="",
         model_type="chat",
-        top_p=0.7,
-        max_tokens=16384,
-        num_ctx=16384,
-        temperature=0.7,
-        seed = 10
+        **kwargs,
     )
-    print(f"Loaded model: {model_name}")
+    print(f"Loaded model: {model_name} with {kwargs}")
     return lm
 
 # 2 . define classes and set up Signatures
 
-def autoconf_dspy (model_name: str):
-    lm = load_model(model_name)
+def autoconf_dspy (model_name: str, overrides: dict | None = None):
+    lm = load_model(model_name, overrides=overrides)
     dspy.configure(lm=lm)
 
 class is_cancer(dspy.Signature):

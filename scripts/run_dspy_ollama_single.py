@@ -16,11 +16,20 @@ Unlike the multirun driver in ``run_gpt_oss_multirun.py``, this script:
 Usage
 -----
     python scripts/run_dspy_ollama_single.py \\
-        --experiment-root /path/to/exp \\
-        --dataset cmuh \\
-        --model gpt \\
+        --model gptoss \\
+        --folder dummy \\
+        --dataset tcga \\
         [--run run01] [--organs 1 2] [--limit N] [--overwrite] \\
         [--tolerate-errors] [-v]
+
+``--model`` must be one of: gptoss, gemma3, gemma4, qwen3_5, medgemmalarge,
+medgemmasmall. Each alias auto-loads ``configs/dspy_ollama_{alias}.yaml`` for
+decoding overrides (temperature, top_p, num_ctx, max_tokens, ...). Any key
+left null in the YAML falls back to the per-model profile baked into
+``models.common.MODEL_PROFILES``.
+
+``--folder`` accepts the shorthands ``dummy`` and ``workspace`` (resolved
+against the repo root) or any absolute / relative path.
 
 Output tree
 -----------
@@ -54,6 +63,13 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 # Make the in-tree package importable without requiring `pip install -e .`.
 sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))  # for _config_loader
+
+from _config_loader import (  # noqa: E402
+    load_model_config,
+    resolve_folder,
+    split_decoding_overrides,
+)
 
 from digital_registrar_research.models.common import (  # noqa: E402
     load_model,
@@ -70,6 +86,13 @@ PIPELINE_LOGGER_NAME = "experiment_logger"  # fixed by pipeline.run_pipeline
 
 DATASETS = ("cmuh", "tcga")
 MAX_RUN_SLOTS = 10  # memory: "run01..run10"
+
+# Unified --model aliases consumed by the consolidated runners. The legacy
+# model_list keys (gpt, gemma27b, qwen30b, ...) still resolve but are not
+# offered from the CLI to keep the surface small and self-documenting.
+UNIFIED_MODELS = (
+    "gptoss", "gemma3", "gemma4", "qwen3_5", "medgemmalarge", "medgemmasmall",
+)
 
 
 # --- IO helpers --------------------------------------------------------------
@@ -409,14 +432,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--experiment-root", type=Path, required=True,
-                    help="Root containing data/ and results/ "
-                         "(the dummy-skeleton layout).")
+    ap.add_argument("--model", required=True, choices=UNIFIED_MODELS,
+                    help="Model alias: one of " + ", ".join(UNIFIED_MODELS) +
+                         ". Each alias auto-loads "
+                         "configs/dspy_ollama_{alias}.yaml (if present) for "
+                         "decoding overrides.")
+    ap.add_argument("--folder", dest="experiment_root", required=True,
+                    type=resolve_folder,
+                    help="Experiment root containing data/ and results/. "
+                         "Shorthand 'dummy' or 'workspace' resolves against "
+                         "the repo root; absolute paths or other relative "
+                         "paths are accepted too.")
     ap.add_argument("--dataset", required=True, choices=DATASETS,
                     help="Dataset name under data/ (cmuh or tcga).")
-    ap.add_argument("--model", required=True,
-                    help=f"Model key from models.common.model_list "
-                         f"(one of: {', '.join(model_list.keys())}).")
     ap.add_argument("--run", default=None,
                     help="Run slot name, e.g. run01..run10 "
                          "(default: next free slot under the model dir).")
@@ -435,9 +463,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-
+def run_with_args(
+    args: argparse.Namespace, overrides: dict | None = None,
+) -> int:
+    """Execute a full single-run given a prebuilt argparse.Namespace and an
+    optional decoding-overrides dict. Factored out of ``main`` so the
+    per-(model, tree) YAML wrappers in ``scripts/run_dspy_ollama_single_*.py``
+    can reuse the same body without re-invoking argparse."""
     if args.model not in model_list:
         print(f"error: unknown --model {args.model!r}. "
               f"Valid keys: {', '.join(model_list.keys())}", file=sys.stderr)
@@ -488,14 +520,20 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("run: %s", run_name)
     logger.info("run dir: %s", run_dir)
     logger.info("organs: %s", [o[0] for o in organs])
+    if overrides:
+        logger.info("decoding overrides: %s", overrides)
 
-    setup_pipeline(args.model)  # autoconf_dspy under the hood
-    lm = load_model(args.model)
+    setup_pipeline(args.model, overrides=overrides)  # autoconf_dspy under the hood
+    lm = load_model(args.model, overrides=overrides)
     lm_kwargs = {
         "temperature": getattr(lm, "temperature", None) or lm.kwargs.get("temperature"),
         "top_p": lm.kwargs.get("top_p"),
+        "top_k": lm.kwargs.get("top_k"),
         "max_tokens": lm.kwargs.get("max_tokens"),
         "num_ctx": lm.kwargs.get("num_ctx"),
+        "repeat_penalty": lm.kwargs.get("repeat_penalty"),
+        "keep_alive": lm.kwargs.get("keep_alive"),
+        "cache": lm.kwargs.get("cache"),
         "seed": lm.kwargs.get("seed"),
     }
 
@@ -551,6 +589,13 @@ def main(argv: list[str] | None = None) -> int:
     if summary["n_pipeline_error"] > 0 and not args.tolerate_errors:
         return 1
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    cfg = load_model_config(args.model)
+    overrides = split_decoding_overrides(cfg.get("decoding"))
+    return run_with_args(args, overrides)
 
 
 if __name__ == "__main__":

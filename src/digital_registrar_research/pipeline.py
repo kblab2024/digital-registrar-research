@@ -50,13 +50,14 @@ def timeit(func):
         return result, end_time - start_time
     return wrapper
 
-def setup_pipeline(model_name: str):
+def setup_pipeline(model_name: str, overrides: dict | None = None):
     """
     Set up the pipeline by loading the specified model and configuring dspy.
 
     :param model_name: Name of the model to load
+    :param overrides: Optional decoding-parameter overrides forwarded to load_model
     """
-    autoconf_dspy(model_name)  # noqa: F405
+    autoconf_dspy(model_name, overrides=overrides)  # noqa: F405
     print("Pipeline setup complete.")
 
 class CancerPipeline(dspy.Module):
