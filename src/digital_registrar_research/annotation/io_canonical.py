@@ -28,9 +28,11 @@ import os
 from dataclasses import dataclass
 
 from .io import (  # noqa: F401 — re-exported for app_canonical
+    NA_SENTINEL,
     build_save_payload,
     load_json,
     load_report_text,
+    rehydrate_sentinels,
     save_annotation,
     strip_meta,
 )

@@ -13,6 +13,7 @@ from digital_registrar_research.annotation.annotator_config import (
     load_annotators,
 )
 from digital_registrar_research.annotation.io import (
+    NA_SENTINEL,
     FolderSet,
     SampleRef,
     build_save_payload,
@@ -20,9 +21,14 @@ from digital_registrar_research.annotation.io import (
     list_samples,
     load_json,
     load_report_text,
+    rehydrate_sentinels,
     save_annotation,
     strip_meta,
 )
+
+NOT_SET_LABEL = "— not set —"
+NA_LABEL = "— N/A —"
+EMPTY_LABEL = "— empty —"
 from digital_registrar_research.annotation.parser import (
     CANCER_CATEGORIES,
     CANCER_TO_FILE,
@@ -122,7 +128,9 @@ def _on_file_change():
     pre = strip_meta(load_json(sample.result_path))
     st.session_state.pre_annotation = pre
     if os.path.exists(sample.annotation_path):
-        st.session_state.annotation = strip_meta(load_json(sample.annotation_path))
+        raw = load_json(sample.annotation_path)
+        st.session_state.annotation = strip_meta(raw)
+        rehydrate_sentinels(st.session_state.annotation, raw.get("_meta"))
         st.session_state.annotation_status = "completed"
     else:
         st.session_state.annotation = copy.deepcopy(pre)
@@ -176,16 +184,22 @@ def _set_items(section: str, array_field: str, items: list):
 # ── Formatting / diff helpers ──────────────────────────────────────────────────
 
 def _fmt_option(val, field_type: str = "enum") -> str:
+    if val == NA_SENTINEL:
+        return NA_LABEL
     if val is None:
-        return "— not set —"
+        return NOT_SET_LABEL
     if isinstance(val, bool):
         return "Yes" if val else "No"
     return str(val).replace("_", " ")
 
 
+_NULLISH = (None, "", NA_SENTINEL)
+
+
 def _values_differ(a, b) -> bool:
-    # Treat "" and None as equivalent (we normalise empties to None on save).
-    if (a is None or a == "") and (b is None or b == ""):
+    # Null-equivalent states (pre: None/""; annotation: None/""/NA_SENTINEL) all
+    # serialise to the same null, so they shouldn't light up the diff marker.
+    if a in _NULLISH and b in _NULLISH:
         return False
     return a != b
 
@@ -196,7 +210,7 @@ def _diff_marker(current, pre) -> str:
 
 def _pre_caption(pre_val) -> str | None:
     if pre_val is None or pre_val == "":
-        return "Pre-annotated: — not set —"
+        return f"Pre-annotated: {NOT_SET_LABEL}"
     return f"Pre-annotated: {_fmt_option(pre_val)}"
 
 
@@ -209,36 +223,61 @@ def render_field(field: FieldSpec, current_val, pre_val, key: str) -> object:
     help_text = field.description or None
 
     if field.field_type in ("enum", "int_enum"):
-        options = [None] + field.enum_values
+        options = [None, NA_SENTINEL, *field.enum_values]
         idx = options.index(current_val) if current_val in options else 0
         new_val = st.selectbox(
             label, options=options, index=idx,
             format_func=_fmt_option, key=key, help=help_text,
         )
     elif field.field_type == "bool":
-        options = [None, True, False]
-        idx = options.index(current_val) if current_val in options else 0
+        # Per spec: bool fields expose exactly three options, no 尚未設定.
+        # A None coming from pre-annotation or a fresh session is treated as
+        # intentional N/A (first option) — the selectbox never emits None.
+        options = [NA_SENTINEL, True, False]
+        if current_val is None or current_val == NA_SENTINEL:
+            idx = 0
+        elif current_val in (True, False):
+            idx = options.index(current_val)
+        else:
+            idx = 0
         new_val = st.selectbox(
             label, options=options, index=idx,
             format_func=_fmt_option, key=key, help=help_text,
         )
     elif field.field_type == "int":
         col_num, col_null = st.columns([3, 1])
-        is_null = current_val is None
+        is_null = current_val is None or current_val == NA_SENTINEL
         with col_null:
             null_checked = st.checkbox("N/A", value=is_null, key=key + "__null")
         with col_num:
+            num_init = (
+                int(current_val)
+                if isinstance(current_val, int) and not isinstance(current_val, bool)
+                else 0
+            )
             num_val = st.number_input(
-                label, value=int(current_val) if current_val is not None else 0,
+                label, value=num_init,
                 min_value=0, step=1, disabled=null_checked,
                 key=key + "__num", help=help_text,
             )
-        new_val = None if null_checked else int(num_val)
+        # Store the sentinel so the N/A intent is carried into save_payload.
+        new_val = NA_SENTINEL if null_checked else int(num_val)
     elif field.field_type == "string":
-        raw = st.text_input(
-            label, value=current_val or "", key=key, help=help_text,
-        )
-        new_val = raw if raw else None
+        col_text, col_na = st.columns([3, 1])
+        is_na = current_val == NA_SENTINEL
+        with col_na:
+            na_checked = st.checkbox("N/A", value=is_na, key=key + "__na")
+        with col_text:
+            text_init = "" if is_na else (current_val or "")
+            raw = st.text_input(
+                label, value=text_init,
+                disabled=na_checked,
+                key=key + "__text", help=help_text,
+            )
+        if na_checked:
+            new_val = NA_SENTINEL
+        else:
+            new_val = raw if raw else None
     else:
         new_val = current_val
 
@@ -264,8 +303,37 @@ def render_array_section(section: SectionSpec, section_key_prefix: str):
     afield = section.array_field_name
     atype = section.array_field_type
 
+    # Array-level N/A toggle: the entire section can be marked as intentionally
+    # null, distinct from an empty list that simply means "not yet set".
+    raw_current = _get(section.name, afield)
+    is_na_now = raw_current == NA_SENTINEL
+    na_key = f"{section_key_prefix}__{afield}__na"
+    backup_key = f"{section_key_prefix}__{afield}__na_backup"
+
+    col_hdr, col_na = st.columns([5, 2])
+    with col_hdr:
+        st.markdown(f"**{afield.replace('_', ' ').title()}**")
+    with col_na:
+        na_checked = st.checkbox("N/A (intentional)", value=is_na_now, key=na_key)
+
+    if na_checked and not is_na_now:
+        # Entering N/A: backup current list so we can restore on uncheck.
+        if isinstance(raw_current, list):
+            st.session_state[backup_key] = copy.deepcopy(raw_current)
+        _set(section.name, afield, NA_SENTINEL)
+        st.rerun()
+    if not na_checked and is_na_now:
+        # Leaving N/A: restore previous list if we have one.
+        restored = st.session_state.pop(backup_key, None)
+        _set(section.name, afield, restored)
+        st.rerun()
+
+    if na_checked:
+        st.caption(NA_LABEL)
+        return
+
     if atype == "array_of_strings_enum":
-        current_list = _get_items(section.name, afield) or []
+        current_list = raw_current if isinstance(raw_current, list) else []
         pre_list = _get_items_pre(section.name, afield) or []
         changed = set(current_list) != set(pre_list)
         label = f"{'✎ ' if changed else ''}{afield.replace('_', ' ').title()}"
@@ -276,12 +344,12 @@ def render_array_section(section: SectionSpec, section_key_prefix: str):
             key=f"{section_key_prefix}__{afield}__multiselect",
         )
         if changed:
-            st.caption(f"Pre-annotated: {', '.join(_fmt_option(v) for v in pre_list) or '— empty —'}")
+            st.caption(f"Pre-annotated: {', '.join(_fmt_option(v) for v in pre_list) or EMPTY_LABEL}")
         _set_items(section.name, afield, new_list if new_list else None)
         return
 
     # array_of_objects
-    items = list(_get_items(section.name, afield))  # shallow copy
+    items = list(raw_current) if isinstance(raw_current, list) else []
     pre_items = _get_items_pre(section.name, afield)
 
     to_remove = None
@@ -497,11 +565,16 @@ def render_annotation_panel():
 
     excision = ann.get("cancer_excision_report")
     pre_excision = pre.get("cancer_excision_report")
-    excision_opts = [None, True, False]
-    idx = excision_opts.index(excision) if excision in excision_opts else 0
+    excision_opts = [NA_SENTINEL, True, False]
+    if excision is None or excision == NA_SENTINEL:
+        eidx = 0
+    elif excision in (True, False):
+        eidx = excision_opts.index(excision)
+    else:
+        eidx = 0
     label = f"{_diff_marker(excision, pre_excision)}Cancer Excision Report"
     new_excision = st.selectbox(
-        label, options=excision_opts, index=idx,
+        label, options=excision_opts, index=eidx,
         format_func=_fmt_option, key=f"is_cancer_excision_{st.session_state.last_sample_id}",
         help="Is this a primary cancer excision report eligible for registry?",
     )
