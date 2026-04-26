@@ -475,8 +475,14 @@ def run_experiment(proto: Protocol, output_root: Path,
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--config", type=Path, required=True,
-                    help="Frozen protocol YAML (configs/multirun_gpt_oss.yaml).")
+    _default_config = (
+        REPO_ROOT / "configs" / "local" / "multirun_gpt_oss.yaml"
+        if (REPO_ROOT / "configs" / "local" / "multirun_gpt_oss.yaml").is_file()
+        else REPO_ROOT / "configs" / "multirun_gpt_oss.yaml"
+    )
+    ap.add_argument("--config", type=Path, default=_default_config,
+                    help="Frozen protocol YAML (default: configs/local/ if present, "
+                         "else configs/multirun_gpt_oss.yaml).")
     ap.add_argument("--output", type=Path,
                     default=REPO_ROOT / "results/benchmarks/gpt_oss",
                     help="Output root (default: %(default)s).")

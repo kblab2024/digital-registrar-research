@@ -14,6 +14,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIGS_DIR = REPO_ROOT / "configs"
+LOCAL_CONFIGS_DIR = CONFIGS_DIR / "local"
 
 DECODING_KEYS = (
     "temperature", "top_p", "top_k", "num_ctx", "max_tokens",
@@ -22,20 +23,47 @@ DECODING_KEYS = (
 
 
 def model_config_path(model_alias: str) -> Path:
-    """Return the conventional config-file path for a model alias."""
+    """Return the config-file path for a model alias, preferring local/ override.
+
+    File-level resolution (used when callers want a single canonical path,
+    e.g. for logging). Per-key merging is handled in ``load_model_config``."""
+    local = LOCAL_CONFIGS_DIR / f"dspy_ollama_{model_alias}.yaml"
+    if local.is_file():
+        return local
     return CONFIGS_DIR / f"dspy_ollama_{model_alias}.yaml"
 
 
-def load_model_config(model_alias: str) -> dict[str, Any]:
-    """Load ``configs/dspy_ollama_{model_alias}.yaml``, or return ``{}`` if
-    it does not exist. The config is optional; missing = fall back to
-    MODEL_PROFILES in models.common."""
-    cfg_path = model_config_path(model_alias)
-    if not cfg_path.is_file():
+def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge *over* on top of *base*. Nested dicts merge key-by-key;
+    everything else (lists, scalars) is replaced wholesale by *over*."""
+    out = dict(base)
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    if not path.is_file():
         return {}
     import yaml
-    with cfg_path.open(encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+def load_model_config(model_alias: str) -> dict[str, Any]:
+    """Load the config for *model_alias* with per-key local-over-shared merge.
+
+    Loads ``configs/dspy_ollama_{alias}.yaml`` as the base and overlays
+    ``configs/local/dspy_ollama_{alias}.yaml`` on top. Each key is resolved
+    independently, so a local file can hold a partial override (e.g. just
+    ``decoding.num_ctx``) without redeclaring every other knob. Returns
+    ``{}`` if neither file exists."""
+    shared = _load_yaml(CONFIGS_DIR / f"dspy_ollama_{model_alias}.yaml")
+    local = _load_yaml(LOCAL_CONFIGS_DIR / f"dspy_ollama_{model_alias}.yaml")
+    return _deep_merge(shared, local)
 
 
 def split_decoding_overrides(decoding_section: dict[str, Any] | None) -> dict[str, Any]:

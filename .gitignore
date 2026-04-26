@@ -63,6 +63,10 @@ workspace/
 # Annotation tool — per-deployment annotator list (rebuilt from DEFAULTS)
 src/digital_registrar_research/annotation/annotators.json
 
+# Local configs — machine-specific, never pushed
+configs/local/*
+!configs/local/.gitkeep
+
 # API keys / secrets
 .env
 .env.local
