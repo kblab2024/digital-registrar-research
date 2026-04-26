@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import html as _html
 import os
 from pathlib import Path
 
@@ -39,6 +40,47 @@ from digital_registrar_research.annotation.parser import (
 from digital_registrar_research.annotation.ui import pick_folder
 
 st.set_page_config(page_title="Digital Registrar", layout="wide")
+
+
+# ── CSS ────────────────────────────────────────────────────────────────────────
+
+_STICKY_CSS = """
+<style>
+/* Force the row holding the report column to align children at the top,
+   otherwise the sticky child gets stretched to row height and sticky breaks. */
+[data-testid="stHorizontalBlock"]:has(.report-col-marker) {
+    align-items: flex-start !important;
+    overflow: visible !important;
+}
+
+/* Make the report column sticky. Use both :has() (modern, scoped) and
+   :last-child as a fallback selector. */
+[data-testid="stHorizontalBlock"]:has(.report-col-marker) > [data-testid="stColumn"]:last-child,
+[data-testid="stHorizontalBlock"]:has(.report-col-marker) > [data-testid="column"]:last-child,
+[data-testid="stColumn"]:has(> div .report-col-marker),
+[data-testid="stColumn"]:has(.report-col-marker) {
+    position: sticky !important;
+    top: 1rem !important;
+    align-self: flex-start !important;
+    max-height: calc(100vh - 2rem) !important;
+    overflow-y: auto !important;
+}
+
+.report-text-pre {
+    background: #f0f2f6;
+    border: 1px solid #d6d8dc;
+    border-radius: 4px;
+    padding: 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0;
+}
+</style>
+"""
+st.markdown(_STICKY_CSS, unsafe_allow_html=True)
 
 
 # ── Session state ─────────────────────────────────────────────────────────────
@@ -702,13 +744,13 @@ def render_report_panel():
     elif status == "new":
         st.info("New annotation — pre-filled from GPT-OSS result")
 
-    st.text_area(
-        "Report Text",
-        value=st.session_state.report_text,
-        height=620,
-        disabled=True,
-        key=f"report_text_area_{sample.sample_id}",
-        label_visibility="collapsed",
+    # Original report uses "|" as line separator. Convert to <br> (rather than
+    # "\n") because st.markdown collapses raw newlines inside HTML blocks to
+    # spaces before rendering, even inside <pre>.
+    report_html = _html.escape(st.session_state.report_text).replace("|", "<br>")
+    st.markdown(
+        f'<pre class="report-text-pre">{report_html}</pre>',
+        unsafe_allow_html=True,
     )
 
 
@@ -729,6 +771,7 @@ def main():
 
     col_left, col_right = st.columns([1, 1])
     with col_right:
+        st.markdown('<span class="report-col-marker"></span>', unsafe_allow_html=True)
         render_report_panel()
     with col_left:
         render_annotation_panel()
