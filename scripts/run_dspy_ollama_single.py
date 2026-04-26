@@ -70,6 +70,7 @@ from _config_loader import (  # noqa: E402
     resolve_folder,
     split_decoding_overrides,
 )
+from _run_id import format_run_id, machine_slug  # noqa: E402
 
 from digital_registrar_research.models.common import (  # noqa: E402
     load_model,
@@ -214,14 +215,21 @@ def discover_cases(organ_dir: Path, limit: int | None) -> list[Path]:
 
 
 def pick_next_run(model_dir: Path) -> str:
-    """Return ``runNN`` for the first slot in 01..10 without a `_summary.json`.
+    """Return the first run-id in 01..10 without a `_summary.json`.
+
+    Names follow ``run{NN}[-{machine_slug}]`` (see ``scripts/_run_id.py``).
+    The slot space is per-machine: with ``DRR_MACHINE_ID=alpha`` the
+    function only ever sees/returns ``run01-alpha..run10-alpha``, so two
+    machines with distinct slugs each get an independent 10-slot budget.
     Partial-but-not-finalised runs are treated as free (to allow resumption)."""
+    slug = machine_slug()
     for k in range(1, MAX_RUN_SLOTS + 1):
-        name = f"run{k:02d}"
+        name = format_run_id(k, padded=True)
         if not (model_dir / name / "_summary.json").exists():
             return name
+    suffix_msg = f" (machine={slug!r})" if slug else ""
     raise RuntimeError(
-        f"all {MAX_RUN_SLOTS} run slots are populated under {model_dir}; "
+        f"all {MAX_RUN_SLOTS} run slots are populated under {model_dir}{suffix_msg}; "
         f"pass --run runNN explicitly to re-run one (use --overwrite to clobber cases)."
     )
 
@@ -492,9 +500,9 @@ def run_with_args(
                  / args.dataset / "llm" / slug)
 
     if args.run:
-        if not re.fullmatch(r"run\d{2}", args.run):
-            print(f"error: --run must look like 'run01' (got {args.run!r})",
-                  file=sys.stderr)
+        if not re.fullmatch(r"run\d{2}(-[a-z0-9][a-z0-9-]*)?", args.run):
+            print(f"error: --run must look like 'run01' or 'run01-<machine>' "
+                  f"(got {args.run!r})", file=sys.stderr)
             return 2
         run_name = args.run
     else:

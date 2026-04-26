@@ -56,7 +56,7 @@ models/clinicalbert/{v1_baseline,v2_finetuned}/{checkpoint.pt,config.yaml}
 | Case ID | `{dataset}{N}_{idx}` | `tcga1_37`, `cmuh1_1` |
 | Organ partition | numeric dir | `1/` = breast, `2/` = colorectal (see `dataset_manifest.yaml`) |
 | LLM model | snake_case with size | `gpt_oss_20b`, `gemma4_e2b` |
-| Run directory | zero-padded | `run01`..`run10` |
+| Run directory | zero-padded, optional machine suffix | `run01`..`run10`, or `run01-alpha`..`run10-alpha` |
 | Mode subtree | `{with,without}_preann/` | `with_preann/` |
 | Annotator dir | `{annotator}/` (mode implied by parent path) | `nhc/` |
 | Sidecar files | leading underscore | `_summary.json`, `_manifest.yaml`, `_log.jsonl` |
@@ -105,6 +105,22 @@ results/predictions/cmuh/llm/gpt_oss_20b/
 ├── run02/ ... run10/
 └── _manifest.yaml                    # lists all runs + config hash + validity flags
 ```
+
+### Multi-machine sweeps
+
+When the same `(dataset, model)` is processed on more than one host, set a
+short stable slug per machine so each one writes to a disjoint slot space:
+
+  * Env var (one-shot): `DRR_MACHINE_ID=alpha python scripts/run_…`
+  * Persistent: `machine_id: alpha` in `configs/local/runtime.yaml`
+    (the `configs/local/` tree is gitignored, so each checkout sets its own).
+
+Run dirs then become `run01-alpha .. run10-alpha` on machine *alpha* and
+`run01-beta .. run10-beta` on machine *beta*. Both forms still match the
+`startswith("run")` discovery glob in
+[`benchmarks/eval/multirun.py`](../src/digital_registrar_research/benchmarks/eval/multirun.py),
+so the eval aggregator naturally treats them as additional samples for the
+confidence interval. Slug format: `^[a-z0-9][a-z0-9-]{0,11}$`.
 
 Majority-vote ensembles live under
 `results/evaluation/{dataset}/ensembles/{model}/` and are produced from
