@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga9_8 organ=stomach
+Final Diagnosis
+pTNM pT4A N0 MX -- stage ib
+Lymphovascular invasion - YES.
+Histologic type: tubular adenoCA
+Surgery: partial gastrectomy (received fresh).
+PNI: -.
+LNs - 0 of 25 involved by tumor.
+** END **

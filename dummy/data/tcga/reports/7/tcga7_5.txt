@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga7_5 organ=pancreas
+DIAGNOSIS:
+Lymphovascular invasion - no.
+Procedure performed - whipple procedure.
+All margins (-)
+Lymph nodes: 2/18 positive.
+Tumor size: 45 mm.
+HISTOLOGY -- ductal adenoCA
+PNI: +.
+Staging: pT3 N1 MX -- stage iib
+** END **

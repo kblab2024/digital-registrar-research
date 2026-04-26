@@ -1,0 +1,8 @@
+SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh10_40, organ=thyroid
+FINAL DIAGNOSIS:
+  Procedure: total_thyroidectomy
+  Histology: papillary_thyroid_carcinoma
+  Tumor size: 24 mm
+  LVI=False
+  pTNM: t1a n0 mx, stage i
+  Lymph nodes: 0/3 involved

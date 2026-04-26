@@ -1,8 +1,8 @@
 experiment_id: multirun_gemma4_30b_tcga_v1
 dataset: tcga
 model: gemma4_30b
-k: 2
-created_at: 2026-04-23
+k: 3
+created_at: 2026-04-26
 config_hash: 670b1bec8775
 runs:
   - run: run01
@@ -13,4 +13,7 @@ runs:
     seed: 43
     valid: true
     parse_error_rate: 0.0
-note: dummy skeleton — real sweeps use k=10 per configs/experiments/
+  - run: run03
+    seed: 44
+    valid: true
+    parse_error_rate: 0.0

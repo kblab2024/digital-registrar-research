@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga6_36 organ=lung
+Final Diagnosis
+Regional nodes: 0/6.
+HISTOLOGY -- adenoCA
+Grossly, the tumor measures 18 mm in greatest dimension.
+Lymphovascular invasion - no.
+Procedure performed - lobectomy.
+IHC: ALK-
+All margins (-)
+AJCC -- pT1A N0 MX -- stage ia2
+

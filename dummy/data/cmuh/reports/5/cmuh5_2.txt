@@ -1,0 +1,8 @@
+SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh5_2, organ=liver
+FINAL DIAGNOSIS:
+  Procedure: partial_hepatectomy
+  Histology: hepatocellular_carcinoma
+  Tumor size: 30 mm
+  Grade 2
+  pTNM: t3 n0 mx, stage ib
+  Lymph nodes: 0/1 involved

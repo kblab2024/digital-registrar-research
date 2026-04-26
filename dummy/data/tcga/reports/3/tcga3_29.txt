@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga3_29 organ=colorectal
+DIAGNOSIS:
+No angiolymphatic invasion.
+LNs - 0 of 22 involved by tumor.
+pTNM pT4A N0 MX -- stage iia
+Histologic grade 2.
+PROC: segmental colectomy
+The lesion is consistent with adenoCA.
+All margins (-)
+Pathologist: [redacted]

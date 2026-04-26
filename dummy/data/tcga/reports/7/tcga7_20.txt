@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga7_20 organ=pancreas
+DIAGNOSIS:
+PNI: +.
+All margins (-)
+LVI: not identified.
+Lesion ~3.3cm.
+HISTOLOGY -- ductal adenoCA
+Procedure performed - whipple procedure.
+Staging: pT2 N1 MX -- stage iib
+Regional nodes: 2/18.
+** END **

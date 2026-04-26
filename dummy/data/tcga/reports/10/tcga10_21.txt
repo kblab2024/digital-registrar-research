@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga10_21 organ=thyroid
+-- Diagnosis --
+LNs - 0 of 3 involved by tumor.
+All margins (-)
+Microscopic: PTC.
+Surgery: total thyroidectomy (received fresh).
+Staging: pT1B N0 MX -- stage i
+Tumor size: 20 mm.
+** END **

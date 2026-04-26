@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga10_17 organ=thyroid
+DIAGNOSIS:
+Regional nodes: 0/3.
+The lesion is consistent with PTC.
+PROC: total thyroidectomy
+No angiolymphatic invasion.
+pTNM pT1B N0 MX -- stage i
+Lesion ~2.8cm.
+Pathologist: [redacted]

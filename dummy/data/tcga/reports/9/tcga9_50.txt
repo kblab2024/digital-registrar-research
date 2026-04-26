@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga9_50 organ=stomach
+DIAGNOSIS:
+No malignancy identified. Benign tissue only.
+Dictated and signed electronically.

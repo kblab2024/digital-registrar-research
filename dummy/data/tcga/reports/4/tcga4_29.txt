@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga4_29 organ=esophagus
+Final Diagnosis
+PROC: esophagectomy
+Lymphovascular invasion - no.
+On microscopy, SCC is identified, infiltrating into surrounding tissue.
+Resection margins free of tumor.
+Staging: pT4A N0 MX -- stage ii
+Grade: 2.
+Lymph nodes: 0/8 positive.
+End of report.

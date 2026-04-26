@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga7_17 organ=pancreas
+FINAL DIAGNOSIS:
+Lymphovascular invasion - no.
+All margins (-)
+PNI: +.
+Histologic type: ductal adenoCA
+Staging: pT3 N1 MX -- stage iib
+A 4.5 cm mass was identified.
+Surgery: whipple procedure (received fresh).
+Regional nodes: 2/18.
+Pathologist: [redacted]

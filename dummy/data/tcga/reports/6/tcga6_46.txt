@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga6_46 organ=lung
+FINAL DIAGNOSIS:
+no carcinoma seen in submitted material
+Pathologist: [redacted]

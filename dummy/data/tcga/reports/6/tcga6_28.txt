@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_28 organ=lung
+PATH DX:
+LNs - 0 of 6 involved by tumor.
+Microscopic: adenoCA.
+All margins (-)
+AJCC -- pT1A N0 MX -- stage ia2
+Procedure performed - lobectomy.
+Tumor size: 15 mm.
+IHC: ALK-
+End of report.

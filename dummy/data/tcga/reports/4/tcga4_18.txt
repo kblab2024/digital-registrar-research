@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga4_18 organ=esophagus
+-- Diagnosis --
+Surgery: esophagectomy (received fresh).
+Regional nodes: 0/8.
+All margins (-)
+Grade: 3.
+LVI: present.
+pTNM pT2 N0 MX -- stage ii
+Microscopic: SCC.
+Pathologist: [redacted]

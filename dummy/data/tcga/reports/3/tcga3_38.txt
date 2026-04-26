@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga3_38 organ=colorectal
+FINAL DIAGNOSIS:
+LNs - 0 of 22 involved by tumor.
+pTNM pT4A N0 MX -- stage iia
+On microscopy, adenoCA is identified, infiltrating into surrounding tissue.
+Margins: negative.
+No angiolymphatic invasion.
+Specimen: s/p segmental colectomy.
+Pathologist: [redacted]

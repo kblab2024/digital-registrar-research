@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga6_26 organ=lung
+DIAGNOSIS:
+PROC: lobectomy
+The lesion is consistent with adenoCA.
+IHC: ALK-
+Lymph nodes: 0/6 positive.
+Resection margins free of tumor.
+Grossly, the tumor measures 30 mm in greatest dimension.
+AJCC -- pT1C N0 MX -- stage ia2
+No angiolymphatic invasion.
+** END **

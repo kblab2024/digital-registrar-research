@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga9_30 organ=stomach
+PATH DX:
+The lesion is consistent with tubular adenoCA.
+Staging: pT2 N1 MX -- stage iia
+Lymph nodes: 2/25 positive.
+Resection margins free of tumor.
+Surgery: partial gastrectomy (received fresh).
+(grade 3)
+

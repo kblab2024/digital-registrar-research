@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga2_20 organ=cervix
+DIAGNOSIS:
+Staging: pT2B N1A MX -- stage ib1
+HISTOLOGY -- SCC, NOS
+Procedure performed - radical hysterectomy.
+Histologic grade 2.
+Tumor size: 22 mm.
+LNs - 2 of 12 involved by tumor.
+End of report.

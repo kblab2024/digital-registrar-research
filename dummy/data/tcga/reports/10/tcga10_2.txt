@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_2 organ=thyroid
+-- Diagnosis --
+Histologic type: PTC
+Lesion ~1.6cm.
+No angiolymphatic invasion.
+PROC: total thyroidectomy
+AJCC -- pT2 N0 MX -- stage i
+Lymph nodes: 0/3 positive.
+Resection margins free of tumor.
+Dictated and signed electronically.

@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga3_49 organ=colorectal
+FINAL DIAGNOSIS:
+Negative for invasive carcinoma. Reactive changes noted.
+** END **

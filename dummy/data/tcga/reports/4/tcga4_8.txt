@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga4_8 organ=esophagus
+-- Diagnosis --
+PROC: esophagectomy
+HISTOLOGY -- SCC
+pTNM pT4A N2 MX -- stage iiib
+All margins (-)
+Regional nodes: 5/8.
+Lymphovascular invasion - no.
+(grade 2)
+End of report.

@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga6_30 organ=lung
+FINAL DIAGNOSIS:
++ angiolymphatic invasion.
+HISTOLOGY -- adenoCA
+pTNM pT1C N0 MX -- stage ia2
+LNs - 0 of 6 involved by tumor.
+Resection margins free of tumor.
+Grossly, the tumor measures 21 mm in greatest dimension.
+IHC: ALK-, PDL1+
+PROC: lobectomy
+Pathologist: [redacted]

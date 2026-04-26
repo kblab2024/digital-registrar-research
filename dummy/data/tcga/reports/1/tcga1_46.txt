@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga1_46 organ=breast
+Final Diagnosis
+Findings benign; not registry-eligible.
+Dictated and signed electronically.

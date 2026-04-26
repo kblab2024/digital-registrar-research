@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga9_21 organ=stomach
+-- Diagnosis --
+HISTOLOGY -- tubular adenoCA
+Staging: pT2 N0 MX -- stage ib
+(grade 3)
+Lymph nodes: 0/25 positive.
+Lymphovascular invasion - no.
+Procedure performed - partial gastrectomy.
+Pathologist: [redacted]

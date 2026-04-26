@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga3_44 organ=colorectal
+DIAGNOSIS:
+Findings benign; not registry-eligible.
+

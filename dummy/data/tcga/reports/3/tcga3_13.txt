@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga3_13 organ=colorectal
+FINAL DIAGNOSIS:
+AJCC -- pT3 N0 MX -- stage iia
+Procedure performed - segmental colectomy.
+Margins: negative.
+No angiolymphatic invasion.
+The lesion is consistent with adenoCA.
+Regional nodes: 0/22.
+Dictated and signed electronically.

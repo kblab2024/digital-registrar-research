@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga7_40 organ=pancreas
+-- Diagnosis --
+A 4.1 cm mass was identified.
+pTNM pT2 N1 MX -- stage iib
+Specimen: s/p whipple procedure.
+Lymph nodes: 2/18 positive.
+On microscopy, ductal adenoCA is identified, infiltrating into surrounding tissue.
+Dictated and signed electronically.

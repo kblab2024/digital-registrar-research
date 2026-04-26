@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga3_40 organ=colorectal
+Final Diagnosis
+AJCC -- pT3 N1 MX -- stage iii
+PROC: segmental colectomy
+Lymphovascular invasion - no.
+Sections show adenoCA arising in the colorectal.
+Regional nodes: 2/22.
+Resection margins free of tumor.
+(grade 1)
+Pathologist: [redacted]

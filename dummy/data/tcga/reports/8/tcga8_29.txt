@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga8_29 organ=prostate
+Final Diagnosis
+Grossly, the tumor measures 18 mm in greatest dimension.
+No angiolymphatic invasion.
+LNs - 0 of 4 involved by tumor.
+Histologic grade group_2_3_4.
+HISTOLOGY -- acinar adenoCA
+Procedure performed - radical prostatectomy.
+Staging: pT3B N0 MX -- stage iia
+** END **

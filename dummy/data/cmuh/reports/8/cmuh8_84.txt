@@ -1,0 +1,4 @@
+SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh8_84, organ=prostate
+FINAL DIAGNOSIS:
+  No invasive carcinoma identified.
+  Benign findings; specimen not eligible for cancer registry.

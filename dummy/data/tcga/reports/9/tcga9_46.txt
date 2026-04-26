@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga9_46 organ=stomach
+FINAL DIAGNOSIS:
+Specimen does not contain viable tumor.
+End of report.

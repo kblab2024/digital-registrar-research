@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga4_22 organ=esophagus
+PATH DX:
+HISTOLOGY -- SCC
+Specimen: s/p esophagectomy.
+LNs - 0 of 8 involved by tumor.
+AJCC -- pT3 N0 MX -- stage ii
+All margins (-)
+

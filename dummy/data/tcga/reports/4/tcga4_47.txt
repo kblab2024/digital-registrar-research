@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga4_47 organ=esophagus
+-- Diagnosis --
+Findings benign; not registry-eligible.
+End of report.

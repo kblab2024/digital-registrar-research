@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga1_17 organ=breast
+PATH DX:
+Tumor size: 18 mm.
+IHC: er+, pr+
+Histologic grade 2.
+Regional nodes: 0/2.
+Specimen: s/p wide excision.
+No angiolymphatic invasion.
+pTNM pT1C N0 MX
+Microscopic: invasive ductal CA, NST.
+

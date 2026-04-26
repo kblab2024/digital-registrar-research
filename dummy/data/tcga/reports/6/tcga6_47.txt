@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga6_47 organ=lung
+FINAL DIAGNOSIS:
+No malignancy identified. Benign tissue only.
+

@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga9_35 organ=stomach
+DIAGNOSIS:
+Regional nodes: 2/25.
+(grade 2)
+Staging: pT4A N1 MX -- stage iia
+LVI: not identified.
+The lesion is consistent with tubular adenoCA.
+PNI: -.
+Surgery: partial gastrectomy (received fresh).
+Resection margins free of tumor.
+

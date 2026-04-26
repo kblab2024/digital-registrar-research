@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga10_44 organ=thyroid
+PATH DX:
+Specimen does not contain viable tumor.
+

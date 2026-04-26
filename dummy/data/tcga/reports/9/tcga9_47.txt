@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga9_47 organ=stomach
+Final Diagnosis
+no carcinoma seen in submitted material
+Pathologist: [redacted]

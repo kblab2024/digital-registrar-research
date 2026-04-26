@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga2_49 organ=cervix
+-- Diagnosis --
+Specimen does not contain viable tumor.
+

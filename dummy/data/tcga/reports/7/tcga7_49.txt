@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga7_49 organ=pancreas
+DIAGNOSIS:
+No malignancy identified. Benign tissue only.
+End of report.

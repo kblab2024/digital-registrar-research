@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga6_21 organ=lung
+-- Diagnosis --
+Specimen: s/p lobectomy.
+Lymphovascular invasion - no.
+Lymph nodes: 0/6 positive.
+Margins: negative.
+Histologic type: adenoCA
+IHC: ALK-, PDL1+
+Tumor size: 15 mm.
+Staging: pT1B N0 MX -- stage ia2
+End of report.

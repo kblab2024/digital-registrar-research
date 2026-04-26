@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga1_27 organ=breast
+FINAL DIAGNOSIS:
+Staging: pT2 N0 MX
+Tumor size: 24 mm.
+Surgery: wide excision (received fresh).
+Resection margins free of tumor.
+Grade: 3.
+On microscopy, invasive ductal CA, NST is identified, infiltrating into surrounding tissue.
+Lymph nodes: 0/2 positive.
+Pathologist: [redacted]

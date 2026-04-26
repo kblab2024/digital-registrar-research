@@ -1,0 +1,4 @@
+SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh2_97, organ=cervix
+FINAL DIAGNOSIS:
+  No invasive carcinoma identified.
+  Benign findings; specimen not eligible for cancer registry.

@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga4_48 organ=esophagus
+-- Diagnosis --
+Specimen does not contain viable tumor.
+End of report.

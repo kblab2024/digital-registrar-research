@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga2_19 organ=cervix
+-- Diagnosis --
+Resection margins free of tumor.
+Regional nodes: 0/12.
+pTNM pT2A1 N0 MX -- stage ib1
+(grade 1)
+Sections show SCC, NOS arising in the cervix.
+Tumor size: 22 mm.
+Surgery: radical hysterectomy (received fresh).
+** END **

@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga7_9 organ=pancreas
+PATH DX:
++ angiolymphatic invasion.
+PNI: +.
+AJCC -- pT3 N1 MX -- stage iib
+Lymph nodes: 2/18 positive.
+Lesion ~3.7cm.
+On microscopy, ductal adenoCA is identified, infiltrating into surrounding tissue.
+PROC: whipple procedure
+Resection margins free of tumor.
+** END **

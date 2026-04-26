@@ -1,0 +1,41 @@
+dataset: cmuh
+created_at: 2026-04-26
+n_cases: 1000
+n_cancer_cases: 800
+n_noncancer_cases: 200
+cancer_rate: 0.8
+organs:
+  - n: 1
+    name: breast
+    n_cases: 100
+  - n: 2
+    name: cervix
+    n_cases: 100
+  - n: 3
+    name: colorectal
+    n_cases: 100
+  - n: 4
+    name: esophagus
+    n_cases: 100
+  - n: 5
+    name: liver
+    n_cases: 100
+  - n: 6
+    name: lung
+    n_cases: 100
+  - n: 7
+    name: pancreas
+    n_cases: 100
+  - n: 8
+    name: prostate
+    n_cases: 100
+  - n: 9
+    name: stomach
+    n_cases: 100
+  - n: 10
+    name: thyroid
+    n_cases: 100
+cases_per_organ: 100
+report_style: structured_keyvalue
+source: synthetic_dummy_skeleton
+schema_version: fair_plus_nested_plus_biomarkers_v1

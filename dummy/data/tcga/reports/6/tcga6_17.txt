@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_17 organ=lung
+PATH DX:
+Resection margins free of tumor.
+LVI: not identified.
+Sections show adenoCA arising in the lung.
+Tumor size: 24 mm.
+Staging: pT1B N0 MX -- stage ia2
+LNs - 0 of 6 involved by tumor.
+Surgery: lobectomy (received fresh).
+Pathologist: [redacted]

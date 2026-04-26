@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_39 organ=lung
+DIAGNOSIS:
+Lymphovascular invasion - no.
+Regional nodes: 0/6.
+Specimen: s/p lobectomy.
+Histologic type: adenoCA
+pTNM pT2A N0 MX -- stage ia2
+Grossly, the tumor measures 27 mm in greatest dimension.
+Margins: negative.
+** END **

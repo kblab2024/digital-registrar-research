@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga2_46 organ=cervix
+-- Diagnosis --
+Negative for invasive carcinoma. Reactive changes noted.
+

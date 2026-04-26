@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga5_24 organ=liver
+-- Diagnosis --
+Tumor size: 20 mm.
+pTNM pT1B N0 MX -- stage ib
+Regional nodes: 0/1.
+Specimen: s/p partial hepatectomy.
+Margins: negative.
+Histologic grade 4.
+Histologic type: HCC
+** END **

@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga8_43 organ=prostate
+FINAL DIAGNOSIS:
+Findings benign; not registry-eligible.
+** END **

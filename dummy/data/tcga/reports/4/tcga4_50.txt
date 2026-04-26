@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga4_50 organ=esophagus
+PATH DX:
+Findings benign; not registry-eligible.
+** END **

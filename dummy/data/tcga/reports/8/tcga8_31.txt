@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga8_31 organ=prostate
+DIAGNOSIS:
+AJCC -- pT3A N0 MX -- stage iia
+Lymph nodes: 0/4 positive.
+Tumor size: 18 mm.
+Lymphovascular invasion - no.
+PROC: radical prostatectomy
+(grade group_4_4_4)
+Microscopic: acinar adenoCA.
+** END **

@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga5_42 organ=liver
+PATH DX:
+Findings benign; not registry-eligible.
+** END **

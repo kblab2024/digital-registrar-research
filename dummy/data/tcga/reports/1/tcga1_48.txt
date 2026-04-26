@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga1_48 organ=breast
+FINAL DIAGNOSIS:
+No malignancy identified. Benign tissue only.
+Pathologist: [redacted]

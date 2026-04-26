@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_24 organ=thyroid
+DIAGNOSIS:
+Surgery: total thyroidectomy (received fresh).
+Grossly, the tumor measures 8 mm in greatest dimension.
+On microscopy, PTC is identified, infiltrating into surrounding tissue.
+LVI: not identified.
+Margins: negative.
+Staging: pT1A N0 MX -- stage i
+Regional nodes: 0/3.
+

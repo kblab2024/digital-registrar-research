@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga10_11 organ=thyroid
+Final Diagnosis
+LNs - 0 of 3 involved by tumor.
+On microscopy, PTC is identified, infiltrating into surrounding tissue.
+AJCC -- pT3A N0 MX -- stage i
+PROC: total thyroidectomy
+A 2.8 cm mass was identified.
+Pathologist: [redacted]

@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga7_43 organ=pancreas
+-- Diagnosis --
+Findings benign; not registry-eligible.
+Dictated and signed electronically.

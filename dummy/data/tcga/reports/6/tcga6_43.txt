@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga6_43 organ=lung
+PATH DX:
+Specimen does not contain viable tumor.
+

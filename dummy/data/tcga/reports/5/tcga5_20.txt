@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga5_20 organ=liver
+PATH DX:
+Procedure performed - partial hepatectomy.
+Tumor size: 30 mm.
+The lesion is consistent with HCC.
+LNs - 0 of 1 involved by tumor.
+Staging: pT3 N0 MX -- stage ib
+End of report.

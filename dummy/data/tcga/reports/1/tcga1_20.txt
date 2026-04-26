@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga1_20 organ=breast
+PATH DX:
+PROC: wide excision
+IHC: er-, pr-
+Histologic type: invasive ductal CA, NST
++ angiolymphatic invasion.
+Histologic grade 2.
+LNs - 0 of 2 involved by tumor.
+Tumor size: 27 mm.
+pTNM pT2 N0 MX
+

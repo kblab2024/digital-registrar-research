@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga3_37 organ=colorectal
+FINAL DIAGNOSIS:
+Histologic grade 1.
+The lesion is consistent with adenoCA.
+No angiolymphatic invasion.
+Staging: pT3 N0 MX -- stage iia
+All margins (-)
+Regional nodes: 0/22.
+Surgery: segmental colectomy (received fresh).
+** END **

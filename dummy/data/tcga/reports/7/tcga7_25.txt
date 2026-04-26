@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga7_25 organ=pancreas
+-- Diagnosis --
+Margins: negative.
+Lymph nodes: 2/18 positive.
+Lesion ~2.9cm.
+Histologic type: ductal adenoCA
+pTNM pT3 N1 MX -- stage iib
+PROC: whipple procedure
+End of report.

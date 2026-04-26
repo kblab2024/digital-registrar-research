@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga4_33 organ=esophagus
+-- Diagnosis --
+Regional nodes: 0/8.
+Surgery: esophagectomy (received fresh).
+Margins: negative.
++ angiolymphatic invasion.
+Histologic grade 3.
+Staging: pT2 N0 MX -- stage ii
+Microscopic: SCC.
+

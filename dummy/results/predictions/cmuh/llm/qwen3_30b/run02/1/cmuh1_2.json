@@ -32,8 +32,8 @@
     "margins": [
       {
         "margin_category": "superficial",
-        "margin_involved": true,
-        "distance": null,
+        "margin_involved": false,
+        "distance": 5,
         "description": null
       },
       {
@@ -57,7 +57,7 @@
     "biomarkers": [
       {
         "biomarker_category": "er",
-        "expression": true,
+        "expression": false,
         "percentage": null,
         "score": null,
         "biomarker_name": "estrogen receptor"

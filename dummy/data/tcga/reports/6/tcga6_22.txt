@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga6_22 organ=lung
+Final Diagnosis
+Specimen: s/p lobectomy.
+Lymphovascular invasion - no.
+AJCC -- pT1C N0 MX -- stage ia2
+Regional nodes: 0/6.
+IHC: ALK-
+Tumor size: 18 mm.
+All margins (-)
+Microscopic: adenoCA.
+** END **

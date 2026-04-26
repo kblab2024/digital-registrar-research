@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga1_42 organ=breast
+DIAGNOSIS:
+No malignancy identified. Benign tissue only.
+** END **

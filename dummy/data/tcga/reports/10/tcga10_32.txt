@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga10_32 organ=thyroid
+FINAL DIAGNOSIS:
+Grossly, the tumor measures 16 mm in greatest dimension.
+Margins: negative.
+On microscopy, PTC is identified, infiltrating into surrounding tissue.
+Procedure performed - total thyroidectomy.
+Lymph nodes: 0/3 positive.
+pTNM pT1A N0 MX -- stage i
+** END **

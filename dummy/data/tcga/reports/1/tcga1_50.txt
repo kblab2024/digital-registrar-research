@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga1_50 organ=breast
+-- Diagnosis --
+no carcinoma seen in submitted material
+Pathologist: [redacted]

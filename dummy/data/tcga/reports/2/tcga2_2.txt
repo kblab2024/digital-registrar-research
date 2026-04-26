@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga2_2 organ=cervix
+DIAGNOSIS:
+(grade 2)
+AJCC -- pT2B N0 MX -- stage ib1
+Microscopic: SCC, NOS.
+Lymph nodes: 0/12 positive.
+Tumor size: 22 mm.
+Margins: negative.
+Specimen: s/p radical hysterectomy.
+Dictated and signed electronically.

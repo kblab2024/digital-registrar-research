@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga1_22 organ=breast
+PATH DX:
+PROC: wide excision
+LVI: not identified.
+Grade: 1.
+Sections show invasive ductal CA, NST arising in the breast.
+Regional nodes: 0/2.
+Staging: pT2 N0 MX
+Tumor size: 33 mm.
+Resection margins free of tumor.
+** END **

@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga4_14 organ=esophagus
+-- Diagnosis --
+Lymphovascular invasion - no.
+Staging: pT4A N0 MX -- stage ii
+Specimen: s/p esophagectomy.
+All margins (-)
+LNs - 0 of 8 involved by tumor.
+The lesion is consistent with SCC.
+

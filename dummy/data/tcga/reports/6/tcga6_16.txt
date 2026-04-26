@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga6_16 organ=lung
+DIAGNOSIS:
+Lymphovascular invasion - no.
+IHC: ALK-, PDL1+
+On microscopy, adenoCA is identified, infiltrating into surrounding tissue.
+Procedure performed - lobectomy.
+AJCC -- pT1A N0 MX -- stage ia2
+All margins (-)
+Grossly, the tumor measures 21 mm in greatest dimension.
+LNs - 0 of 6 involved by tumor.
+End of report.

@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga8_17 organ=prostate
+-- Diagnosis --
+Histologic grade group_2_3_4.
+pTNM pT3B N0 MX -- stage iia
+Tumor size: 18 mm.
+Procedure performed - radical prostatectomy.
+PNI: +.
+No angiolymphatic invasion.
+Regional nodes: 0/4.
+On microscopy, acinar adenoCA is identified, infiltrating into surrounding tissue.
+Pathologist: [redacted]

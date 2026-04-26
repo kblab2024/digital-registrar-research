@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga8_15 organ=prostate
+Final Diagnosis
+Sections show acinar adenoCA arising in the prostate.
+Lymph nodes: 0/4 positive.
+Specimen: s/p radical prostatectomy.
+Tumor size: 18 mm.
+Histologic grade group_4_4_4.
+PNI: +.
+Staging: pT2 N0 MX -- stage iia
+End of report.

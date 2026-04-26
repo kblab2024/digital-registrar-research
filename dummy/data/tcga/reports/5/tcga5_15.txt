@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga5_15 organ=liver
+Final Diagnosis
+Grossly, the tumor measures 35 mm in greatest dimension.
+Histologic type: HCC
+Grade: 3.
+pTNM pT1B N0 MX -- stage ib
+Regional nodes: 0/1.
+Procedure performed - partial hepatectomy.
+All margins (-)
+

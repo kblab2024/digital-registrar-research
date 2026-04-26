@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga3_16 organ=colorectal
+Final Diagnosis
+No angiolymphatic invasion.
+Procedure performed - segmental colectomy.
+pTNM pT3 N0 MX -- stage iia
+LNs - 0 of 22 involved by tumor.
+(grade 1)
+Resection margins free of tumor.
+Microscopic: adenoCA.
+Pathologist: [redacted]

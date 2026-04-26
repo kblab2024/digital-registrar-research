@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_37 organ=thyroid
+PATH DX:
+The lesion is consistent with PTC.
+Staging: pT1B N0 MX -- stage i
+LVI: not identified.
+Regional nodes: 0/3.
+Specimen: s/p total thyroidectomy.
+Grossly, the tumor measures 12 mm in greatest dimension.
+All margins (-)
+Dictated and signed electronically.

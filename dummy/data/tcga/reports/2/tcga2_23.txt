@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga2_23 organ=cervix
+-- Diagnosis --
+AJCC -- pT2B N0 MX -- stage ib1
+All margins (-)
+Grossly, the tumor measures 22 mm in greatest dimension.
+Histologic type: SCC, NOS
+PROC: radical hysterectomy
+Grade: 2.
+LNs - 0 of 12 involved by tumor.
+Pathologist: [redacted]

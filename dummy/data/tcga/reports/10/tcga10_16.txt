@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga10_16 organ=thyroid
+Final Diagnosis
+Regional nodes: 0/3.
+Specimen: s/p total thyroidectomy.
+Tumor size: 24 mm.
+Sections show PTC arising in the thyroid.
+All margins (-)
+pTNM pT1A N0 MX -- stage i
+** END **

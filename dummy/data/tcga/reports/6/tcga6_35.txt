@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_35 organ=lung
+DIAGNOSIS:
+Microscopic: adenoCA.
+Grossly, the tumor measures 15 mm in greatest dimension.
+Lymph nodes: 0/6 positive.
+Lymphovascular invasion - YES.
+Procedure performed - lobectomy.
+Margins: negative.
+Staging: pT2A N0 MX -- stage ia2
+Pathologist: [redacted]

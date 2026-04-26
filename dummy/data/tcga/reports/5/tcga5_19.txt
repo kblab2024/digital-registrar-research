@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga5_19 organ=liver
+FINAL DIAGNOSIS:
+Microscopic: HCC.
+Surgery: partial hepatectomy (received fresh).
+pTNM pT2 N0 MX -- stage ib
+LNs - 0 of 1 involved by tumor.
+Lesion ~2.5cm.
+Margins: negative.
+(grade 3)
+End of report.

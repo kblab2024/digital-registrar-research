@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga8_37 organ=prostate
+FINAL DIAGNOSIS:
+HISTOLOGY -- acinar adenoCA
+Lymph nodes: 0/4 positive.
+AJCC -- pT3A N0 MX -- stage iia
+Procedure performed - radical prostatectomy.
+Tumor size: 18 mm.
+(grade group_2_3_4)
+** END **

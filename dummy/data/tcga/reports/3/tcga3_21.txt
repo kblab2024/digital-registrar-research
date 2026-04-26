@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga3_21 organ=colorectal
+-- Diagnosis --
+Sections show adenoCA arising in the colorectal.
+Resection margins free of tumor.
+Grade: 3.
++ angiolymphatic invasion.
+Regional nodes: 0/22.
+pTNM pT2 N0 MX -- stage iia
+Surgery: segmental colectomy (received fresh).
+

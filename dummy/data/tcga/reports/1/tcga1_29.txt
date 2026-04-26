@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga1_29 organ=breast
+FINAL DIAGNOSIS:
+The lesion is consistent with invasive ductal CA, NST.
+All margins (-)
+Procedure performed - wide excision.
+Grade: 2.
+Regional nodes: 0/2.
+Staging: pT2 N0 MX
+Tumor size: 30 mm.
+

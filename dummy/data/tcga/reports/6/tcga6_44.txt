@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga6_44 organ=lung
+DIAGNOSIS:
+no carcinoma seen in submitted material
+

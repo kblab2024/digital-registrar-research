@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga3_42 organ=colorectal
+DIAGNOSIS:
+Negative for invasive carcinoma. Reactive changes noted.
+Dictated and signed electronically.

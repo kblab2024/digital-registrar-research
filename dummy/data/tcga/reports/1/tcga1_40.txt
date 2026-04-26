@@ -1,0 +1,12 @@
+[synthetic-tcga] case=tcga1_40 organ=breast
+-- Diagnosis --
+Grossly, the tumor measures 15 mm in greatest dimension.
+Histologic grade 1.
+On microscopy, invasive ductal CA, NST is identified, infiltrating into surrounding tissue.
+IHC: er-
+Lymphovascular invasion - YES.
+Resection margins free of tumor.
+Specimen: s/p wide excision.
+LNs - 0 of 2 involved by tumor.
+AJCC -- pT1C N0 MX
+Pathologist: [redacted]

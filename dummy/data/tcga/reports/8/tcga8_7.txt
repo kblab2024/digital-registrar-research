@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga8_7 organ=prostate
+-- Diagnosis --
+PNI: +.
+LNs - 0 of 4 involved by tumor.
+Grossly, the tumor measures 18 mm in greatest dimension.
+Histologic type: acinar adenoCA
+Staging: pT3A N0 MX -- stage iia
+Surgery: radical prostatectomy (received fresh).
+Pathologist: [redacted]

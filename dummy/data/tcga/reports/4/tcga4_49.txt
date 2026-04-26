@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga4_49 organ=esophagus
+Final Diagnosis
+Negative for invasive carcinoma. Reactive changes noted.
+** END **

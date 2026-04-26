@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga5_39 organ=liver
+FINAL DIAGNOSIS:
+LNs - 0 of 1 involved by tumor.
+Histologic grade 3.
+All margins (-)
+Procedure performed - partial hepatectomy.
+Microscopic: HCC.
+AJCC -- pT1B N0 MX -- stage ib
+Tumor size: 35 mm.
+End of report.

@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga1_19 organ=breast
+PATH DX:
+All margins (-)
+LVI: not identified.
+LNs - 0 of 2 involved by tumor.
+Microscopic: invasive ductal CA, NST.
+Procedure performed - wide excision.
+pTNM pT2 N0 MX
+Lesion ~2.4cm.
+IHC: er+, pr+, her2 score=0
+

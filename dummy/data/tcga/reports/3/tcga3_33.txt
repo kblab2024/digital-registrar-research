@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga3_33 organ=colorectal
+Final Diagnosis
+AJCC -- pT2 N0 MX -- stage iia
+Margins: negative.
+Histologic grade 3.
+Specimen: s/p segmental colectomy.
+Lymph nodes: 0/22 positive.
+The lesion is consistent with adenoCA.
+End of report.

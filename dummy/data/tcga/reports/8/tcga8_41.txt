@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga8_41 organ=prostate
+-- Diagnosis --
+Negative for invasive carcinoma. Reactive changes noted.
+** END **

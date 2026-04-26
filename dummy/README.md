@@ -1,28 +1,15 @@
-# Dummy skeleton — redesigned layout
+# Dummy fixture (synthetic, regenerable)
 
-This tree mirrors the canonical layout for the experiment:
-
-- `{with_preann,without_preann}/data/{cmuh,tcga}/` — fully independent per-mode datasets
-  (reports, annotations, splits, manifest). `preannotation/` exists only under `with_preann/`.
-- `results/predictions/{dataset}/{llm,clinicalbert,rule_based}/...` — per-method outputs
-- `results/evaluation/{dataset}/...` — (populated by eval scripts)
-- `configs/{datasets,models,annotators}/` — machine-readable experiment metadata
-- `models/clinicalbert/{v1_baseline,v2_finetuned}/` — checkpoint placeholders
-
-## Naming
-
-| Thing | Pattern |
-|---|---|
-| Mode subtree | `with_preann/`, `without_preann/` |
-| Case ID | `{dataset}{N}_{idx}` (`tcga1_7`, `cmuh2_3`) |
-| Organ dir | numeric — `1/` = breast, `2/` = colorectal |
-| Run dir | `run01`..`run10` |
-| Annotator dir | `{annotator}/` (mode is already in the parent path) |
-| Sidecar files | leading underscore (`_summary.json`, `_manifest.yaml`, `_log.jsonl`) |
-| Case files | `{case_id}.json` — annotator/run/model is encoded by the folder |
-
-## Regenerate
+This tree is produced by `scripts/gen_dummy_skeleton.py`. The toolkit is
+checked in; the output is not. Regenerate any time:
 
 ```
 python scripts/gen_dummy_skeleton.py --out dummy --clean
 ```
+
+Defaults: cmuh = 100 × 10 organs, tcga = 50 × 10 organs, 80% cancer / 20% non-cancer, 3 LLM runs.
+For a 10-run sweep matching the real experiments: `--llm-runs 10`.
+
+CMUH reports are clean key-value text. TCGA reports are chaotic
+(dictation-style, abbreviations, shuffled sections) so the two datasets
+exercise different parser robustness.

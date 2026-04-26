@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga6_7 organ=lung
+PATH DX:
+HISTOLOGY -- adenoCA
+Grossly, the tumor measures 15 mm in greatest dimension.
+pTNM pT2A N0 MX -- stage ia2
+IHC: ALK-
+Resection margins free of tumor.
+LVI: not identified.
+PROC: lobectomy
+Regional nodes: 0/6.
+End of report.

@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga9_17 organ=stomach
+PATH DX:
+Histologic grade 2.
+PROC: partial gastrectomy
+Sections show tubular adenoCA arising in the stomach.
+Staging: pT4A N0 MX -- stage ib
+PNI: -.
+Lymph nodes: 0/25 positive.
+Margins: negative.
+** END **

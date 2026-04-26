@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga7_19 organ=pancreas
+Final Diagnosis
+Regional nodes: 2/18.
+HISTOLOGY -- ductal adenoCA
+PNI: +.
+Grossly, the tumor measures 29 mm in greatest dimension.
+Staging: pT3 N1 MX -- stage iib
+LVI: not identified.
+Procedure performed - whipple procedure.
+Resection margins free of tumor.
+Dictated and signed electronically.

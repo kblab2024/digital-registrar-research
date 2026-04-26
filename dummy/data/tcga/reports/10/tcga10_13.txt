@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga10_13 organ=thyroid
+FINAL DIAGNOSIS:
+Resection margins free of tumor.
+Lymph nodes: 0/3 positive.
+PROC: total thyroidectomy
+On microscopy, PTC is identified, infiltrating into surrounding tissue.
+AJCC -- pT1B N0 MX -- stage i
+Tumor size: 12 mm.
+Dictated and signed electronically.

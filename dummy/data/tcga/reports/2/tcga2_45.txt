@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga2_45 organ=cervix
+DIAGNOSIS:
+No malignancy identified. Benign tissue only.
+Pathologist: [redacted]

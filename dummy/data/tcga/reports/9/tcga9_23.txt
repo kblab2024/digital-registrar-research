@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga9_23 organ=stomach
+PATH DX:
+Specimen: s/p partial gastrectomy.
+AJCC -- pT4A N0 MX -- stage ib
+The lesion is consistent with tubular adenoCA.
+Lymph nodes: 0/25 positive.
+No angiolymphatic invasion.
+(grade 2)
+

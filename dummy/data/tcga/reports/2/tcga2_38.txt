@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga2_38 organ=cervix
+-- Diagnosis --
+Resection margins free of tumor.
+Regional nodes: 0/12.
+Histologic grade 2.
+Grossly, the tumor measures 22 mm in greatest dimension.
+AJCC -- pT2B N0 MX -- stage ib1
+The lesion is consistent with SCC, NOS.
+PROC: radical hysterectomy
+End of report.

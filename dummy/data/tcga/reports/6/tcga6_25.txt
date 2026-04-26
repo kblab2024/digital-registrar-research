@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga6_25 organ=lung
+Final Diagnosis
+PROC: lobectomy
+pTNM pT1B N0 MX -- stage ia2
+LNs - 0 of 6 involved by tumor.
+IHC: ALK-
+Lymphovascular invasion - YES.
+Lesion ~2.7cm.
+Resection margins free of tumor.
+HISTOLOGY -- adenoCA
+End of report.

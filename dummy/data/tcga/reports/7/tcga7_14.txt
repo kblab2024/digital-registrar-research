@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga7_14 organ=pancreas
+-- Diagnosis --
+Procedure performed - whipple procedure.
+Lymph nodes: 2/18 positive.
+AJCC -- pT2 N1 MX -- stage iib
+Lymphovascular invasion - no.
+All margins (-)
+Lesion ~3.3cm.
+HISTOLOGY -- ductal adenoCA
+

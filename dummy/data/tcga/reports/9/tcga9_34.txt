@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga9_34 organ=stomach
+Final Diagnosis
+LVI: not identified.
+Grade: 1.
+All margins (-)
+Regional nodes: 0/25.
+Staging: pT3 N0 MX -- stage ib
+Procedure performed - partial gastrectomy.
+PNI: -.
+Histologic type: tubular adenoCA
+Dictated and signed electronically.

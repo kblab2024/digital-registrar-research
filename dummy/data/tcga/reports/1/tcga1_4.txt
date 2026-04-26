@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga1_4 organ=breast
+DIAGNOSIS:
+IHC: er+, pr+
+Margins: negative.
+AJCC -- pT2 N0 MX
+Lymph nodes: 0/2 positive.
+HISTOLOGY -- invasive ductal CA, NST
+Lesion ~2.7cm.
+PROC: wide excision
+** END **

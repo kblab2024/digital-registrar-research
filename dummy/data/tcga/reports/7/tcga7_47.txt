@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga7_47 organ=pancreas
+-- Diagnosis --
+Negative for invasive carcinoma. Reactive changes noted.
+** END **

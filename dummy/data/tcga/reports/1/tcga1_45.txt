@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga1_45 organ=breast
+PATH DX:
+Negative for invasive carcinoma. Reactive changes noted.
+** END **

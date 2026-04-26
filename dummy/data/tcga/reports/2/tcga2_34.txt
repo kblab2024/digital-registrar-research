@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga2_34 organ=cervix
+-- Diagnosis --
+AJCC -- pT2A1 N0 MX -- stage ib1
+PROC: radical hysterectomy
+All margins (-)
+The lesion is consistent with SCC, NOS.
+Lesion ~2.2cm.
+Lymph nodes: 0/12 positive.
+

@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga3_9 organ=colorectal
+Final Diagnosis
+Margins: negative.
+Procedure performed - segmental colectomy.
+The lesion is consistent with adenoCA.
+Staging: pT2 N0 MX -- stage iia
+(grade 3)
+LNs - 0 of 22 involved by tumor.
+Pathologist: [redacted]

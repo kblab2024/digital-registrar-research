@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga7_10 organ=pancreas
+Final Diagnosis
+Staging: pT2 N1 MX -- stage iib
+HISTOLOGY -- ductal adenoCA
+Lymphovascular invasion - no.
+Regional nodes: 2/18.
+Lesion ~4.1cm.
+Margins: negative.
+Surgery: whipple procedure (received fresh).
+

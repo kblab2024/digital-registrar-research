@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga10_50 organ=thyroid
+-- Diagnosis --
+no carcinoma seen in submitted material
+Dictated and signed electronically.

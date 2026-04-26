@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga4_35 organ=esophagus
+FINAL DIAGNOSIS:
+LNs - 0 of 8 involved by tumor.
+(grade 2)
+AJCC -- pT4A N0 MX -- stage ii
+Surgery: esophagectomy (received fresh).
+HISTOLOGY -- SCC
+End of report.

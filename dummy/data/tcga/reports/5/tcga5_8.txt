@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga5_8 organ=liver
+-- Diagnosis --
+Sections show HCC arising in the liver.
+Surgery: partial hepatectomy (received fresh).
+Regional nodes: 0/1.
+A 3.0 cm mass was identified.
+Grade: 4.
+Staging: pT3 N0 MX -- stage ib
+** END **

@@ -1,0 +1,9 @@
+SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh1_48, organ=breast
+FINAL DIAGNOSIS:
+  Procedure: wide_excision
+  Histology: invasive_carcinoma_no_special_type
+  Tumor size: 15 mm, laterality=right
+  Grade 3, LVI=True
+  Margins: negative
+  ER: True, PR: True
+  pTNM: t1c n0 mx

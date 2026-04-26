@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga4_19 organ=esophagus
+Final Diagnosis
+AJCC -- pT3 N0 MX -- stage ii
+No angiolymphatic invasion.
+Procedure performed - esophagectomy.
+HISTOLOGY -- SCC
+All margins (-)
+LNs - 0 of 8 involved by tumor.
+Grade: 1.
+** END **

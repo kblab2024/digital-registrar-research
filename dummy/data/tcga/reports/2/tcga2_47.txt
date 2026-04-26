@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga2_47 organ=cervix
+Final Diagnosis
+no carcinoma seen in submitted material
+Pathologist: [redacted]

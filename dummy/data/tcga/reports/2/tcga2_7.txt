@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga2_7 organ=cervix
+PATH DX:
+Grade: 1.
+Lymph nodes: 0/12 positive.
+Specimen: s/p radical hysterectomy.
+Tumor size: 22 mm.
+AJCC -- pT2A1 N0 MX -- stage ib1
+HISTOLOGY -- SCC, NOS
+** END **

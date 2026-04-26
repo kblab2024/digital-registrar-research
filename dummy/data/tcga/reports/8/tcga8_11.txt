@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga8_11 organ=prostate
+-- Diagnosis --
+Tumor size: 18 mm.
+Grade: group_4_4_4.
+pTNM pT3B N0 MX -- stage iia
+PNI: +.
+LVI: not identified.
+Specimen: s/p radical prostatectomy.
+Sections show acinar adenoCA arising in the prostate.
+LNs - 0 of 4 involved by tumor.
+

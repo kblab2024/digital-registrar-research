@@ -1,0 +1,12 @@
+[synthetic-tcga] case=tcga1_24 organ=breast
+Final Diagnosis
+Margins: negative.
+Lymph nodes: 0/2 positive.
+Staging: pT1C N0 MX
+Tumor size: 15 mm.
+Histologic type: invasive ductal CA, NST
+Lymphovascular invasion - YES.
+Grade: 3.
+IHC: er+
+Procedure performed - wide excision.
+

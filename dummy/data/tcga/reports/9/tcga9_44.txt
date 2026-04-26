@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga9_44 organ=stomach
+Final Diagnosis
+no carcinoma seen in submitted material
+** END **

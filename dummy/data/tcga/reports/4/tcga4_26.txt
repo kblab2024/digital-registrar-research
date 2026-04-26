@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga4_26 organ=esophagus
+-- Diagnosis --
+Histologic type: SCC
+(grade 2)
+pTNM pT4A N0 MX -- stage ii
+Regional nodes: 0/8.
+Procedure performed - esophagectomy.
+Pathologist: [redacted]

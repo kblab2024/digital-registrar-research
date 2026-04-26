@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga8_50 organ=prostate
+FINAL DIAGNOSIS:
+Negative for invasive carcinoma. Reactive changes noted.
+Dictated and signed electronically.

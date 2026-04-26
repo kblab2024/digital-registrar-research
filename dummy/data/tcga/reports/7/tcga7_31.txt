@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga7_31 organ=pancreas
+Final Diagnosis
+Sections show ductal adenoCA arising in the pancreas.
+Grossly, the tumor measures 29 mm in greatest dimension.
+Lymphovascular invasion - no.
+Resection margins free of tumor.
+Surgery: whipple procedure (received fresh).
+LNs - 2 of 18 involved by tumor.
+Staging: pT3 N1 MX -- stage iib
+End of report.

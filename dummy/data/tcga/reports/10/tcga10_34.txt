@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_34 organ=thyroid
+PATH DX:
+Tumor size: 24 mm.
+Procedure performed - total thyroidectomy.
+Margins: negative.
+Regional nodes: 0/3.
+No angiolymphatic invasion.
+Sections show PTC arising in the thyroid.
+Staging: pT2 N0 MX -- stage i
+** END **

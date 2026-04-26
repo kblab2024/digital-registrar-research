@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga7_50 organ=pancreas
+Final Diagnosis
+Negative for invasive carcinoma. Reactive changes noted.
+Pathologist: [redacted]

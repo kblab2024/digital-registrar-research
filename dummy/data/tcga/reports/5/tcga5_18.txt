@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga5_18 organ=liver
+PATH DX:
+Procedure performed - partial hepatectomy.
+Grade: 2.
+All margins (-)
+pTNM pT1B N0 MX -- stage ib
+Microscopic: HCC.
+Lesion ~2.0cm.
+LNs - 0 of 1 involved by tumor.
+Dictated and signed electronically.

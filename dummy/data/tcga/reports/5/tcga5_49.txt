@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga5_49 organ=liver
+PATH DX:
+Negative for invasive carcinoma. Reactive changes noted.
+Dictated and signed electronically.

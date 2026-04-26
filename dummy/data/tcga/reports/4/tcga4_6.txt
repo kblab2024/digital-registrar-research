@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga4_6 organ=esophagus
+PATH DX:
+Grade: 3.
+All margins (-)
+HISTOLOGY -- SCC
+PROC: esophagectomy
+Lymph nodes: 0/8 positive.
+Staging: pT2 N0 MX -- stage ii
+Pathologist: [redacted]

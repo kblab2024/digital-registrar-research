@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga5_9 organ=liver
+Final Diagnosis
+Grade: 1.
+Surgery: partial hepatectomy (received fresh).
+AJCC -- pT1B N0 MX -- stage ib
+Lymph nodes: 0/1 positive.
+Sections show HCC arising in the liver.
+Tumor size: 35 mm.
+Margins: negative.
+** END **

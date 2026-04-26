@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga5_22 organ=liver
+PATH DX:
+The lesion is consistent with HCC.
+All margins (-)
+Lymph nodes: 0/1 positive.
+Grossly, the tumor measures 40 mm in greatest dimension.
+Staging: pT2 N0 MX -- stage ib
+Surgery: partial hepatectomy (received fresh).
+** END **

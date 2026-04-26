@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga3_25 organ=colorectal
+FINAL DIAGNOSIS:
+LVI: not identified.
+LNs - 2 of 22 involved by tumor.
+Grade: 1.
+Staging: pT3 N1 MX -- stage iii
+Margins: negative.
+Sections show adenoCA arising in the colorectal.
+Surgery: segmental colectomy (received fresh).
+Dictated and signed electronically.

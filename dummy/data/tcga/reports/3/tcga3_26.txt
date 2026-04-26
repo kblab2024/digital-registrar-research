@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga3_26 organ=colorectal
+PATH DX:
+Lymphovascular invasion - no.
+Margins: negative.
+pTNM pT4A N0 MX -- stage iia
+HISTOLOGY -- adenoCA
+Lymph nodes: 0/22 positive.
+Procedure performed - segmental colectomy.
+** END **

@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga5_33 organ=liver
+-- Diagnosis --
+Regional nodes: 0/1.
+Lesion ~3.5cm.
+All margins (-)
+Histologic grade 1.
+Microscopic: HCC.
+pTNM pT1B N0 MX -- stage ib
+PROC: partial hepatectomy
+Dictated and signed electronically.

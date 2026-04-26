@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga6_19 organ=lung
+Final Diagnosis
+A 3.0 cm mass was identified.
+On microscopy, adenoCA is identified, infiltrating into surrounding tissue.
+Resection margins free of tumor.
+Surgery: lobectomy (received fresh).
+No angiolymphatic invasion.
+pTNM pT2A N0 MX -- stage ia2
+IHC: ALK-
+LNs - 0 of 6 involved by tumor.
+Dictated and signed electronically.

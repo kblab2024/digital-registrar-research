@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga7_28 organ=pancreas
+PATH DX:
+LVI: not identified.
+Histologic type: ductal adenoCA
+Procedure performed - whipple procedure.
+Lymph nodes: 2/18 positive.
+Margins: negative.
+Grossly, the tumor measures 41 mm in greatest dimension.
+pTNM pT2 N1 MX -- stage iib
+

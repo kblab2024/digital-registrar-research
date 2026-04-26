@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga10_43 organ=thyroid
+Final Diagnosis
+No malignancy identified. Benign tissue only.
+** END **

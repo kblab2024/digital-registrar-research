@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga8_24 organ=prostate
+FINAL DIAGNOSIS:
+Specimen: s/p radical prostatectomy.
+HISTOLOGY -- acinar adenoCA
+Regional nodes: 0/4.
+Grade: group_1_3_3.
+pTNM pT2 N0 MX -- stage iia
+No angiolymphatic invasion.
+Grossly, the tumor measures 18 mm in greatest dimension.
+End of report.

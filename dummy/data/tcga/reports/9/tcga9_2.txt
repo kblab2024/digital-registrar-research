@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga9_2 organ=stomach
+-- Diagnosis --
+Lymphovascular invasion - no.
+Staging: pT4A N0 MX -- stage ib
+Resection margins free of tumor.
+Lymph nodes: 0/25 positive.
+PROC: partial gastrectomy
+Sections show tubular adenoCA arising in the stomach.
+PNI: -.
+Pathologist: [redacted]

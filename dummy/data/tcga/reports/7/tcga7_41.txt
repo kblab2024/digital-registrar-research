@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga7_41 organ=pancreas
+-- Diagnosis --
+Findings benign; not registry-eligible.
+** END **

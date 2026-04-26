@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga8_28 organ=prostate
+DIAGNOSIS:
+Grade: group_1_3_3.
+pTNM pT3A N0 MX -- stage iia
+HISTOLOGY -- acinar adenoCA
+Tumor size: 18 mm.
+PNI: +.
+Lymph nodes: 0/4 positive.
+PROC: radical prostatectomy
+LVI: not identified.
+

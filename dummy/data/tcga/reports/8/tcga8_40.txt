@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga8_40 organ=prostate
+DIAGNOSIS:
+Surgery: radical prostatectomy (received fresh).
+AJCC -- pT3A N0 MX -- stage iia
+LNs - 0 of 4 involved by tumor.
+(grade group_1_3_3)
+Grossly, the tumor measures 18 mm in greatest dimension.
+Sections show acinar adenoCA arising in the prostate.
+** END **

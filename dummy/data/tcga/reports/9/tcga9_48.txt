@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga9_48 organ=stomach
+FINAL DIAGNOSIS:
+No malignancy identified. Benign tissue only.
+

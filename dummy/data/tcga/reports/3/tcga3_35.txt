@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga3_35 organ=colorectal
+Final Diagnosis
+Histologic grade 2.
+AJCC -- pT4A N1 MX -- stage iii
+Procedure performed - segmental colectomy.
+Lymphovascular invasion - no.
+Microscopic: adenoCA.
+LNs - 2 of 22 involved by tumor.
+

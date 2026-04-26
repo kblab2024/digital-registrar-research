@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga1_41 organ=breast
+DIAGNOSIS:
+Specimen does not contain viable tumor.
+** END **

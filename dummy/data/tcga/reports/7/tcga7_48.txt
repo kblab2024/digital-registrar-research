@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga7_48 organ=pancreas
+FINAL DIAGNOSIS:
+Findings benign; not registry-eligible.
+Pathologist: [redacted]

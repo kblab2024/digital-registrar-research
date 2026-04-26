@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_15 organ=thyroid
+Final Diagnosis
+Resection margins free of tumor.
+LNs - 0 of 3 involved by tumor.
+pTNM pT3A N0 MX -- stage i
+Tumor size: 20 mm.
+On microscopy, PTC is identified, infiltrating into surrounding tissue.
+Procedure performed - total thyroidectomy.
+No angiolymphatic invasion.
+End of report.

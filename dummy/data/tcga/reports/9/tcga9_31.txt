@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga9_31 organ=stomach
+FINAL DIAGNOSIS:
+PNI: -.
+(grade 1)
+Histologic type: tubular adenoCA
+Margins: negative.
+AJCC -- pT3 N0 MX -- stage ib
+Procedure performed - partial gastrectomy.
+Lymph nodes: 0/25 positive.
+Lymphovascular invasion - no.
+Dictated and signed electronically.

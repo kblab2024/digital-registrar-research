@@ -1,0 +1,8 @@
+SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh2_57, organ=cervix
+FINAL DIAGNOSIS:
+  Procedure: radical_hysterectomy
+  Histology: squamous_cell_carcinoma_nos
+  Tumor size: 22 mm
+  Grade 3
+  pTNM: t1b1 n0 mx, stage ib1
+  Lymph nodes: 0/12 involved

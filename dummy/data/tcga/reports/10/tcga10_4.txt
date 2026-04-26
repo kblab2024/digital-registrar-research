@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga10_4 organ=thyroid
+DIAGNOSIS:
+All margins (-)
+Surgery: total thyroidectomy (received fresh).
+Histologic type: PTC
+AJCC -- pT1A N0 MX -- stage i
+Grossly, the tumor measures 24 mm in greatest dimension.
+Lymph nodes: 0/3 positive.
+End of report.

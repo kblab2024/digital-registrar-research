@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga9_26 organ=stomach
+-- Diagnosis --
+Grade: 2.
+No angiolymphatic invasion.
+Histologic type: tubular adenoCA
+Margins: negative.
+LNs - 0 of 25 involved by tumor.
+PROC: partial gastrectomy
+AJCC -- pT4A N0 MX -- stage ib
+End of report.

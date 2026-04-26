@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga2_3 organ=cervix
+FINAL DIAGNOSIS:
+AJCC -- pT1B1 N0 MX -- stage ib1
+Microscopic: SCC, NOS.
+Lymph nodes: 0/12 positive.
+Histologic grade 3.
+Specimen: s/p radical hysterectomy.
+Tumor size: 22 mm.
+End of report.

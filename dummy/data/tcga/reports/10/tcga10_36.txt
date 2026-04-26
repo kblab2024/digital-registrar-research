@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_36 organ=thyroid
+PATH DX:
+Sections show PTC arising in the thyroid.
+Resection margins free of tumor.
+No angiolymphatic invasion.
+Tumor size: 8 mm.
+AJCC -- pT1A N0 MX -- stage i
+LNs - 0 of 3 involved by tumor.
+Surgery: total thyroidectomy (received fresh).
+Pathologist: [redacted]

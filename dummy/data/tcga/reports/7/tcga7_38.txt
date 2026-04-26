@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga7_38 organ=pancreas
+PATH DX:
+Grossly, the tumor measures 33 mm in greatest dimension.
+No angiolymphatic invasion.
+Regional nodes: 2/18.
+Staging: pT2 N1 MX -- stage iib
+Resection margins free of tumor.
+Surgery: whipple procedure (received fresh).
+On microscopy, ductal adenoCA is identified, infiltrating into surrounding tissue.
+End of report.

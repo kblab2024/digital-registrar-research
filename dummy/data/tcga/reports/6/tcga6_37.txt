@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_37 organ=lung
+Final Diagnosis
+PROC: lobectomy
+All margins (-)
+HISTOLOGY -- adenoCA
+IHC: ALK-, PDL1+
+A 2.1 cm mass was identified.
+Lymph nodes: 0/6 positive.
+Staging: pT1B N0 MX -- stage ia2
+** END **

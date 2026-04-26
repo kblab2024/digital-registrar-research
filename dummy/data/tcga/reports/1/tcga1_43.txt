@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga1_43 organ=breast
+PATH DX:
+Findings benign; not registry-eligible.
+** END **

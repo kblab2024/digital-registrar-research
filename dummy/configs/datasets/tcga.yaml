@@ -1,18 +1,27 @@
 name: tcga
-modes:
-  with_preann:
-    reports_dir: with_preann/data/tcga/reports
-    annotations_dir: with_preann/data/tcga/annotations
-    preannotation_dir: with_preann/data/tcga/preannotation
-    splits_path: with_preann/data/tcga/splits.json
-    manifest_path: with_preann/data/tcga/dataset_manifest.yaml
-  without_preann:
-    reports_dir: without_preann/data/tcga/reports
-    annotations_dir: without_preann/data/tcga/annotations
-    splits_path: without_preann/data/tcga/splits.json
-    manifest_path: without_preann/data/tcga/dataset_manifest.yaml
+reports_dir: data/tcga/reports
+annotations_dir: data/tcga/annotations
+preannotation_dir: data/tcga/preannotation
+splits_path: data/tcga/splits.json
+manifest_path: data/tcga/dataset_manifest.yaml
 organs:
   - n: 1
     name: breast
   - n: 2
+    name: cervix
+  - n: 3
     name: colorectal
+  - n: 4
+    name: esophagus
+  - n: 5
+    name: liver
+  - n: 6
+    name: lung
+  - n: 7
+    name: pancreas
+  - n: 8
+    name: prostate
+  - n: 9
+    name: stomach
+  - n: 10
+    name: thyroid

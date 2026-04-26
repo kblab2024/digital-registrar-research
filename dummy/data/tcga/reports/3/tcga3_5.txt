@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga3_5 organ=colorectal
+PATH DX:
+Histologic type: adenoCA
+Regional nodes: 2/22.
+Specimen: s/p segmental colectomy.
+AJCC -- pT4A N1 MX -- stage iii
+Histologic grade 2.
+Resection margins free of tumor.
+

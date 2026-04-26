@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_8 organ=thyroid
+-- Diagnosis --
+Staging: pT1A N0 MX -- stage i
+No angiolymphatic invasion.
+All margins (-)
+Lesion ~1.6cm.
+Sections show PTC arising in the thyroid.
+Specimen: s/p total thyroidectomy.
+Lymph nodes: 0/3 positive.
+Dictated and signed electronically.

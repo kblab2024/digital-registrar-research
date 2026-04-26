@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga3_43 organ=colorectal
+PATH DX:
+Findings benign; not registry-eligible.
+Pathologist: [redacted]

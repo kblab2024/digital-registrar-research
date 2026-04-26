@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga7_35 organ=pancreas
+FINAL DIAGNOSIS:
+HISTOLOGY -- ductal adenoCA
+LNs - 2 of 18 involved by tumor.
+Grossly, the tumor measures 45 mm in greatest dimension.
+Lymphovascular invasion - no.
+PROC: whipple procedure
+Staging: pT3 N1 MX -- stage iib
+End of report.

@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga7_8 organ=pancreas
+Final Diagnosis
+LNs - 2 of 18 involved by tumor.
+Tumor size: 33 mm.
+PROC: whipple procedure
+All margins (-)
+Sections show ductal adenoCA arising in the pancreas.
+Staging: pT2 N1 MX -- stage iib
+End of report.

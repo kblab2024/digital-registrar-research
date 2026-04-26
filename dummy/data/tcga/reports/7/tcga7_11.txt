@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga7_11 organ=pancreas
+Final Diagnosis
+Staging: pT3 N1 MX -- stage iib
+LNs - 2 of 18 involved by tumor.
+PROC: whipple procedure
+PNI: +.
+LVI: not identified.
+Lesion ~4.5cm.
+All margins (-)
+Sections show ductal adenoCA arising in the pancreas.
+Pathologist: [redacted]

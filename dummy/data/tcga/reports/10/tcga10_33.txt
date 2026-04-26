@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga10_33 organ=thyroid
+FINAL DIAGNOSIS:
+Grossly, the tumor measures 20 mm in greatest dimension.
+Sections show PTC arising in the thyroid.
+AJCC -- pT1B N0 MX -- stage i
+Procedure performed - total thyroidectomy.
+Regional nodes: 0/3.
+Pathologist: [redacted]

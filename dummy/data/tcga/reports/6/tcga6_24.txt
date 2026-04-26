@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_24 organ=lung
+DIAGNOSIS:
+HISTOLOGY -- adenoCA
+All margins (-)
+LVI: not identified.
+LNs - 0 of 6 involved by tumor.
+Procedure performed - lobectomy.
+Staging: pT1A N0 MX -- stage ia2
+A 2.4 cm mass was identified.
+Pathologist: [redacted]

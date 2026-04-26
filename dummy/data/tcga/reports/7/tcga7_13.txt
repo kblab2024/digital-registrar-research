@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga7_13 organ=pancreas
+-- Diagnosis --
+Staging: pT3 N1 MX -- stage iib
+A 2.9 cm mass was identified.
+Sections show ductal adenoCA arising in the pancreas.
+Specimen: s/p whipple procedure.
+Resection margins free of tumor.
+Lymph nodes: 2/18 positive.
+PNI: +.
+Pathologist: [redacted]

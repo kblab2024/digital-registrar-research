@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga1_47 organ=breast
+PATH DX:
+Specimen does not contain viable tumor.
+Dictated and signed electronically.

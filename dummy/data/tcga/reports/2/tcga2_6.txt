@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga2_6 organ=cervix
+PATH DX:
+LNs - 0 of 12 involved by tumor.
+(grade 3)
+Procedure performed - radical hysterectomy.
+Microscopic: SCC, NOS.
+pTNM pT1B1 N0 MX -- stage ib1
+Grossly, the tumor measures 22 mm in greatest dimension.
+Pathologist: [redacted]

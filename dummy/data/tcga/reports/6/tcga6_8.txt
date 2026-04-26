@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_8 organ=lung
+-- Diagnosis --
+Lymphovascular invasion - no.
+pTNM pT1A N0 MX -- stage ia2
+On microscopy, adenoCA is identified, infiltrating into surrounding tissue.
+Procedure performed - lobectomy.
+Lymph nodes: 0/6 positive.
+Lesion ~1.8cm.
+Resection margins free of tumor.
+** END **

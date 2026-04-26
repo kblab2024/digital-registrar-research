@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga1_36 organ=breast
+FINAL DIAGNOSIS:
+Tumor size: 27 mm.
+Specimen: s/p wide excision.
+LVI: present.
+(grade 3)
+IHC: er+, pr+, her2 score=0
+AJCC -- pT2 N0 MX
+Lymph nodes: 0/2 positive.
+HISTOLOGY -- invasive ductal CA, NST
+

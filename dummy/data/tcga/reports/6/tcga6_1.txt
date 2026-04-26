@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga6_1 organ=lung
+Final Diagnosis
+Staging: pT1B N0 MX -- stage ia2
+Resection margins free of tumor.
+Lymph nodes: 0/6 positive.
+Lesion ~1.8cm.
+Procedure performed - lobectomy.
+HISTOLOGY -- adenoCA
+Pathologist: [redacted]

@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga7_46 organ=pancreas
+Final Diagnosis
+Negative for invasive carcinoma. Reactive changes noted.
+Dictated and signed electronically.

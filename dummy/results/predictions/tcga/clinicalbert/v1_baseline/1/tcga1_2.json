@@ -8,7 +8,7 @@
     "cancer_clock": null,
     "cancer_laterality": "right",
     "histology": "invasive_carcinoma_no_special_type",
-    "tumor_size": 21,
+    "tumor_size": 20,
     "lymphovascular_invasion": false,
     "perineural_invasion": null,
     "distant_metastasis": null,
@@ -32,8 +32,8 @@
     "margins": [
       {
         "margin_category": "superficial",
-        "margin_involved": true,
-        "distance": null,
+        "margin_involved": false,
+        "distance": 5,
         "description": null
       },
       {

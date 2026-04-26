@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga5_2 organ=liver
+FINAL DIAGNOSIS:
+Surgery: partial hepatectomy (received fresh).
+(grade 2)
+HISTOLOGY -- HCC
+Regional nodes: 0/1.
+Tumor size: 30 mm.
+Staging: pT3 N0 MX -- stage ib
+

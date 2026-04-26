@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga2_17 organ=cervix
+-- Diagnosis --
+Histologic type: SCC, NOS
+Margins: negative.
+pTNM pT2B N0 MX -- stage ib1
+Procedure performed - radical hysterectomy.
+LNs - 0 of 12 involved by tumor.
+Tumor size: 22 mm.
+Dictated and signed electronically.

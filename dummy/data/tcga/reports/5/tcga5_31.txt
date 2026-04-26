@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga5_31 organ=liver
+FINAL DIAGNOSIS:
+Microscopic: HCC.
+AJCC -- pT2 N0 MX -- stage ib
+All margins (-)
+Lymph nodes: 0/1 positive.
+A 2.5 cm mass was identified.
+Surgery: partial hepatectomy (received fresh).
+Histologic grade 3.
+End of report.

@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga6_33 organ=lung
+PATH DX:
+Surgery: lobectomy (received fresh).
+Lymphovascular invasion - no.
+Tumor size: 30 mm.
+Regional nodes: 0/6.
+HISTOLOGY -- adenoCA
+pTNM pT1B N0 MX -- stage ia2
+End of report.

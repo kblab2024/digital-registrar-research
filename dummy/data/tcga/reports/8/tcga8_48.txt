@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga8_48 organ=prostate
+Final Diagnosis
+no carcinoma seen in submitted material
+

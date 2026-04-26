@@ -1,0 +1,4 @@
+SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh1_93, organ=breast
+FINAL DIAGNOSIS:
+  No invasive carcinoma identified.
+  Benign findings; specimen not eligible for cancer registry.

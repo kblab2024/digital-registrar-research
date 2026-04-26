@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga9_12 organ=stomach
+FINAL DIAGNOSIS:
+Resection margins free of tumor.
+Lymph nodes: 0/25 positive.
+Microscopic: tubular adenoCA.
+pTNM pT2 N0 MX -- stage ib
+Grade: 3.
+Specimen: s/p partial gastrectomy.
+Lymphovascular invasion - YES.
+Dictated and signed electronically.

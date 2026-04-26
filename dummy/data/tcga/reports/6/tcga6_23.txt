@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_23 organ=lung
+PATH DX:
+Procedure performed - lobectomy.
+AJCC -- pT2A N0 MX -- stage ia2
+Tumor size: 21 mm.
+Lymph nodes: 0/6 positive.
+Lymphovascular invasion - no.
+HISTOLOGY -- adenoCA
+All margins (-)
+** END **

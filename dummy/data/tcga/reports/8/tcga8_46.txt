@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga8_46 organ=prostate
+PATH DX:
+No malignancy identified. Benign tissue only.
+** END **

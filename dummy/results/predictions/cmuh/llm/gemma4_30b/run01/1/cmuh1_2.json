@@ -32,8 +32,8 @@
     "margins": [
       {
         "margin_category": "superficial",
-        "margin_involved": true,
-        "distance": null,
+        "margin_involved": false,
+        "distance": 5,
         "description": null
       },
       {

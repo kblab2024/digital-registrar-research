@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga4_15 organ=esophagus
+DIAGNOSIS:
+Lymph nodes: 0/8 positive.
+Microscopic: SCC.
+(grade 3)
+AJCC -- pT2 N0 MX -- stage ii
+Specimen: s/p esophagectomy.
+Lymphovascular invasion - YES.
+Dictated and signed electronically.

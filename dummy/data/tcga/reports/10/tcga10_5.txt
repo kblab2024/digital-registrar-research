@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga10_5 organ=thyroid
+-- Diagnosis --
+pTNM pT1B N0 MX -- stage i
+Lesion ~2.8cm.
+Regional nodes: 0/3.
+Microscopic: PTC.
+Resection margins free of tumor.
+PROC: total thyroidectomy
+** END **

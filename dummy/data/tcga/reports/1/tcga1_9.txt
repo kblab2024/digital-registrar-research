@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga1_9 organ=breast
+-- Diagnosis --
+Grossly, the tumor measures 18 mm in greatest dimension.
+LNs - 0 of 2 involved by tumor.
+Histologic grade 3.
+All margins (-)
+Surgery: wide excision (received fresh).
+HISTOLOGY -- invasive ductal CA, NST
+pTNM pT1C N0 MX
+Dictated and signed electronically.

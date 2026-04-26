@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga7_7 organ=pancreas
+DIAGNOSIS:
+The lesion is consistent with ductal adenoCA.
+pTNM pT3 N1 MX -- stage iib
+LNs - 2 of 18 involved by tumor.
+Resection margins free of tumor.
+PROC: whipple procedure
+LVI: not identified.
+Tumor size: 29 mm.
+

@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga3_45 organ=colorectal
+FINAL DIAGNOSIS:
+No malignancy identified. Benign tissue only.
+

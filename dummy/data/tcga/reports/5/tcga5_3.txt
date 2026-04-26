@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga5_3 organ=liver
+FINAL DIAGNOSIS:
+AJCC -- pT1B N0 MX -- stage ib
+Histologic grade 3.
+Histologic type: HCC
+Tumor size: 35 mm.
+LNs - 0 of 1 involved by tumor.
+Resection margins free of tumor.
+PROC: partial hepatectomy
+End of report.

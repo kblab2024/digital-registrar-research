@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga3_39 organ=colorectal
+FINAL DIAGNOSIS:
+Lymphovascular invasion - YES.
+Specimen: s/p segmental colectomy.
+Regional nodes: 0/22.
+Grade: 3.
+Resection margins free of tumor.
+pTNM pT2 N0 MX -- stage iia
+Histologic type: adenoCA
+End of report.

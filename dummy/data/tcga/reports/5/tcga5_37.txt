@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga5_37 organ=liver
+Final Diagnosis
+Lymph nodes: 0/1 positive.
+HISTOLOGY -- HCC
+Procedure performed - partial hepatectomy.
+Staging: pT2 N0 MX -- stage ib
+Grossly, the tumor measures 25 mm in greatest dimension.
+Histologic grade 1.
+** END **

@@ -1,0 +1,7 @@
+[synthetic-tcga] case=tcga9_10 organ=stomach
+DIAGNOSIS:
+Histologic type: tubular adenoCA
+AJCC -- pT3 N1 MX -- stage iia
+Lymph nodes: 2/25 positive.
+Specimen: s/p partial gastrectomy.
+End of report.

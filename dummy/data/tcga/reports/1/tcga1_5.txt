@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga1_5 organ=breast
+DIAGNOSIS:
+Histologic grade 2.
+Tumor size: 30 mm.
+LVI: not identified.
+AJCC -- pT2 N0 MX
+On microscopy, invasive ductal CA, NST is identified, infiltrating into surrounding tissue.
+Procedure performed - wide excision.
+LNs - 0 of 2 involved by tumor.
+Dictated and signed electronically.

@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga1_28 organ=breast
+Final Diagnosis
+pTNM pT2 N0 MX
+Procedure performed - wide excision.
++ angiolymphatic invasion.
+HISTOLOGY -- invasive ductal CA, NST
+Tumor size: 27 mm.
+Resection margins positive.
+IHC: er+, pr+
+Lymph nodes: 0/2 positive.
+

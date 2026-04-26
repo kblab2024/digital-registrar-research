@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_2 organ=lung
+PATH DX:
+Regional nodes: 0/6.
+Lesion ~2.1cm.
+Sections show adenoCA arising in the lung.
+Staging: pT1C N0 MX -- stage ia2
+Lymphovascular invasion - no.
+Resection margins free of tumor.
+Specimen: s/p lobectomy.
+Pathologist: [redacted]

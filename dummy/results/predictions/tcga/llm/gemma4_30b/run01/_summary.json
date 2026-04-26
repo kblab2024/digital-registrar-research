@@ -3,10 +3,10 @@
   "model": "gemma4_30b",
   "seed": 42,
   "dataset": "tcga",
-  "n_cases": 6,
-  "total_tokens": 4161,
+  "n_cases": 500,
+  "total_tokens": 399962,
   "parse_errors": 0,
   "parse_error_rate": 0.0,
-  "wall_time_s": 73.0,
-  "created_at": "2026-04-23T23:54:44+00:00"
+  "wall_time_s": 69.6,
+  "created_at": "2026-04-26T03:44:45+00:00"
 }

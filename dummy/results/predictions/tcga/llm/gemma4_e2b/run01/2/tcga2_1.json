@@ -1,43 +1,27 @@
 {
   "cancer_excision_report": true,
-  "cancer_category": "colorectal",
+  "cancer_category": "cervix",
   "cancer_category_others_description": null,
   "cancer_data": {
-    "procedure": "segmental_colectomy",
+    "procedure": "radical_hysterectomy",
     "surgical_technique": null,
-    "cancer_primary_site": "sigmoid_colon",
-    "histology": "adenocarcinoma",
-    "grade": 2,
-    "tumor_invasion": "pericolorectal_tissue",
-    "lymphovascular_invasion": false,
-    "perineural_invasion": null,
-    "extracellular_mucin": null,
-    "signet_ring": null,
-    "tumor_budding": null,
-    "type_of_polyp": null,
+    "cancer_primary_site": "12_3_clock",
+    "histology": "squamous_cell_carcinoma_nos",
+    "grade": 1,
+    "tumor_size": 22,
+    "depth_of_invasion_number": 8,
+    "depth_of_invasion_three_tier": null,
     "distant_metastasis": null,
     "treatment_effect": null,
     "tnm_descriptor": null,
-    "pt_category": "t2",
+    "pt_category": "t2a1",
     "pn_category": "n0",
     "pm_category": "mx",
-    "stage_group": "iia",
+    "stage_group": "ib1",
     "ajcc_version": null,
     "margins": [
       {
-        "margin_category": "proximal",
-        "margin_involved": false,
-        "distance": null,
-        "description": "Negative"
-      },
-      {
-        "margin_category": "distal",
-        "margin_involved": false,
-        "distance": null,
-        "description": "Negative"
-      },
-      {
-        "margin_category": "radial_or_circumferencial",
+        "margin_category": null,
         "margin_involved": false,
         "distance": null,
         "description": "Negative"
@@ -45,14 +29,14 @@
     ],
     "regional_lymph_node": [
       {
-        "lymph_node_category": "mesenteric",
+        "lymph_node_side": null,
+        "lymph_node_category": null,
         "involved": 0,
-        "examined": 22,
+        "examined": 12,
         "station_name": null
       }
     ],
     "extranodal_extension": null,
-    "maximal_ln_size": null,
-    "biomarkers": null
+    "maximal_ln_size": null
   }
 }

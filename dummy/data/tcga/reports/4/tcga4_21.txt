@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga4_21 organ=esophagus
+PATH DX:
+AJCC -- pT2 N0 MX -- stage ii
+Grade: 3.
++ angiolymphatic invasion.
+On microscopy, SCC is identified, infiltrating into surrounding tissue.
+Lymph nodes: 0/8 positive.
+Resection margins free of tumor.
+PROC: esophagectomy
+End of report.

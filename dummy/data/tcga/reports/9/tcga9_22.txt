@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga9_22 organ=stomach
+-- Diagnosis --
+Staging: pT3 N0 MX -- stage ib
+(grade 1)
+Lymph nodes: 0/25 positive.
+Microscopic: tubular adenoCA.
+PNI: -.
+Lymphovascular invasion - no.
+PROC: partial gastrectomy
+All margins (-)
+Pathologist: [redacted]

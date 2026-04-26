@@ -3,10 +3,10 @@
   "model": "gemma4_30b",
   "seed": 43,
   "dataset": "cmuh",
-  "n_cases": 6,
-  "total_tokens": 4168,
+  "n_cases": 1000,
+  "total_tokens": 793119,
   "parse_errors": 0,
   "parse_error_rate": 0.0,
-  "wall_time_s": 35.2,
-  "created_at": "2026-04-23T23:54:44+00:00"
+  "wall_time_s": 99.3,
+  "created_at": "2026-04-26T03:44:44+00:00"
 }

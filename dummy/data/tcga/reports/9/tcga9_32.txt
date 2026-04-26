@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga9_32 organ=stomach
+PATH DX:
+Grade: 2.
+AJCC -- pT4A N0 MX -- stage ib
+PROC: partial gastrectomy
+Lymph nodes: 0/25 positive.
+Microscopic: tubular adenoCA.
++ angiolymphatic invasion.
+Resection margins free of tumor.
+PNI: -.
+Dictated and signed electronically.

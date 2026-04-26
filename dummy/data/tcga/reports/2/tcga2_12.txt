@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga2_12 organ=cervix
+FINAL DIAGNOSIS:
+Staging: pT1B1 N1A MX -- stage ib1
+Margins: negative.
+Regional nodes: 2/12.
+Specimen: s/p radical hysterectomy.
+Lesion ~2.2cm.
+Grade: 3.
+Histologic type: SCC, NOS
+

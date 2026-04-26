@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga10_14 organ=thyroid
+PATH DX:
+Microscopic: PTC.
+LNs - 0 of 3 involved by tumor.
+Tumor size: 16 mm.
+Procedure performed - total thyroidectomy.
+Staging: pT2 N0 MX -- stage i
+End of report.

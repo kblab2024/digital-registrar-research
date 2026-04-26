@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga9_41 organ=stomach
+Final Diagnosis
+No malignancy identified. Benign tissue only.
+End of report.

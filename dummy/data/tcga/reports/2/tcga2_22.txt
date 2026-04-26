@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga2_22 organ=cervix
+PATH DX:
+(grade 1)
+All margins (-)
+Procedure performed - radical hysterectomy.
+Regional nodes: 0/12.
+On microscopy, SCC, NOS is identified, infiltrating into surrounding tissue.
+pTNM pT2A1 N0 MX -- stage ib1
+Tumor size: 22 mm.
+

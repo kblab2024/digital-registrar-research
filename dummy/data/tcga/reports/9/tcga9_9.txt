@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga9_9 organ=stomach
+-- Diagnosis --
+Regional nodes: 0/25.
+No angiolymphatic invasion.
+pTNM pT2 N0 MX -- stage ib
+Surgery: partial gastrectomy (received fresh).
+Resection margins free of tumor.
+Histologic grade 3.
+On microscopy, tubular adenoCA is identified, infiltrating into surrounding tissue.
+End of report.

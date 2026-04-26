@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga2_42 organ=cervix
+PATH DX:
+No malignancy identified. Benign tissue only.
+End of report.

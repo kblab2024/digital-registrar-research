@@ -1,0 +1,4 @@
+SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh10_92, organ=thyroid
+FINAL DIAGNOSIS:
+  No invasive carcinoma identified.
+  Benign findings; specimen not eligible for cancer registry.

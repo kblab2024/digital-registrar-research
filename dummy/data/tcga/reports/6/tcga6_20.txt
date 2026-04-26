@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga6_20 organ=lung
+PATH DX:
+pTNM pT1A N0 MX -- stage ia2
+On microscopy, adenoCA is identified, infiltrating into surrounding tissue.
+Surgery: lobectomy (received fresh).
+Lesion ~3.3cm.
+IHC: ALK-, PDL1+
+Lymph nodes: 0/6 positive.
+Resection margins free of tumor.
+** END **

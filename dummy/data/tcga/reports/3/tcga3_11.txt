@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga3_11 organ=colorectal
+DIAGNOSIS:
+Lymphovascular invasion - no.
+AJCC -- pT4A N0 MX -- stage iia
+Surgery: segmental colectomy (received fresh).
+Grade: 2.
+Histologic type: adenoCA
+Resection margins free of tumor.
+Lymph nodes: 0/22 positive.
+End of report.

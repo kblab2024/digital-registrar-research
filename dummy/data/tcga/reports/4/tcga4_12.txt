@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga4_12 organ=esophagus
+PATH DX:
+On microscopy, SCC is identified, infiltrating into surrounding tissue.
+Surgery: esophagectomy (received fresh).
+Lymph nodes: 5/8 positive.
++ angiolymphatic invasion.
+pTNM pT2 N2 MX -- stage iiib
+Grade: 3.
+End of report.

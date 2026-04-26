@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga3_34 organ=colorectal
+DIAGNOSIS:
+Lymph nodes: 0/22 positive.
+The lesion is consistent with adenoCA.
+PROC: segmental colectomy
+No angiolymphatic invasion.
+Margins: negative.
+pTNM pT3 N0 MX -- stage iia
+

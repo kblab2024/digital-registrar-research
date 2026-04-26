@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga2_44 organ=cervix
+FINAL DIAGNOSIS:
+No malignancy identified. Benign tissue only.
+Dictated and signed electronically.

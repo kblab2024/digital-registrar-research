@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga4_39 organ=esophagus
+DIAGNOSIS:
+LNs - 0 of 8 involved by tumor.
+The lesion is consistent with SCC.
+Staging: pT2 N0 MX -- stage ii
+Surgery: esophagectomy (received fresh).
+(grade 3)
+Dictated and signed electronically.

@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga7_3 organ=pancreas
+Final Diagnosis
+Histologic type: ductal adenoCA
+Surgery: whipple procedure (received fresh).
+Margins: negative.
+LVI: present.
+AJCC -- pT3 N1 MX -- stage iib
+Regional nodes: 2/18.
+Grossly, the tumor measures 37 mm in greatest dimension.
+

@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga7_15 organ=pancreas
+DIAGNOSIS:
+On microscopy, ductal adenoCA is identified, infiltrating into surrounding tissue.
+PNI: +.
+Resection margins free of tumor.
+AJCC -- pT3 N1 MX -- stage iib
+Specimen: s/p whipple procedure.
+Lymph nodes: 2/18 positive.
+Lesion ~3.7cm.
+End of report.

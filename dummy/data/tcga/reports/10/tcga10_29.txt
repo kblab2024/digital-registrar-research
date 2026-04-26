@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_29 organ=thyroid
+PATH DX:
+Margins: negative.
+Regional nodes: 0/3.
+Histologic type: PTC
+Tumor size: 28 mm.
+Specimen: s/p total thyroidectomy.
+AJCC -- pT1B N0 MX -- stage i
+LVI: not identified.
+Dictated and signed electronically.

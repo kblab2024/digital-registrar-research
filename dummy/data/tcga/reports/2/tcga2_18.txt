@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga2_18 organ=cervix
+PATH DX:
+Lesion ~2.2cm.
+Staging: pT1B1 N0 MX -- stage ib1
+LNs - 0 of 12 involved by tumor.
+Surgery: radical hysterectomy (received fresh).
+Margins: negative.
+(grade 3)
+Microscopic: SCC, NOS.
+Dictated and signed electronically.

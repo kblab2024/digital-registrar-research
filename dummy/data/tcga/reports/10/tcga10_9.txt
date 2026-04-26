@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_9 organ=thyroid
+FINAL DIAGNOSIS:
+AJCC -- pT1B N0 MX -- stage i
+Specimen: s/p total thyroidectomy.
+A 2.0 cm mass was identified.
+Lymphovascular invasion - no.
+All margins (-)
+On microscopy, PTC is identified, infiltrating into surrounding tissue.
+Lymph nodes: 0/3 positive.
+Pathologist: [redacted]

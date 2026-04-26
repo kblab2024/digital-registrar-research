@@ -1,0 +1,8 @@
+[synthetic-tcga] case=tcga9_18 organ=stomach
+Final Diagnosis
+Specimen: s/p partial gastrectomy.
+LNs - 0 of 25 involved by tumor.
+Staging: pT2 N0 MX -- stage ib
+No angiolymphatic invasion.
+On microscopy, tubular adenoCA is identified, infiltrating into surrounding tissue.
+Pathologist: [redacted]

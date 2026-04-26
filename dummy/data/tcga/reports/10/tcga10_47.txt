@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga10_47 organ=thyroid
+Final Diagnosis
+Findings benign; not registry-eligible.
+

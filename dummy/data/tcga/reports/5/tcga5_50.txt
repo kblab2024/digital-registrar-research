@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga5_50 organ=liver
+DIAGNOSIS:
+Negative for invasive carcinoma. Reactive changes noted.
+** END **

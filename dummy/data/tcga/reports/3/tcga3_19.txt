@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga3_19 organ=colorectal
+FINAL DIAGNOSIS:
+AJCC -- pT3 N0 MX -- stage iia
+Histologic grade 1.
+Sections show adenoCA arising in the colorectal.
+Specimen: s/p segmental colectomy.
+Regional nodes: 0/22.
+Margins: negative.
+Lymphovascular invasion - no.
+Pathologist: [redacted]

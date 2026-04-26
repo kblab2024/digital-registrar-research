@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga10_45 organ=thyroid
+-- Diagnosis --
+Findings benign; not registry-eligible.
+

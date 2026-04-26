@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_31 organ=thyroid
+DIAGNOSIS:
+Grossly, the tumor measures 12 mm in greatest dimension.
+Resection margins free of tumor.
+Lymph nodes: 0/3 positive.
+Lymphovascular invasion - no.
+PROC: total thyroidectomy
+AJCC -- pT3A N0 MX -- stage i
+Histologic type: PTC
+

@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga4_45 organ=esophagus
+FINAL DIAGNOSIS:
+Specimen does not contain viable tumor.
+Dictated and signed electronically.

@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga9_15 organ=stomach
+-- Diagnosis --
+PROC: partial gastrectomy
+HISTOLOGY -- tubular adenoCA
+LNs - 2 of 25 involved by tumor.
+Histologic grade 3.
+Lymphovascular invasion - no.
+pTNM pT2 N1 MX -- stage iia
+All margins (-)
+

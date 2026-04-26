@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga4_44 organ=esophagus
+PATH DX:
+No malignancy identified. Benign tissue only.
+End of report.

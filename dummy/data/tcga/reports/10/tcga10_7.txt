@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga10_7 organ=thyroid
+DIAGNOSIS:
+Surgery: total thyroidectomy (received fresh).
+pTNM pT3A N0 MX -- stage i
+Regional nodes: 0/3.
+No angiolymphatic invasion.
+Histologic type: PTC
+A 1.2 cm mass was identified.
+Resection margins free of tumor.
+** END **

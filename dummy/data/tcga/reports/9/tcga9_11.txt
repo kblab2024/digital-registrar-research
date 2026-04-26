@@ -1,0 +1,11 @@
+[synthetic-tcga] case=tcga9_11 organ=stomach
+DIAGNOSIS:
+pTNM pT4A N0 MX -- stage ib
+Grade: 2.
+Surgery: partial gastrectomy (received fresh).
+Microscopic: tubular adenoCA.
+Resection margins free of tumor.
+LNs - 0 of 25 involved by tumor.
+LVI: not identified.
+PNI: -.
+

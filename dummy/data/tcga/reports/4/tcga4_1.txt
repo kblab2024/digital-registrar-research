@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga4_1 organ=esophagus
+DIAGNOSIS:
+LNs - 0 of 8 involved by tumor.
+Lymphovascular invasion - no.
+PROC: esophagectomy
+All margins (-)
+HISTOLOGY -- SCC
+AJCC -- pT3 N0 MX -- stage ii
+End of report.

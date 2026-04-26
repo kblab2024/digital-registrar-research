@@ -1,0 +1,12 @@
+[synthetic-tcga] case=tcga1_34 organ=breast
+FINAL DIAGNOSIS:
+Staging: pT2 N0 MX
+LNs - 0 of 2 involved by tumor.
+Grade: 1.
+Lesion ~2.1cm.
+Lymphovascular invasion - no.
+IHC: er+
+The lesion is consistent with invasive ductal CA, NST.
+Resection margins free of tumor.
+PROC: wide excision
+End of report.

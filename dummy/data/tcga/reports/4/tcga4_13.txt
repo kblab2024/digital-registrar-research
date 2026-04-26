@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga4_13 organ=esophagus
+PATH DX:
+Histologic grade 1.
+Regional nodes: 0/8.
+PROC: esophagectomy
+pTNM pT3 N0 MX -- stage ii
+Sections show SCC arising in the esophagus.
+No angiolymphatic invasion.
+Pathologist: [redacted]

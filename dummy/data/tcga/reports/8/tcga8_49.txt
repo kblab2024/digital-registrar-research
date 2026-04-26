@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga8_49 organ=prostate
+Final Diagnosis
+Findings benign; not registry-eligible.
+Dictated and signed electronically.

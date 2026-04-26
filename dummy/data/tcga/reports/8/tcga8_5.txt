@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga8_5 organ=prostate
+PATH DX:
+A 1.8 cm mass was identified.
+(grade group_2_3_4)
+HISTOLOGY -- acinar adenoCA
+Surgery: radical prostatectomy (received fresh).
+Regional nodes: 0/4.
+AJCC -- pT3B N0 MX -- stage iia
+Lymphovascular invasion - YES.
+

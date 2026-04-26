@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga6_34 organ=lung
+DIAGNOSIS:
+LNs - 0 of 6 involved by tumor.
+Staging: pT1C N0 MX -- stage ia2
+Lymphovascular invasion - no.
+Microscopic: adenoCA.
+Specimen: s/p lobectomy.
+Lesion ~3.3cm.
+Pathologist: [redacted]

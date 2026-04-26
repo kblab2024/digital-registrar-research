@@ -8,7 +8,7 @@
     "cancer_clock": null,
     "cancer_laterality": "right",
     "histology": "invasive_carcinoma_no_special_type",
-    "tumor_size": 18,
+    "tumor_size": 19,
     "lymphovascular_invasion": false,
     "perineural_invasion": null,
     "distant_metastasis": null,
@@ -57,7 +57,7 @@
     "biomarkers": [
       {
         "biomarker_category": "er",
-        "expression": false,
+        "expression": true,
         "percentage": null,
         "score": null,
         "biomarker_name": "estrogen receptor"

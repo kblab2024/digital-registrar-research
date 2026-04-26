@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga7_32 organ=pancreas
+Final Diagnosis
+A 3.3 cm mass was identified.
+Margins: negative.
+AJCC -- pT2 N1 MX -- stage iib
+Lymph nodes: 2/18 positive.
+Histologic type: ductal adenoCA
+Procedure performed - whipple procedure.
+

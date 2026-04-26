@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga4_40 organ=esophagus
+DIAGNOSIS:
+Lymph nodes: 5/8 positive.
+No angiolymphatic invasion.
+Procedure performed - esophagectomy.
+Margins: negative.
+HISTOLOGY -- SCC
+AJCC -- pT3 N2 MX -- stage iiib
+Pathologist: [redacted]

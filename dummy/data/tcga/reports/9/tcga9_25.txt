@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga9_25 organ=stomach
+FINAL DIAGNOSIS:
+Sections show tubular adenoCA arising in the stomach.
+Grade: 1.
+LVI: not identified.
+pTNM pT3 N1 MX -- stage iia
+Surgery: partial gastrectomy (received fresh).
+LNs - 2 of 25 involved by tumor.
+Dictated and signed electronically.

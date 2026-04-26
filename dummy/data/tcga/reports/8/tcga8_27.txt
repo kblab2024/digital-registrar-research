@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga8_27 organ=prostate
+PATH DX:
+Regional nodes: 0/4.
+Grossly, the tumor measures 18 mm in greatest dimension.
+Grade: group_4_4_4.
+Specimen: s/p radical prostatectomy.
+The lesion is consistent with acinar adenoCA.
+Staging: pT2 N0 MX -- stage iia
+PNI: +.
+

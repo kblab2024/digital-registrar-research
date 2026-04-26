@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga2_16 organ=cervix
+PATH DX:
+Specimen: s/p radical hysterectomy.
+A 2.2 cm mass was identified.
+AJCC -- pT2A1 N1A MX -- stage ib1
+LNs - 2 of 12 involved by tumor.
+Microscopic: SCC, NOS.
+Histologic grade 1.
+Resection margins free of tumor.
+** END **

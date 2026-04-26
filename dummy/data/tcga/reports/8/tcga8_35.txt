@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga8_35 organ=prostate
+DIAGNOSIS:
+LNs - 0 of 4 involved by tumor.
+AJCC -- pT3B N0 MX -- stage iia
+PNI: +.
+(grade group_4_4_4)
+The lesion is consistent with acinar adenoCA.
+Tumor size: 18 mm.
+Procedure performed - radical prostatectomy.
+Pathologist: [redacted]

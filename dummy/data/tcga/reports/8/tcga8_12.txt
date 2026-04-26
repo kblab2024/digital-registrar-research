@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga8_12 organ=prostate
+DIAGNOSIS:
+No angiolymphatic invasion.
+Regional nodes: 0/4.
+On microscopy, acinar adenoCA is identified, infiltrating into surrounding tissue.
+pTNM pT2 N0 MX -- stage iia
+Lesion ~1.8cm.
+PROC: radical prostatectomy
+** END **

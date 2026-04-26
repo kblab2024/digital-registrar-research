@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga3_48 organ=colorectal
+Final Diagnosis
+no carcinoma seen in submitted material
+Pathologist: [redacted]

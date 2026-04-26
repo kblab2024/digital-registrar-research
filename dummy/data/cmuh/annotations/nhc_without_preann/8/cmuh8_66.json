@@ -1,0 +1,52 @@
+{
+  "cancer_excision_report": true,
+  "cancer_category": "prostate",
+  "cancer_category_others_description": null,
+  "cancer_data": {
+    "procedure": "radical_prostatectomy",
+    "surgical_technique": null,
+    "histology": "acinar_adenocarcinoma",
+    "grade": "group_3_4_3",
+    "gleason_4_percentage": 30,
+    "gleason_5_percentage": 0,
+    "cribriform_pattern_presence": false,
+    "intraductal_carcinoma_presence": false,
+    "tumor_size": 18,
+    "tumor_percentage": 15,
+    "prostate_size": 50,
+    "prostate_weight": 45,
+    "extraprostatic_extension": false,
+    "seminal_vesicle_invasion": false,
+    "bladder_invasion": false,
+    "lymphovascular_invasion": false,
+    "perineural_invasion": true,
+    "margin_positivity": false,
+    "margin_length": null,
+    "involved_margin_list": null,
+    "distant_metastasis": null,
+    "treatment_effect": null,
+    "tnm_descriptor": null,
+    "pt_category": "t2",
+    "pn_category": "n0",
+    "pm_category": "mx",
+    "stage_group": "iia",
+    "ajcc_version": null,
+    "regional_lymph_node": [
+      {
+        "lymph_node_side": null,
+        "lymph_node_category": null,
+        "involved": 0,
+        "examined": 4,
+        "station_name": null
+      }
+    ],
+    "extranodal_extension": null,
+    "maximal_ln_size": null
+  },
+  "_meta": {
+    "filename": "cmuh8_66.json",
+    "annotator": "nhc",
+    "mode": "without_preann",
+    "annotated_at": "2026-04-26T11:44:43"
+  }
+}

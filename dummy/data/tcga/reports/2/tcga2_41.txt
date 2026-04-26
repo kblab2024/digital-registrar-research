@@ -1,0 +1,4 @@
+[synthetic-tcga] case=tcga2_41 organ=cervix
+FINAL DIAGNOSIS:
+Findings benign; not registry-eligible.
+Dictated and signed electronically.

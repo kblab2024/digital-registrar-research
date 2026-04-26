@@ -1,0 +1,9 @@
+[synthetic-tcga] case=tcga3_30 organ=colorectal
+DIAGNOSIS:
+Surgery: segmental colectomy (received fresh).
+Sections show adenoCA arising in the colorectal.
+Regional nodes: 2/22.
+LVI: present.
+AJCC -- pT2 N1 MX -- stage iii
+All margins (-)
+Dictated and signed electronically.

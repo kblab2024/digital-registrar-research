@@ -1,0 +1,10 @@
+[synthetic-tcga] case=tcga4_2 organ=esophagus
+Final Diagnosis
+LVI: not identified.
+Specimen: s/p esophagectomy.
+Histologic grade 2.
+Margins: negative.
+AJCC -- pT4A N0 MX -- stage ii
+Microscopic: SCC.
+Lymph nodes: 0/8 positive.
+
