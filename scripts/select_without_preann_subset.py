@@ -92,7 +92,7 @@ def gather_buckets(preann_root: Path) -> dict[str, dict[str, list[str]]]:
         n = path.parent.name
         case_id = path.stem
         try:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:
             print(f"warning: failed to parse {path}: {e}", file=sys.stderr)
             continue
