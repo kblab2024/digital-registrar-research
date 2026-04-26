@@ -1,24 +1,23 @@
 """Folder discovery and sample indexing for the canonical dataset layout.
 
-Canonical layout (as produced by ``scripts/gen_dummy_skeleton.py``)::
+Canonical layout (as produced by ``scripts/gen_dummy_skeleton.py`` and
+``scripts/select_without_preann_subset.py``)::
 
     <base_dir>/
-    ├── with_preann/
-    │   └── data/<dataset>/           # e.g. cmuh, tcga
-    │       ├── reports/<n>/<case_id>.txt
-    │       ├── preannotation/<model>/<n>/<case_id>.json
-    │       └── annotations/<annotator>/<n>/<case_id>.json
-    └── without_preann/
-        └── data/<dataset>/
-            ├── reports/<n>/<case_id>.txt
-            └── annotations/<annotator>/<n>/<case_id>.json
+    └── data/<dataset>/              # e.g. cmuh, tcga
+        ├── reports/<n>/<case_id>.txt                   # used by with_preann mode
+        ├── reports_without_preann/<n>/<case_id>.txt    # curated subset for without_preann mode
+        ├── preannotation/<model>/<n>/<case_id>.json
+        └── annotations/<annotator>_<mode>/<n>/<case_id>.json
 
-The two modes are completely independent datasets — different reports,
-different splits, different cases are allowed. ``preannotation/`` exists
-only under ``with_preann/``. Pre-annotation model is fixed to
-``gpt_oss_20b`` for now (the only model present in ``dummy/``). JSON I/O
-helpers are re-exported from :mod:`.io` so the save payload format stays
-identical across both UIs.
+``with_preann`` mode reads from ``reports/`` (the full dataset);
+``without_preann`` mode reads from ``reports_without_preann/`` (a
+curated subset, see ``scripts/select_without_preann_subset.py``). Both
+modes share ``preannotation/`` (loaded only in ``with_preann``) and
+write annotations to ``annotations/<annotator>_<mode>/`` so the two
+modes' outputs stay separate per annotator. Pre-annotation model is
+fixed to ``gpt_oss_20b`` for now. JSON I/O helpers are re-exported from
+:mod:`.io` so the save payload format stays identical across both UIs.
 """
 
 from __future__ import annotations
@@ -41,6 +40,10 @@ from .io import (  # noqa: F401 — re-exported for app_canonical
 PREANNOTATION_MODEL = "gpt_oss_20b"
 
 MODES = ("with_preann", "without_preann")
+
+
+def _reports_subdir(mode: str) -> str:
+    return "reports_without_preann" if mode == "without_preann" else "reports"
 
 
 @dataclass
@@ -66,20 +69,23 @@ class WorkspaceSet:
 
 
 def list_datasets(base_dir: str, mode: str) -> list[str]:
-    """Return sorted names of datasets under ``{base_dir}/{mode}/data/``.
+    """Return sorted names of datasets under ``{base_dir}/data/``.
 
-    A directory counts as a dataset iff it has a ``reports/`` subdir (so
-    we don't trip on stray metadata folders).
+    A directory counts as a dataset iff it has the per-mode reports
+    subdir (``reports/`` for ``with_preann``, ``reports_without_preann/``
+    for ``without_preann``), so we don't trip on stray metadata folders
+    and we hide datasets that haven't been curated for the active mode.
     """
     if not base_dir or not mode:
         return []
-    data_root = os.path.join(base_dir, mode, "data")
+    data_root = os.path.join(base_dir, "data")
     if not os.path.isdir(data_root):
         return []
+    sub = _reports_subdir(mode)
     out: list[str] = []
     for entry in sorted(os.listdir(data_root)):
         full = os.path.join(data_root, entry)
-        if os.path.isdir(full) and os.path.isdir(os.path.join(full, "reports")):
+        if os.path.isdir(full) and os.path.isdir(os.path.join(full, sub)):
             out.append(entry)
     return out
 
@@ -87,8 +93,8 @@ def list_datasets(base_dir: str, mode: str) -> list[str]:
 def load_workspace(base_dir: str, dataset: str, mode: str) -> WorkspaceSet | None:
     if not base_dir or not dataset or not mode:
         return None
-    dataset_root = os.path.join(base_dir, mode, "data", dataset)
-    reports_dir = os.path.join(dataset_root, "reports")
+    dataset_root = os.path.join(base_dir, "data", dataset)
+    reports_dir = os.path.join(dataset_root, _reports_subdir(mode))
     if not os.path.isdir(reports_dir):
         return None
     return WorkspaceSet(
@@ -110,6 +116,7 @@ def list_samples(ws: WorkspaceSet, annotator_suffix: str) -> list[SampleRef]:
     """
     samples: list[SampleRef] = []
     pattern = os.path.join(ws.reports_dir, "*", "*.txt")
+    annotator_dir = f"{annotator_suffix}_{ws.mode}"
     for path in glob.glob(pattern):
         filename = os.path.basename(path)
         sample_id, _ = os.path.splitext(filename)
@@ -123,7 +130,7 @@ def list_samples(ws: WorkspaceSet, annotator_suffix: str) -> list[SampleRef]:
             report_path=path,
             preannotation_path=os.path.join(ws.preannotation_dir, n, f"{sample_id}.json"),
             annotation_path=os.path.join(
-                ws.annotations_dir, annotator_suffix, n, f"{sample_id}.json"
+                ws.annotations_dir, annotator_dir, n, f"{sample_id}.json"
             ),
             annotator_suffix=annotator_suffix,
         ))

@@ -105,7 +105,8 @@ def _reload_from_base(base_dir: str) -> tuple[bool, str]:
     mode = st.session_state.mode
     datasets = list_datasets(base_dir, mode)
     if not datasets:
-        return False, f"此資料夾下找不到 {mode}/data/<dataset>/reports/ 結構。"
+        sub = "reports_without_preann" if mode == "without_preann" else "reports"
+        return False, f"此資料夾下找不到 data/<dataset>/{sub}/ 結構。"
     st.session_state.base_dir = base_dir
     st.session_state.available_datasets = datasets
     dataset = st.session_state.dataset if st.session_state.dataset in datasets else datasets[0]
