@@ -74,6 +74,23 @@ registrar-schemas                                                 # regenerates 
 - [docs/data.md](docs/data.md) — datasets, layout, and naming conventions
 - [docs/experiment_protocol.md](docs/experiment_protocol.md) — the 2026-04 experiment cross-product, evaluation questions, and invariants
 - [docs/branching_strategy.md](docs/branching_strategy.md) — the 12-branch working model (testing / refactor / experiment state)
+- [doc/eval/index.md](doc/eval/index.md) — evaluation pipeline (paper-grade metric explanations + citations)
+
+## Evaluation pipeline
+
+The `scripts/eval/` tree exposes a unified subcommand CLI for all evaluation work:
+
+```bash
+python -m scripts.eval.cli non_nested    --root dummy --dataset cmuh --model gpt_oss_20b --annotator gold --out <out>
+python -m scripts.eval.cli nested        --root dummy --dataset cmuh --model gpt_oss_20b --annotator gold --field regional_lymph_node --out <out>
+python -m scripts.eval.cli iaa           --root dummy --dataset cmuh --annotators gold nhc_with_preann nhc_without_preann kpc_with_preann kpc_without_preann --out <out>
+python -m scripts.eval.cli completeness  --root dummy --dataset cmuh --methods llm:gpt_oss_20b clinicalbert:v2_finetuned rule_based: --annotator gold --out <out>
+python -m scripts.eval.cli diagnostics   --non-nested-out <...> --iaa-out <...> --out <out>
+python -m scripts.eval.cli cross_dataset --left <cmuh_out> --right <tcga_out> --out <out>
+python -m scripts.eval.cli headline      --non-nested-out <...> --iaa-out <...> --out <out>
+```
+
+See [doc/eval/recipes.md](doc/eval/recipes.md) for the full recipe book and [doc/eval/methods_citations.md](doc/eval/methods_citations.md) for paper-ready statistical-method citations. Legacy scripts are archived under `scripts/legacy/` for one transition release.
 
 ## Citation
 

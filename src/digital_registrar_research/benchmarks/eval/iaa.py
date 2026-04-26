@@ -856,7 +856,12 @@ def whole_report_stats(
                 else:
                     units.append([normalize(va), normalize(vb)])
         if level == "ordinal":
-            distinct = sorted({v for u in units for v in u if v is not None})
+            # Some ordinal fields mix int and str values across units;
+            # sorting with a string key keeps the comparison total.
+            distinct = sorted(
+                {v for u in units for v in u if v is not None},
+                key=lambda x: ("" if x is None else str(x)),
+            )
             alpha = krippendorff_alpha(units, level="ordinal",
                                        value_order=distinct)
         else:

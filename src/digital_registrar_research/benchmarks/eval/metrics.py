@@ -76,10 +76,17 @@ NESTED_KEY = {
 }
 
 
-def _item_eq(a: dict, b: dict) -> int:
-    """Count how many inner fields match (for ranking bipartite candidates)."""
+def _item_eq(a, b) -> int:
+    """Count how many inner fields match (for ranking bipartite candidates).
+
+    Defensive against non-dict items: if either side isn't a dict, fall
+    back to a single-value comparison (returns 1 if equal under
+    ``normalize``, else 0).
+    """
     if not (a and b):
         return 0
+    if not (isinstance(a, dict) and isinstance(b, dict)):
+        return 1 if normalize(a) == normalize(b) else 0
     return sum(1 for k in a if k in b and normalize(a[k]) == normalize(b[k]))
 
 
