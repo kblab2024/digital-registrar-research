@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga2_36 organ=cervix
--- Diagnosis --
-On microscopy, SCC, NOS is identified, infiltrating into surrounding tissue.
-pTNM pT1B1 N1A MX -- stage ib1
-Procedure performed - radical hysterectomy.
-Tumor size: 22 mm.
-All margins (-)
-Regional nodes: 2/12.
-Dictated and signed electronically.

@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga3_32 organ=colorectal
-PATH DX:
-Lymph nodes: 0/22 positive.
-LVI: not identified.
-Procedure performed - segmental colectomy.
-Sections show adenoCA arising in the colorectal.
-pTNM pT4A N0 MX -- stage iia
-Grade: 2.
-** END **

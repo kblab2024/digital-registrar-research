@@ -1,4 +1,0 @@
-SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh9_85, organ=stomach
-FINAL DIAGNOSIS:
-  No invasive carcinoma identified.
-  Benign findings; specimen not eligible for cancer registry.

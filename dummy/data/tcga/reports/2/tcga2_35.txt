@@ -1,8 +1,0 @@
-[synthetic-tcga] case=tcga2_35 organ=cervix
-DIAGNOSIS:
-Lesion ~2.2cm.
-On microscopy, SCC, NOS is identified, infiltrating into surrounding tissue.
-Specimen: s/p radical hysterectomy.
-LNs - 0 of 12 involved by tumor.
-pTNM pT2B N0 MX -- stage ib1
-** END **

@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga4_25 organ=esophagus
-FINAL DIAGNOSIS:
-Sections show SCC arising in the esophagus.
-Margins: negative.
-AJCC -- pT3 N0 MX -- stage ii
-Regional nodes: 0/8.
-Grade: 1.
-Surgery: esophagectomy (received fresh).
-Pathologist: [redacted]

@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga5_1 organ=liver
-DIAGNOSIS:
-Regional nodes: 0/1.
-Grossly, the tumor measures 25 mm in greatest dimension.
-The lesion is consistent with HCC.
-AJCC -- pT2 N0 MX -- stage ib
-Specimen: s/p partial hepatectomy.
-Resection margins free of tumor.
-

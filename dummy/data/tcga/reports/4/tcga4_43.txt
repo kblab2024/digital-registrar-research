@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga4_43 organ=esophagus
-Final Diagnosis
-no carcinoma seen in submitted material
-** END **

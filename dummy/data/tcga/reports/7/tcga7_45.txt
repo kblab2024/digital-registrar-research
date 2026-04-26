@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga7_45 organ=pancreas
-PATH DX:
-Negative for invasive carcinoma. Reactive changes noted.
-Pathologist: [redacted]

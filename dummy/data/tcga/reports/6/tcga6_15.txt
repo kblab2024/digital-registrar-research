@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga6_15 organ=lung
-Final Diagnosis
-Staging: pT2A N0 MX -- stage ia2
-Resection margins free of tumor.
-On microscopy, adenoCA is identified, infiltrating into surrounding tissue.
-Regional nodes: 0/6.
-Grossly, the tumor measures 18 mm in greatest dimension.
-Procedure performed - lobectomy.
-End of report.

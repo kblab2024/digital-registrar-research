@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga2_5 organ=cervix
-Final Diagnosis
-AJCC -- pT2B N0 MX -- stage ib1
-Grossly, the tumor measures 22 mm in greatest dimension.
-(grade 2)
-PROC: radical hysterectomy
-HISTOLOGY -- SCC, NOS
-Regional nodes: 0/12.
-** END **

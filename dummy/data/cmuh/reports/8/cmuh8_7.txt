@@ -1,9 +1,0 @@
-SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh8_7, organ=prostate
-FINAL DIAGNOSIS:
-  Procedure: radical_prostatectomy
-  Histology: acinar_adenocarcinoma
-  Tumor size: 18 mm
-  Grade group_4_4_4
-  LVI=False
-  pTNM: t3a n0 mx, stage iia
-  Lymph nodes: 0/4 involved

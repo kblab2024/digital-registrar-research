@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga8_47 organ=prostate
-PATH DX:
-Findings benign; not registry-eligible.
-** END **

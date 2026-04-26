@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga8_25 organ=prostate
--- Diagnosis --
-(grade group_2_3_4)
-AJCC -- pT3A N0 MX -- stage iia
-Specimen: s/p radical prostatectomy.
-Lesion ~1.8cm.
-Lymph nodes: 0/4 positive.
-Sections show acinar adenoCA arising in the prostate.
-Pathologist: [redacted]

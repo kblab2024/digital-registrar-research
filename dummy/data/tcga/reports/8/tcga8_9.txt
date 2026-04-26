@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga8_9 organ=prostate
-Final Diagnosis
-Lymph nodes: 0/4 positive.
-PNI: +.
-Staging: pT2 N0 MX -- stage iia
-Procedure performed - radical prostatectomy.
-Grossly, the tumor measures 18 mm in greatest dimension.
-Microscopic: acinar adenoCA.
-End of report.

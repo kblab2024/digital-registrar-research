@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga5_43 organ=liver
-Final Diagnosis
-Findings benign; not registry-eligible.
-

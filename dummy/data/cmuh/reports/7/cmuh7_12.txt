@@ -1,8 +1,0 @@
-SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh7_12, organ=pancreas
-FINAL DIAGNOSIS:
-  Procedure: whipple_procedure
-  Histology: ductal_adenocarcinoma_nos
-  Tumor size: 25 mm
-  LVI=True
-  pTNM: t2 n1 mx, stage iib
-  Lymph nodes: 2/18 involved

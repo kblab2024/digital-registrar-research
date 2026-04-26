@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga10_30 organ=thyroid
--- Diagnosis --
-Surgery: total thyroidectomy (received fresh).
-Sections show PTC arising in the thyroid.
-Tumor size: 8 mm.
-Regional nodes: 0/3.
-AJCC -- pT2 N0 MX -- stage i
-All margins (-)
-Pathologist: [redacted]

@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga6_38 organ=lung
-FINAL DIAGNOSIS:
-Histologic type: adenoCA
-Resection margins free of tumor.
-A 2.4 cm mass was identified.
-Lymph nodes: 0/6 positive.
-Staging: pT1C N0 MX -- stage ia2
-Procedure performed - lobectomy.
-End of report.

@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga10_48 organ=thyroid
-FINAL DIAGNOSIS:
-no carcinoma seen in submitted material
-** END **

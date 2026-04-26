@@ -1,8 +1,0 @@
-SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh3_75, organ=colorectal
-FINAL DIAGNOSIS:
-  Procedure: segmental_colectomy
-  Histology: adenocarcinoma
-  Grade 3
-  LVI=True
-  pTNM: t2 n1 mx, stage iii
-  Lymph nodes: 2/22 involved

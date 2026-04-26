@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga6_41 organ=lung
-FINAL DIAGNOSIS:
-Specimen does not contain viable tumor.
-Dictated and signed electronically.

@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga7_27 organ=pancreas
-Final Diagnosis
-Lesion ~3.7cm.
-pTNM pT3 N1 MX -- stage iib
-On microscopy, ductal adenoCA is identified, infiltrating into surrounding tissue.
-Regional nodes: 2/18.
-Specimen: s/p whipple procedure.
-Margins: negative.
-** END **

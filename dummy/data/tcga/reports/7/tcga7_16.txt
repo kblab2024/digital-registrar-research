@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga7_16 organ=pancreas
--- Diagnosis --
-Specimen: s/p whipple procedure.
-AJCC -- pT2 N1 MX -- stage iib
-Margins: negative.
-Lymph nodes: 2/18 positive.
-Lesion ~4.1cm.
-Histologic type: ductal adenoCA
-Pathologist: [redacted]

@@ -1,8 +1,0 @@
-SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh9_11, organ=stomach
-FINAL DIAGNOSIS:
-  Procedure: partial_gastrectomy
-  Histology: tubular_adenocarcinoma
-  Grade 2
-  LVI=False
-  pTNM: t4a n0 mx, stage ib
-  Lymph nodes: 0/25 involved

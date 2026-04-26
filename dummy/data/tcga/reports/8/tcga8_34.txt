@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga8_34 organ=prostate
-DIAGNOSIS:
-Surgery: radical prostatectomy (received fresh).
-pTNM pT3A N0 MX -- stage iia
-Lesion ~1.8cm.
-LVI: not identified.
-Regional nodes: 0/4.
-The lesion is consistent with acinar adenoCA.
-

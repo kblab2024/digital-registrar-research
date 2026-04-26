@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga2_14 organ=cervix
-Final Diagnosis
-Tumor size: 22 mm.
-Lymph nodes: 0/12 positive.
-Resection margins free of tumor.
-AJCC -- pT2B N0 MX -- stage ib1
-The lesion is consistent with SCC, NOS.
-Procedure performed - radical hysterectomy.
-Dictated and signed electronically.

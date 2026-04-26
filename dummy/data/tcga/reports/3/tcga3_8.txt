@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga3_8 organ=colorectal
-FINAL DIAGNOSIS:
-Histologic type: adenoCA
-LNs - 0 of 22 involved by tumor.
-AJCC -- pT4A N0 MX -- stage iia
-LVI: not identified.
-Margins: negative.
-Specimen: s/p segmental colectomy.
-Dictated and signed electronically.

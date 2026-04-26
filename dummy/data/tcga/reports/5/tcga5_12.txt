@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga5_12 organ=liver
--- Diagnosis --
-PROC: partial hepatectomy
-Tumor size: 20 mm.
-Margins: negative.
-pTNM pT1B N0 MX -- stage ib
-On microscopy, HCC is identified, infiltrating into surrounding tissue.
-Lymph nodes: 0/1 positive.
-

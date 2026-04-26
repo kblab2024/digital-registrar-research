@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga9_49 organ=stomach
-DIAGNOSIS:
-Negative for invasive carcinoma. Reactive changes noted.
-Dictated and signed electronically.

@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga4_30 organ=esophagus
-PATH DX:
-Sections show SCC arising in the esophagus.
-+ angiolymphatic invasion.
-LNs - 0 of 8 involved by tumor.
-Specimen: s/p esophagectomy.
-pTNM pT2 N0 MX -- stage ii
-Resection margins free of tumor.
-End of report.

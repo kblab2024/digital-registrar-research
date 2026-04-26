@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga6_27 organ=lung
-DIAGNOSIS:
-pTNM pT2A N0 MX -- stage ia2
-PROC: lobectomy
-Histologic type: adenoCA
-Tumor size: 33 mm.
-Margins: negative.
-Regional nodes: 0/6.
-** END **

@@ -1,4 +1,0 @@
-SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh6_95, organ=lung
-FINAL DIAGNOSIS:
-  No invasive carcinoma identified.
-  Benign findings; specimen not eligible for cancer registry.

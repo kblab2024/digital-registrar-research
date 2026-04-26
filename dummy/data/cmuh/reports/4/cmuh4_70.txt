@@ -1,8 +1,0 @@
-SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh4_70, organ=esophagus
-FINAL DIAGNOSIS:
-  Procedure: esophagectomy
-  Histology: squamous_cell_carcinoma
-  Grade 1
-  LVI=False
-  pTNM: t3 n0 mx, stage ii
-  Lymph nodes: 0/8 involved

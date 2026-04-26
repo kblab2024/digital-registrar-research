@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga6_29 organ=lung
--- Diagnosis --
-AJCC -- pT1B N0 MX -- stage ia2
-HISTOLOGY -- adenoCA
-Margins: negative.
-Grossly, the tumor measures 18 mm in greatest dimension.
-Surgery: lobectomy (received fresh).
-Regional nodes: 0/6.
-End of report.

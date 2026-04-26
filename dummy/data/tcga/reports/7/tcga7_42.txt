@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga7_42 organ=pancreas
-FINAL DIAGNOSIS:
-Findings benign; not registry-eligible.
-Dictated and signed electronically.

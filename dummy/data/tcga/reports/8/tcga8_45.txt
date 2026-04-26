@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga8_45 organ=prostate
-PATH DX:
-Negative for invasive carcinoma. Reactive changes noted.
-

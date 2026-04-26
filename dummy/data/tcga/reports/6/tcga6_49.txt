@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga6_49 organ=lung
-DIAGNOSIS:
-no carcinoma seen in submitted material
-End of report.

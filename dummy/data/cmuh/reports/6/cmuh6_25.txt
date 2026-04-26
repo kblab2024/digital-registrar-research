@@ -1,9 +1,0 @@
-SYNTHETIC PATHOLOGY REPORT (dummy) — dataset=cmuh, id=cmuh6_25, organ=lung
-FINAL DIAGNOSIS:
-  Procedure: lobectomy
-  Histology: adenocarcinoma
-  Tumor size: 27 mm
-  LVI=True
-  pTNM: t1b n0 mx, stage ia2
-  Lymph nodes: 0/6 involved
-  Biomarkers: ALK=False, PDL1=True

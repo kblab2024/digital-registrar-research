@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga6_48 organ=lung
--- Diagnosis --
-Negative for invasive carcinoma. Reactive changes noted.
-End of report.

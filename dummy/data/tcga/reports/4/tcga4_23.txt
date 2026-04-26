@@ -1,8 +1,0 @@
-[synthetic-tcga] case=tcga4_23 organ=esophagus
-DIAGNOSIS:
-AJCC -- pT4A N0 MX -- stage ii
-Lymph nodes: 0/8 positive.
-Resection margins free of tumor.
-On microscopy, SCC is identified, infiltrating into surrounding tissue.
-Procedure performed - esophagectomy.
-

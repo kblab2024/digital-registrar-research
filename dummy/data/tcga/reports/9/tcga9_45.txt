@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga9_45 organ=stomach
-PATH DX:
-Negative for invasive carcinoma. Reactive changes noted.
-End of report.

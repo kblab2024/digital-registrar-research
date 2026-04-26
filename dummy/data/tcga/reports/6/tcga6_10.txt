@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga6_10 organ=lung
-FINAL DIAGNOSIS:
-Procedure performed - lobectomy.
-Resection margins free of tumor.
-pTNM pT1C N0 MX -- stage ia2
-The lesion is consistent with adenoCA.
-Regional nodes: 0/6.
-Grossly, the tumor measures 24 mm in greatest dimension.
-Pathologist: [redacted]

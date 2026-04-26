@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga5_41 organ=liver
--- Diagnosis --
-no carcinoma seen in submitted material
-Dictated and signed electronically.

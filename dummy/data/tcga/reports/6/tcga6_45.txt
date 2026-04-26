@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga6_45 organ=lung
-DIAGNOSIS:
-Negative for invasive carcinoma. Reactive changes noted.
-Dictated and signed electronically.

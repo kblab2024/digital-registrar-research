@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga5_34 organ=liver
-Final Diagnosis
-LNs - 0 of 1 involved by tumor.
-Surgery: partial hepatectomy (received fresh).
-Tumor size: 40 mm.
-Margins: negative.
-AJCC -- pT2 N0 MX -- stage ib
-Histologic type: HCC
-** END **

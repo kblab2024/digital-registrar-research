@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga4_20 organ=esophagus
--- Diagnosis --
-The lesion is consistent with SCC.
-Procedure performed - esophagectomy.
-Grade: 2.
-Staging: pT4A N2 MX -- stage iiib
-LNs - 5 of 8 involved by tumor.
-Margins: negative.
-** END **

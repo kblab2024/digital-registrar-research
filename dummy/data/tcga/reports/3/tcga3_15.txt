@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga3_15 organ=colorectal
-FINAL DIAGNOSIS:
-Margins: negative.
-(grade 3)
-The lesion is consistent with adenoCA.
-pTNM pT2 N1 MX -- stage iii
-Specimen: s/p segmental colectomy.
-Regional nodes: 2/22.
-Pathologist: [redacted]

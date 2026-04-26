@@ -1,4 +1,0 @@
-[synthetic-tcga] case=tcga3_50 organ=colorectal
--- Diagnosis --
-No malignancy identified. Benign tissue only.
-Dictated and signed electronically.

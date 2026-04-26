@@ -1,9 +1,0 @@
-[synthetic-tcga] case=tcga8_26 organ=prostate
-FINAL DIAGNOSIS:
-PNI: +.
-AJCC -- pT3B N0 MX -- stage iia
-Histologic type: acinar adenoCA
-Regional nodes: 0/4.
-Procedure performed - radical prostatectomy.
-Tumor size: 18 mm.
-
