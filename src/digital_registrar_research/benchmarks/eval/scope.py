@@ -25,6 +25,7 @@ from functools import cache
 from .scope_organs import (
     ORGAN_BOOL,
     ORGAN_CATEGORICAL,
+    ORGAN_LIST_OF_LITERALS,
     ORGAN_NESTED_LIST,
     ORGAN_SPAN,
 )
@@ -119,6 +120,17 @@ NESTED_LIST_FIELDS: set[str] = set()
 for _n in ORGAN_NESTED_LIST.values():
     NESTED_LIST_FIELDS |= _n
 
+# --- List-of-literals fields (cross-organ union) -----------------------------
+#
+# Distinct from NESTED_LIST_FIELDS — these are arrays of enum strings,
+# not arrays of dicts. Scored as unordered sets in the non_nested
+# subcommand (exact-match for headline accuracy, set-F1 for partial
+# credit).
+
+LIST_OF_LITERALS_FIELDS: set[str] = set()
+for _organ_map in ORGAN_LIST_OF_LITERALS.values():
+    LIST_OF_LITERALS_FIELDS |= set(_organ_map.keys())
+
 
 # --- Fair-scope whitelist (head-to-head comparison table) --------------------
 #
@@ -177,8 +189,42 @@ def get_span_fields(organ: str) -> set[str]:
 
 
 def get_nested_list_fields(organ: str) -> set[str]:
-    """All nested-list fields for `organ` (supplementary coverage table)."""
+    """All nested-list (list-of-dicts) fields for `organ`."""
     return set(ORGAN_NESTED_LIST.get(organ, set()))
+
+
+def get_list_of_literals_fields(organ: str) -> dict[str, list[str]]:
+    """All list-of-literals fields for `organ` with their allowed value lists.
+
+    Distinct from nested-list (list-of-dicts) fields.
+    """
+    return dict(ORGAN_LIST_OF_LITERALS.get(organ, {}))
+
+
+def get_organ_scoreable_fields(organ: str) -> dict[str, str]:
+    """Return all per-organ scalar / list-of-literals fields with their kind.
+
+    Output keys are field names; values are field-kind strings
+    consistent with :func:`iaa.classify_field`:
+        ``"binary"``, ``"nominal"``, ``"ordinal"``, ``"continuous"``,
+        ``"list_of_literals"``.
+
+    Excludes nested-list (list-of-dicts) fields — those go through the
+    nested subcommand. The ``non_nested`` subcommand scores everything
+    in this dict.
+    """
+    out: dict[str, str] = {}
+    # Categoricals — distinguish ordinal vs nominal at the iaa layer;
+    # default to "nominal" here, callers refine via classify_field.
+    for f in get_categorical_fields(organ).keys():
+        out[f] = "nominal"
+    for f in get_bool_fields(organ):
+        out[f] = "binary"
+    for f in get_span_fields(organ):
+        out[f] = "continuous"
+    for f in get_list_of_literals_fields(organ).keys():
+        out[f] = "list_of_literals"
+    return out
 
 
 def get_field_value(annotation: dict, field: str):
@@ -198,8 +244,10 @@ __all__ = [
     "ORGAN_BOOL",
     "ORGAN_SPAN",
     "ORGAN_NESTED_LIST",
+    "ORGAN_LIST_OF_LITERALS",
     "SPAN_FIELDS",
     "NESTED_LIST_FIELDS",
+    "LIST_OF_LITERALS_FIELDS",
     "FAIR_SCOPE",
     "BREAST_BIOMARKERS",
     "get_allowed_values",
@@ -207,5 +255,7 @@ __all__ = [
     "get_bool_fields",
     "get_span_fields",
     "get_nested_list_fields",
+    "get_list_of_literals_fields",
+    "get_organ_scoreable_fields",
     "get_field_value",
 ]

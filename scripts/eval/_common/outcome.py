@@ -25,13 +25,73 @@ from typing import Any, Literal
 from digital_registrar_research.benchmarks.eval.metrics import (
     field_correct,
     is_attempted,
+    normalize,
 )
-from digital_registrar_research.benchmarks.eval.scope import get_field_value
+from digital_registrar_research.benchmarks.eval.scope import (
+    LIST_OF_LITERALS_FIELDS, get_field_value,
+    get_list_of_literals_fields,
+)
 
 from .loaders import ErrorMode, LoadOutcome
 
 
 OutcomeKind = Literal["correct", "wrong", "field_missing", "parse_error", "ineligible"]
+
+
+def _is_list_of_literals_field(field_name: str, organ: str | None = None) -> bool:
+    """Return whether ``field_name`` is list-of-literals for ``organ``.
+
+    The same field name can be a scalar in one organ and a list-of-
+    literals in another (e.g. ``tumor_extent`` is a list-of-literals
+    only for liver — for esophagus/stomach it's a regular categorical).
+    Pass ``organ`` to scope the lookup; if ``None``, falls back to the
+    cross-organ union (used at field-discovery time).
+    """
+    if organ is None:
+        return field_name in LIST_OF_LITERALS_FIELDS
+    return field_name in get_list_of_literals_fields(organ)
+
+
+def _normalize_set(v) -> frozenset:
+    """Coerce a list-of-literals value to a normalised frozenset.
+
+    ``None`` and the empty list both map to ``frozenset()`` so they
+    compare equal — important because the schema's "no involvement"
+    canonical form is ``[]`` but some annotators may write ``None``.
+    """
+    if v is None:
+        return frozenset()
+    if isinstance(v, list):
+        return frozenset(normalize(x) for x in v if x is not None)
+    # Fallback: treat scalar as a single-element set so unequal lengths
+    # show up as wrong rather than crashing.
+    return frozenset({normalize(v)})
+
+
+def list_of_literals_match(gold_value, pred_value) -> bool:
+    """Exact unordered-set match for list-of-literals fields."""
+    return _normalize_set(gold_value) == _normalize_set(pred_value)
+
+
+def list_of_literals_set_metrics(gold_value, pred_value) -> dict:
+    """Item-level TP / FP / FN + F1 for list-of-literals fields.
+
+    Useful for partial-credit reporting (analogous to nested-list F1
+    but on plain string items rather than dicts).
+    """
+    g = _normalize_set(gold_value)
+    p = _normalize_set(pred_value)
+    tp = len(g & p)
+    fp = len(p - g)
+    fn = len(g - p)
+    if tp + fp == 0 or tp + fn == 0:
+        f1 = 0.0
+    else:
+        prec = tp / (tp + fp)
+        rec = tp / (tp + fn)
+        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+    return {"tp": tp, "fp": fp, "fn": fn, "f1": f1,
+            "exact_match": g == p}
 
 
 @dataclass(frozen=True)
@@ -142,14 +202,35 @@ def classify_outcome(
     gold: dict[str, Any],
     case_load: CaseLoad,
     field_name: str,
+    *,
+    organ: str | None = None,
 ) -> Outcome:
     """Classify one ``(case, field)`` outcome.
 
     ``case_load`` summarises how the prediction file loaded — if it
     failed at the case level, every field becomes ``parse_error``.
+
+    Dispatches by field type:
+        - List-of-literals fields (per ``ORGAN_LIST_OF_LITERALS``) score
+          by unordered set equality. Pass ``organ`` for organ-aware
+          dispatch — the same field name can be scalar in one organ and
+          list-of-literals in another (e.g. ``tumor_extent``).
+        - Everything else scores via :func:`metrics.field_correct`.
     """
+    if organ is None:
+        # Best effort — fall back to gold's cancer_category.
+        from digital_registrar_research.benchmarks.eval.metrics import normalize as _norm
+        organ = _norm(gold.get("cancer_category"))
     g_value = get_field_value(gold, field_name)
-    gold_present = g_value is not None
+    is_list_literals = _is_list_of_literals_field(field_name, organ=organ)
+    g_value_is_list = isinstance(g_value, list)
+    if is_list_literals:
+        # An empty list is *not* the same as null for set-equality
+        # scoring — empty list means "no items present" (a definite
+        # answer); null means "not assessed".
+        gold_present = g_value_is_list  # only count actual lists
+    else:
+        gold_present = g_value is not None
 
     if not case_load.ok:
         return Outcome(
@@ -182,6 +263,44 @@ def classify_outcome(
         )
 
     p_value = get_field_value(pred, field_name)
+
+    if is_list_literals:
+        # When gold is null on a list-of-literals field, the row is
+        # ineligible for accuracy but valid for refusal calibration —
+        # treat it like an attempted-but-not-scored row, and mark
+        # gold_present=False so downstream filters drop it from the
+        # accuracy denominator.
+        if not g_value_is_list:
+            # Gold has no list to score against; mark as wrong if
+            # pred is non-empty list (model over-asserted), else
+            # treat as a correct refusal proxy.
+            p_is_list = isinstance(p_value, list) and len(p_value) > 0
+            return Outcome(
+                kind="wrong" if p_is_list else "correct",
+                gold_present=False,
+                parse_error=False,
+                field_missing=False,
+                attempted=True,
+                correct=not p_is_list,
+                wrong=p_is_list,
+                error_mode=None,
+                pred_value=p_value,
+                gold_value=g_value,
+            )
+        is_correct = list_of_literals_match(g_value, p_value)
+        return Outcome(
+            kind="correct" if is_correct else "wrong",
+            gold_present=True,
+            parse_error=False,
+            field_missing=False,
+            attempted=True,
+            correct=is_correct,
+            wrong=not is_correct,
+            error_mode=None,
+            pred_value=p_value,
+            gold_value=g_value,
+        )
+
     correct_flag = field_correct(gold, pred, field_name)
     # ``field_correct`` returns None when not attempted; we already
     # handled that branch.
@@ -218,4 +337,6 @@ __all__ = [
     "CaseLoad",
     "is_field_eligible",
     "classify_outcome",
+    "list_of_literals_match",
+    "list_of_literals_set_metrics",
 ]

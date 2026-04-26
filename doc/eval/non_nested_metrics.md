@@ -1,6 +1,34 @@
 # Non-nested (scalar) field metrics
 
-For single-value fields (categorical, boolean, ordinal, continuous numeric). Reported per-field, per-organ, and per-subgroup (single vs multi-primary). For nested-list fields see [nested_metrics.md](nested_metrics.md).
+For single-value fields (categorical, boolean, ordinal, continuous numeric) **plus list-of-literals fields** (set-valued enums like `tumor_extent`, `vascular_invasion`, `involved_margin_list`). Reported per-field, per-organ, and per-subgroup (single vs multi-primary). For nested-list (list-of-dicts) fields see [nested_metrics.md](nested_metrics.md).
+
+## Field coverage
+
+The atomic table iterates **every per-organ scoreable field** declared in `scope_organs` — categorical + boolean + continuous + list-of-literals. Not just the 12 fields in `FAIR_SCOPE`. Roughly 18–32 fields per organ; ~69 distinct field names cross-organ. See [glossary.md](glossary.md) for the per-organ counts.
+
+The two top-level fields (`cancer_category`, `cancer_excision_report`) and the three breast biomarker synthetic fields (`biomarker_<er|pr|her2>`) are added explicitly on top of the per-organ list.
+
+## List-of-literals scoring
+
+For set-valued enum fields (e.g. `tumor_extent: ["hepatic_vein", "small_vessel"]`):
+
+- **Headline scoring**: unordered set equality. The model's set must exactly match gold's set to count as correct.
+- **Partial-credit scoring** (separate output): item-level TP / FP / FN with set-F1, analogous to nested-list scoring but on plain string items.
+- **Empty list vs null**: an empty list (`[]`) is a definite "no items present" answer, distinct from `null` (not assessed). Both score paths handle this distinction.
+
+**Implementation:** `scripts/eval/_common/outcome.py:list_of_literals_match` (set equality) and `list_of_literals_set_metrics` (TP/FP/FN/F1).
+**Reference:** Set-F1 follows standard IR practice. See van Rijsbergen (1979).
+
+The `list_of_literals` field type is **organ-aware** — the same field name can be a list-of-literals in one organ and a regular categorical in another. `tumor_extent` is `list_of_literals` for liver but `nominal` for esophagus and stomach. The classifier dispatches by `(field, organ)`. Registry: `scope_organs.ORGAN_LIST_OF_LITERALS`.
+
+## Overall accuracy CSVs
+
+Two complementary "overall" views beyond per-field detail:
+
+- **`per_organ_overall.csv`** — one row per organ + a cross-organ `ALL` row, aggregating across all that organ's fields. Reports `attempted_accuracy_micro` (correct / attempted, weighted by sample), `effective_accuracy_micro` (correct / total, penalises missingness), and `macro_field_accuracy` (per-field mean, weights every field equally).
+- **`section_rollup.csv`** — same idea but grouped by section (`top_level`, `staging`, `grading`, `invasion`, `size`, `biomarker`, `other`).
+
+Use the `ALL` row of `per_organ_overall.csv` for the single headline accuracy number; per-organ rows for the stratified breakdown.
 
 ## Two accuracy flavors
 

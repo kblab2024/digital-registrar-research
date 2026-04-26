@@ -123,6 +123,114 @@ def per_field_subgroup_summary(
     return pd.DataFrame(out_rows, columns=cols)
 
 
+def per_organ_overall_summary(
+    df: pd.DataFrame,
+    *,
+    n_boot: int,
+    alpha: float,
+    seed: int,
+) -> pd.DataFrame:
+    """Aggregate accuracy across all fields per organ + a cross-organ ALL row.
+
+    Each row reports the overall (cross-field) attempted and effective
+    accuracy for one organ. Bootstrap CI is computed on the atomic table
+    by case-stratified resampling, so the CI reflects between-case
+    variance.
+    """
+    out_rows: list[dict] = []
+    for organ in sorted(df["organ"].dropna().unique().tolist()):
+        sub = df[df["organ"] == organ]
+        out_rows.append(_overall_row(sub, organ=organ, label=organ,
+                                     n_boot=n_boot, alpha=alpha, seed=seed))
+    # Cross-organ ALL row.
+    out_rows.append(_overall_row(df, organ="ALL", label="ALL",
+                                 n_boot=n_boot, alpha=alpha, seed=seed))
+    return pd.DataFrame(out_rows)
+
+
+def _overall_row(
+    sub: pd.DataFrame, *, organ: str, label: str,
+    n_boot: int, alpha: float, seed: int,
+) -> dict:
+    """Single aggregate row across all fields in ``sub``."""
+    n_total = len(sub)
+    n_attempted = int(sub["attempted"].sum())
+    n_correct = int(sub["correct"].sum())
+    n_wrong = int(sub["wrong"].sum())
+    n_field_missing = int(sub["field_missing"].sum())
+    n_parse_error = int(sub["parse_error"].sum())
+    n_eligible = int(sub["gold_present"].sum())
+
+    if n_attempted > 0:
+        attempted_accuracy = n_correct / n_attempted
+        att_lo, att_hi = wilson_ci(n_correct, n_attempted, alpha)
+    else:
+        attempted_accuracy = float("nan")
+        att_lo = att_hi = float("nan")
+
+    effective_accuracy = n_correct / n_total if n_total else float("nan")
+    eff_lo, eff_hi = (wilson_ci(n_correct, n_total, alpha) if n_total
+                      else (float("nan"), float("nan")))
+
+    # Bootstrap CI on attempted accuracy, resampling case×field rows.
+    if n_attempted > 0:
+        records = sub[sub["attempted"]][["case_id", "correct"]].to_dict("records")
+        boot = bootstrap_ci(
+            records,
+            lambda xs: float(np.mean([r["correct"] for r in xs])),
+            n_boot=n_boot, alpha=alpha, random_state=seed,
+        )
+        boot_lo, boot_hi = boot.lo, boot.hi
+    else:
+        boot_lo = boot_hi = float("nan")
+
+    n_unique_fields = int(sub["field"].nunique()) if not sub.empty else 0
+    n_unique_cases = int(sub["case_id"].nunique()) if not sub.empty else 0
+    n_unique_runs = int(sub["run_id"].nunique()) if not sub.empty else 0
+
+    # Per-field mean of attempted accuracy (different summary — gives
+    # equal weight to every field rather than weighting by sample count).
+    per_field_acc = (
+        sub[sub["attempted"]]
+        .groupby("field")["correct"].mean()
+        .dropna()
+        .to_numpy(dtype=float)
+    )
+    macro_field_acc = (float(per_field_acc.mean())
+                       if per_field_acc.size else float("nan"))
+
+    return {
+        "organ": label,
+        "n_unique_fields": n_unique_fields,
+        "n_unique_cases": n_unique_cases,
+        "n_unique_runs": n_unique_runs,
+        "n_total": n_total,
+        "n_eligible": n_eligible,
+        "n_attempted": n_attempted,
+        "n_correct": n_correct,
+        "n_wrong": n_wrong,
+        "n_field_missing": n_field_missing,
+        "n_parse_error": n_parse_error,
+        "attempted_accuracy_micro": attempted_accuracy,
+        "attempted_acc_wilson_lo": att_lo,
+        "attempted_acc_wilson_hi": att_hi,
+        "attempted_acc_boot_lo": boot_lo,
+        "attempted_acc_boot_hi": boot_hi,
+        "effective_accuracy_micro": effective_accuracy,
+        "effective_acc_wilson_lo": eff_lo,
+        "effective_acc_wilson_hi": eff_hi,
+        "macro_field_accuracy": macro_field_acc,
+        "completeness_penalty": (
+            attempted_accuracy - effective_accuracy
+            if not (np.isnan(attempted_accuracy) or np.isnan(effective_accuracy))
+            else float("nan")
+        ),
+        "attempted_rate": (n_attempted / n_total if n_total else float("nan")),
+        "parse_error_rate": (n_parse_error / n_total if n_total else float("nan")),
+        "field_missing_rate": (n_field_missing / n_total if n_total else float("nan")),
+    }
+
+
 def _per_field_row(
     sub: pd.DataFrame, *, field: str,
     n_boot: int, alpha: float, seed: int,
@@ -673,6 +781,7 @@ __all__ = [
     "per_field_summary",
     "per_field_by_organ_summary",
     "per_field_subgroup_summary",
+    "per_organ_overall_summary",
     "confusion_for_field",
     "per_class_for_field",
     "headline_classification_metrics",

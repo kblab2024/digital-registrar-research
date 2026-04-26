@@ -8,9 +8,31 @@
 | `nominal` | `cancer_category`, `procedure`, `histology` | Unweighted κ, balanced accuracy |
 | `ordinal` | `grade`, `pt_category`, `nuclear_grade` | Quadratic-weighted κ, Kendall's τ-b, top-k, rank distance |
 | `continuous` | `tumor_size`, `dcis_size`, `maximal_ln_size` | MAE, RMSE, CCC, ICC, Bland-Altman |
+| `list_of_literals` | `tumor_extent` (liver), `vascular_invasion` (liver), `involved_margin_list` (prostate) | Unordered set equality + set-F1 (TP/FP/FN on items) |
 | `nested_list` | `regional_lymph_node`, `margins`, `biomarkers` | Bipartite F1, hallucination/miss rate, count MAE |
 
-Single source of truth: `digital_registrar_research.benchmarks.eval.iaa.classify_field(field, organ)`. Per-organ taxonomy in `scope_organs.py`.
+Single source of truth: `digital_registrar_research.benchmarks.eval.iaa.classify_field(field, organ)`. Per-organ taxonomy in `scope_organs.py`. The `list_of_literals` registry is in `scope_organs.ORGAN_LIST_OF_LITERALS` — distinct from `ORGAN_NESTED_LIST` (which is list-of-dicts).
+
+**Note on organ-aware classification.** The same field name can be a different type in different organs. `tumor_extent` is `list_of_literals` for liver but `nominal` for esophagus and stomach (it's a single-string enum there). The classifier dispatches by `(field, organ)`, not field alone. Pass `organ=` to `classify_outcome` to get the right scoring path.
+
+## Per-organ scoreable fields
+
+For the `non_nested` subcommand, the atomic table iterates every per-organ scoreable field — not the (much smaller) `FAIR_SCOPE`. Field counts per organ in the canonical schemas (as of 2026-04):
+
+| Organ | Categorical | Boolean | Continuous | List-of-literals | Total |
+|---|---:|---:|---:|---:|---:|
+| breast | 17 | 6 | 4 | 0 | 27 (+ 3 biomarker_* synthetic) |
+| colorectal | 18 | 4 | 1 | 0 | 23 |
+| lung | 17 | 5 | 1 | 0 | 23 |
+| prostate | 13 | 5 | 4 | 1 | 23 |
+| liver | 9 | 6 | 3 | 2 | 20 |
+| stomach | 16 | 4 | 1 | 0 | 21 |
+| esophagus | 14 | 4 | 1 | 0 | 19 |
+| cervix | 13 | 5 | 1 | 0 | 19 |
+| pancreas | 13 | 4 | 1 | 0 | 18 |
+| thyroid | 17 | 4 | 1 | 0 | 22 |
+
+The two top-level fields (`cancer_category`, `cancer_excision_report`) plus the three breast biomarker synthetic fields (`biomarker_er`, `biomarker_pr`, `biomarker_her2`) are added on top per organ as appropriate. Cross-organ union: ~69 distinct fields.
 
 ## Sections (`classify_section`)
 

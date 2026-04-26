@@ -44,6 +44,10 @@ from digital_registrar_research.benchmarks.eval.multi_primary import (
 )
 from digital_registrar_research.benchmarks.eval.scope import (
     BREAST_BIOMARKERS, FAIR_SCOPE, get_field_value,
+    get_organ_scoreable_fields,
+)
+from digital_registrar_research.benchmarks.eval.scope_organs import (
+    ORGAN_LIST_OF_LITERALS,
 )
 
 from .._common.args import (
@@ -134,6 +138,12 @@ def _main(args: argparse.Namespace) -> int:
         atomic, n_boot=args.n_boot, alpha=args.alpha, seed=args.seed,
     )
     write_csv(per_field_by_subgroup, args.out / "per_field_by_subgroup.csv")
+
+    # Per-organ aggregate (across all that organ's fields) + cross-organ ALL row.
+    per_organ_overall = M.per_organ_overall_summary(
+        atomic, n_boot=args.n_boot, alpha=args.alpha, seed=args.seed,
+    )
+    write_csv(per_organ_overall, args.out / "per_organ_overall.csv")
 
     # --- Classification metrics --------------------------------------------
 
@@ -278,11 +288,16 @@ def _build_atomic_table(
     organs: Iterable[int],
     case_filter: set[str] | None,
 ) -> tuple[pd.DataFrame, dict[int, int]]:
-    """Score every (run, case, field) tuple → long-form DataFrame.
+    """Score every (run, case, organ-scoreable field) tuple → long DataFrame.
+
+    The field list is **per organ** — every categorical, boolean, span,
+    and list-of-literals field declared for that organ in
+    ``scope_organs``. This produces ~25–30 fields per organ rather than
+    the 12 in ``FAIR_SCOPE``, giving full coverage of the per-organ
+    schema.
 
     Returns ``(atomic_df, n_cases_per_organ)`` for the manifest.
     """
-    fields = list(FAIR_SCOPE) + [f"biomarker_{b}" for b in BREAST_BIOMARKERS]
     n_per_organ: dict[int, int] = {}
     rows: list[dict] = []
 
@@ -294,6 +309,10 @@ def _build_atomic_table(
     for oi, _ in case_index:
         n_per_organ[oi] = n_per_organ.get(oi, 0) + 1
 
+    # Pre-resolve the per-organ field list so we don't re-derive it per case.
+    fields_by_organ: dict[str, dict[str, str]] = {}
+    biomarker_fields = [f"biomarker_{b}" for b in BREAST_BIOMARKERS]
+
     for run_id in run_ids:
         for organ_idx, case_id in case_index:
             gold_path = paths.annotation(args.annotator, organ_idx, case_id)
@@ -304,7 +323,6 @@ def _build_atomic_table(
                 continue
 
             organ = organ_name(organ_idx)
-            # Override organ from gold's cancer_category if present and consistent.
             organ_from_gold = normalize(gold.get("cancer_category"))
             if organ_from_gold and organ_from_gold != "others":
                 organ = organ_from_gold
@@ -318,20 +336,35 @@ def _build_atomic_table(
             lo = load_prediction(pred_path)
             case_load = CaseLoad.from_load_outcome(lo)
 
-            for field in fields:
-                # Breast biomarkers are conditional on cancer_category=="breast".
-                if field.startswith("biomarker_") and organ != "breast":
-                    continue
+            # Build the per-organ field list once per organ, cached.
+            if organ not in fields_by_organ:
+                organ_fields = get_organ_scoreable_fields(organ)
+                # cancer_category and cancer_excision_report are top-level —
+                # not declared per-organ in scope_organs; add them explicitly.
+                organ_fields.setdefault("cancer_category", "nominal")
+                organ_fields.setdefault("cancer_excision_report", "binary")
+                fields_by_organ[organ] = organ_fields
 
+            field_kinds = fields_by_organ[organ]
+            # Score every per-organ field plus breast biomarkers (when applicable).
+            field_iter = list(field_kinds.keys())
+            if organ == "breast":
+                field_iter += biomarker_fields
+
+            for field in field_iter:
                 if field.startswith("biomarker_"):
+                    if organ != "breast":
+                        continue
                     out = _classify_biomarker(gold, case_load, field)
+                    field_kind = "binary"
                 else:
-                    out = classify_outcome(gold, case_load, field)
+                    out = classify_outcome(gold, case_load, field, organ=organ)
+                    field_kind = field_kinds.get(field) or classify_field(field, organ)
 
-                # Skip fields where gold itself is null AND the prediction
-                # is null — these are uninformative for non-nested scoring.
-                # Keep them when the prediction is present (so OOV / refusal
-                # calibration sees them).
+                # Skip rows that are uninformative: gold absent AND pred
+                # absent AND no parse_error. Keep rows where pred attempted
+                # (for OOV / refusal calibration) and rows where gold has
+                # an answer the model might have missed.
                 if (not out.gold_present and not out.attempted
                         and not out.parse_error):
                     continue
@@ -346,7 +379,7 @@ def _build_atomic_table(
                     "organ": organ,
                     "subgroup": subgroup,
                     "field": field,
-                    "field_kind": classify_field(field, organ),
+                    "field_kind": field_kind,
                     "gold_present": out.gold_present,
                     "attempted": out.attempted,
                     "correct": out.correct,
