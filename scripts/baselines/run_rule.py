@@ -319,13 +319,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--folder", dest="experiment_root", required=True,
+    ap.add_argument("--folder", dest="experiment_root", default="workspace",
                     type=resolve_folder,
                     help="Experiment root containing data/ and results/. "
-                         "Shorthand 'dummy' or 'workspace' resolves against "
-                         "the repo root.")
-    ap.add_argument("--dataset", required=True, choices=DATASETS,
-                    help="Dataset name under data/ (cmuh or tcga).")
+                         "Default: workspace. Shorthand 'dummy' or absolute "
+                         "path also accepted.")
+    ap.add_argument("--datasets", nargs="+", default=list(DATASETS),
+                    choices=DATASETS,
+                    help="Dataset name(s) under data/ (default: both cmuh and tcga).")
     ap.add_argument("--organs", nargs="*", default=None,
                     help="Only run these numeric organ directories, e.g. 1 2 "
                          "(default: every organ subdir of reports/).")
@@ -341,37 +342,44 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
-def run_with_args(args: argparse.Namespace) -> int:
-    reports_root = args.experiment_root / "data" / args.dataset / "reports"
-    annotations_root = args.experiment_root / "data" / args.dataset / "annotations"
+def _run_one_dataset(
+    dataset: str, args: argparse.Namespace,
+) -> tuple[int, dict | None]:
+    """Predict on one dataset. Returns (exit_code, summary or None)."""
+    reports_root = args.experiment_root / "data" / dataset / "reports"
+    annotations_root = args.experiment_root / "data" / dataset / "annotations"
     if not reports_root.is_dir():
-        print(f"error: reports not found at {reports_root}", file=sys.stderr)
-        return 2
+        print(f"[skip] {dataset}: reports not found at {reports_root}",
+              file=sys.stderr)
+        return 0, None
 
     organs = discover_organs(reports_root, args.organs)
     if not organs:
         suffix = f" matching {args.organs}" if args.organs else ""
-        print(f"error: no organ dirs with *.txt found under {reports_root}"
-              f"{suffix}", file=sys.stderr)
-        return 2
+        print(f"[skip] {dataset}: no organ dirs with *.txt found under "
+              f"{reports_root}{suffix}", file=sys.stderr)
+        return 0, None
 
     out_dir = (args.experiment_root / "results" / "predictions"
-               / args.dataset / "rule_based")
+               / dataset / "rule_based")
     logger = _setup_logging(out_dir, args.verbose)
     logger.info("experiment_root: %s", args.experiment_root)
-    logger.info("dataset: %s", args.dataset)
+    logger.info("dataset: %s", dataset)
     logger.info("method: rule_based (deterministic; no model, no run_id)")
     logger.info("output: %s", out_dir)
     logger.info("organs: %s", [o[0] for o in organs])
 
+    # Inject args.dataset for back-compat with run() which reads it.
+    per_ds_args = argparse.Namespace(**{**vars(args), "dataset": dataset})
+
     started_at = _utc_now_iso()
     t_run = time.perf_counter()
-    summary = run(out_dir, organs, annotations_root, logger, args)
+    summary = run(out_dir, organs, annotations_root, logger, per_ds_args)
     finished_at = _utc_now_iso()
 
     _atomic_write_json(out_dir / "_run_meta.json", {
         "method": "rule_based",
-        "dataset": args.dataset,
+        "dataset": dataset,
         "experiment_root": str(args.experiment_root.resolve()),
         "organs": [o[0] for o in organs],
         "started_at": started_at,
@@ -386,17 +394,30 @@ def run_with_args(args: argparse.Namespace) -> int:
     wall_fmt = (f"{wall_s // 3600:02d}:{(wall_s % 3600) // 60:02d}:"
                 f"{wall_s % 60:02d}")
     summary_line = (
-        f"OK={summary['n_ok']} ERR={summary['n_pipeline_error']} "
-        f"CACHED={summary['n_cached']} N={summary['n_cases']} "
-        f"WALL={wall_fmt}"
+        f"[{dataset}] OK={summary['n_ok']} ERR={summary['n_pipeline_error']} "
+        f"CACHED={summary['n_cached']} N={summary['n_cases']} WALL={wall_fmt}"
     )
     logger.info(summary_line)
     print(summary_line)
-    print(f"out dir: {out_dir}")
+    print(f"[{dataset}] out dir: {out_dir}")
 
-    if summary["n_pipeline_error"] > 0 and not args.tolerate_errors:
-        return 1
-    return 0
+    code = 1 if (summary["n_pipeline_error"] > 0 and not args.tolerate_errors) else 0
+    return code, summary
+
+
+def run_with_args(args: argparse.Namespace) -> int:
+    overall = 0
+    n_run = 0
+    for dataset in args.datasets:
+        code, summary = _run_one_dataset(dataset, args)
+        if summary is not None:
+            n_run += 1
+        overall |= code
+    if n_run == 0:
+        print(f"error: no datasets in {args.datasets} had reports under "
+              f"{args.experiment_root}/data/", file=sys.stderr)
+        return 2
+    return overall
 
 
 def main(argv: list[str] | None = None) -> int:

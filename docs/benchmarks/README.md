@@ -10,39 +10,34 @@ A reproducible comparison of three baseline methods against gold annotations on 
 
 All three methods write into the **canonical predictions tree**, so a single eval pipeline produces directly-comparable metrics CSVs.
 
+## Defaults
+
+- **`--folder workspace`** — the live data tree. Override to `dummy` for synthetic fixtures or absolute path for elsewhere.
+- **`--datasets cmuh tcga`** — multi-dataset by default. Pass a single name to focus.
+- **`--split test`** — the eval wrappers restrict every method's `non_nested` call to the test fold of `splits.json`. Mandatory when BERT is involved; keeps coverage comparable for rule-vs-LLM. Override with `--split all`.
+- **`--test-fraction 0.34`** — the default split ratio used by `registrar-split` when generating `splits.json`.
+
 ## Quickstart (5-minute end-to-end on dummy data)
 
 ```bash
-# 1. Generate a synthetic dataset under dummy/.
+# 1. Generate the dummy data tree (cmuh + tcga, splits.json included).
 python scripts/data/gen_dummy_skeleton.py --out dummy --clean --cases-per-organ 5 --llm-runs 1
 
-# 2. Run rule_based predictions on every report.
-python scripts/baselines/run_rule.py --folder dummy --dataset cmuh --overwrite
+# 2. Run rule_based predictions on both datasets in one call.
+python scripts/baselines/run_rule.py --folder dummy --overwrite
 
-# 3. (Skip BERT training on dummy — checkpoints aren't shipped.) Run LLM via the
-#    pipeline runner already in the repo, or rely on the LLM predictions
-#    populated by gen_dummy_skeleton.
-
-# 4. Score each method with the canonical eval pipeline.
-python -m scripts.eval.cli non_nested --root dummy --dataset cmuh \
-    --method rule_based --annotator gold \
-    --out dummy/results/eval/non_nested_rule
-
-python -m scripts.eval.cli non_nested --root dummy --dataset cmuh \
-    --method llm --model gpt_oss_20b --annotator gold \
-    --out dummy/results/eval/non_nested_llm
-
-# 5. Side-by-side compare (paired bootstrap + McNemar + Wilson CIs).
-python -m scripts.eval.compare.run_compare \
-    --inputs rule_based:dummy/results/eval/non_nested_rule \
-             llm:dummy/results/eval/non_nested_llm \
-    --out dummy/results/eval/compare/rule_vs_llm
-
-# Or the convenience wrapper that does steps 4 + 5 in one call:
+# 3. Score rule vs LLM, both datasets, test split only.
 python scripts/baselines/eval_rule_vs_llm.py \
-    --folder dummy --dataset cmuh --llm-model gpt_oss_20b \
+    --folder dummy --llm-model gpt_oss_20b \
     --out dummy/results/eval/rule_vs_llm
+
+# Or do the same thing with three methods on workspace defaults:
+python scripts/baselines/eval_rule_bert_llm.py \
+    --llm-model gpt_oss_20b \
+    --out workspace/results/eval/rule_bert_llm
 ```
+
+The convenience wrappers loop over datasets internally and concatenate per-dataset parquets with a `dataset` column, so the comparison tables (`headline.csv`, `per_field.csv`, `pairwise.csv`) come out stratified by (method, dataset, organ, field) automatically.
 
 ## Documentation map
 

@@ -45,7 +45,32 @@ The `dummy/` tree is fully synthetic but schema-valid, so the entire benchmark +
 
 ### Real data (`workspace/`)
 
-The contract: drop your reports + gold annotations into `workspace/data/{dataset}/...` matching the same tree. The runners and eval scripts treat `workspace` exactly the same as `dummy` — only the contents differ.
+The contract: drop your reports + gold annotations into `workspace/data/{dataset}/...` matching the same tree. The runners and eval scripts default to `--folder workspace` and treat it exactly the same as `dummy` — only the contents differ.
+
+### Generating the train/test split
+
+`registrar-split` (which now points at the canonical layout) creates or refreshes `splits.json` for any dataset:
+
+```bash
+# Default: refresh both cmuh and tcga at workspace, 0.34 test fraction.
+registrar-split
+
+# Equivalent explicit form.
+registrar-split --folder workspace --datasets cmuh tcga --test-fraction 0.34 --seed 20251117
+
+# Generate splits for the dummy fixture (gen_dummy_skeleton already
+# does this, but you can override the test fraction here).
+registrar-split --folder dummy --datasets cmuh tcga --test-fraction 0.30
+```
+
+What it does:
+
+1. Reads gold annotations from `{folder}/data/{dataset}/annotations/gold/<organ>/*.json`.
+2. Splits stratified by `cancer_category` so every organ appears in both folds.
+3. Writes `{folder}/data/{dataset}/splits.json` with `{train, test, seed, test_fraction, total}`.
+4. Skips datasets with no gold (warns), errors out only when no dataset has gold.
+
+The split is deterministic for a fixed `--seed` (default `20251117`) — re-running with the same flags always produces the same split.
 
 ## Output layout (`{folder}/results/predictions/{dataset}/`)
 

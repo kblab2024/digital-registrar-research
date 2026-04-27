@@ -103,12 +103,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--folder", dest="experiment_root", required=True,
+    ap.add_argument("--folder", dest="experiment_root", default="workspace",
                     type=resolve_folder,
-                    help="Experiment root (dummy/workspace/abs path).")
+                    help="Experiment root (default: workspace; dummy / abs path).")
     ap.add_argument("--datasets", nargs="+", default=list(DATASETS),
                     choices=DATASETS,
-                    help="Datasets to pool for training (default: both).")
+                    help="Datasets to pool for training (default: both cmuh and tcga).")
     ap.add_argument("--heads", nargs="+", default=list(DEFAULT_HEADS),
                     choices=("cls", "qa"),
                     help="Heads to train (default: both).")

@@ -255,11 +255,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument("--folder", dest="experiment_root", required=True,
+    ap.add_argument("--folder", dest="experiment_root", default="workspace",
                     type=resolve_folder,
-                    help="Experiment root (dummy/workspace/abs path).")
-    ap.add_argument("--dataset", required=True, choices=DATASETS,
-                    help="Dataset name under data/.")
+                    help="Experiment root (default: workspace; dummy / abs path).")
+    ap.add_argument("--datasets", nargs="+", default=list(DATASETS),
+                    choices=DATASETS,
+                    help="Dataset name(s) (default: both cmuh and tcga).")
     ap.add_argument("--heads", nargs="+", default=list(DEFAULT_HEADS),
                     choices=("cls", "qa", "merged"),
                     help="Which heads to run. 'merged' requires both cls and "
@@ -277,24 +278,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
-def run_with_args(args: argparse.Namespace) -> int:
+def _run_one_dataset(dataset: str, args: argparse.Namespace) -> int:
+    """Run cls/qa/merged for one dataset under canonical paths."""
     pred_root = (args.experiment_root / "results" / "predictions"
-                 / args.dataset / "clinicalbert")
+                 / dataset / "clinicalbert")
     cls_dir = pred_root / "cls"
     qa_dir = pred_root / "qa"
     merged_dir = pred_root / "merged"
 
-    log_dir = pred_root  # parent of head dirs
-    logger = _setup_logging(log_dir, args.verbose)
+    logger = _setup_logging(pred_root, args.verbose)
     logger.info("experiment_root: %s", args.experiment_root)
-    logger.info("dataset: %s", args.dataset)
+    logger.info("dataset: %s", dataset)
     logger.info("heads: %s", args.heads)
     logger.info("organs: %s", args.organs)
+
+    # Per-dataset args view (the inner predict() functions accept a
+    # single dataset).
+    per_ds = argparse.Namespace(
+        **{**vars(args), "dataset": dataset, "datasets": dataset},
+    )
 
     started_at = _utc_now_iso()
     overall: dict[str, Any] = {
         "method": "clinicalbert",
-        "dataset": args.dataset,
+        "dataset": dataset,
         "heads": list(args.heads),
         "started_at": started_at,
         "head_summaries": {},
@@ -302,9 +309,9 @@ def run_with_args(args: argparse.Namespace) -> int:
     t_run = time.perf_counter()
 
     if "cls" in args.heads:
-        overall["head_summaries"]["cls"] = run_cls(args, cls_dir, logger)
+        overall["head_summaries"]["cls"] = run_cls(per_ds, cls_dir, logger)
     if "qa" in args.heads:
-        overall["head_summaries"]["qa"] = run_qa(args, qa_dir, logger)
+        overall["head_summaries"]["qa"] = run_qa(per_ds, qa_dir, logger)
     if "merged" in args.heads:
         overall["head_summaries"]["merged"] = merge_heads(
             cls_dir, qa_dir, merged_dir, logger,
@@ -315,7 +322,7 @@ def run_with_args(args: argparse.Namespace) -> int:
     _atomic_write_json(pred_root / "_summary.json", overall)
     _atomic_write_json(pred_root / "_run_meta.json", {
         "method": "clinicalbert",
-        "dataset": args.dataset,
+        "dataset": dataset,
         "experiment_root": str(args.experiment_root.resolve()),
         "heads": list(args.heads),
         "ckpt_cls": str(args.ckpt_cls),
@@ -329,8 +336,15 @@ def run_with_args(args: argparse.Namespace) -> int:
         "argv": sys.argv,
     })
 
-    print(f"out dir: {pred_root}")
+    print(f"[{dataset}] out dir: {pred_root}")
     return 0
+
+
+def run_with_args(args: argparse.Namespace) -> int:
+    overall = 0
+    for dataset in args.datasets:
+        overall |= _run_one_dataset(dataset, args)
+    return overall
 
 
 def main(argv: list[str] | None = None) -> int:

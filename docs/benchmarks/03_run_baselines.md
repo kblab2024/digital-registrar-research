@@ -6,14 +6,14 @@ Each baseline has a dedicated runner under `scripts/baselines/` (and `scripts/pi
 
 ```bash
 python scripts/baselines/run_rule.py \
-    --folder workspace --dataset tcga \
+    [--folder workspace] [--datasets cmuh tcga] \
     [--organs 1 2 3] [--limit 50] [--overwrite] [-v]
 ```
 
-| Flag | Effect |
-|---|---|
-| `--folder` | Experiment root (`dummy` / `workspace` / abs path). |
-| `--dataset` | `cmuh` or `tcga`. |
+| Flag | Default | Effect |
+|---|---|---|
+| `--folder` | `workspace` | Experiment root (`dummy` / `workspace` / abs path). |
+| `--datasets` | `cmuh tcga` | One or more datasets. Default loops over both. |
 | `--organs` | Numeric organ subdirs to keep, e.g. `1 2 3`. Default: every organ subdir under `reports/` that has at least one `.txt`. |
 | `--limit N` | Cap cases per organ (debugging). |
 | `--overwrite` | Reprocess cases even if a valid output already exists. |
@@ -31,7 +31,7 @@ Output: `{folder}/results/predictions/{dataset}/rule_based/{organ_n}/{case_id}.j
 
 ```bash
 python scripts/baselines/run_bert.py \
-    --folder workspace --dataset tcga \
+    [--folder workspace] [--datasets cmuh tcga] \
     [--heads cls qa merged] \
     [--ckpt-cls ckpts/clinicalbert_cls.pt] \
     [--ckpt-qa  ckpts/clinicalbert_qa] \
@@ -40,8 +40,8 @@ python scripts/baselines/run_bert.py \
 
 | Flag | Default | Effect |
 |---|---|---|
-| `--folder` | required | Experiment root. |
-| `--dataset` | required | `cmuh` or `tcga`. |
+| `--folder` | `workspace` | Experiment root. |
+| `--datasets` | `cmuh tcga` | One or more datasets. Default loops over both. |
 | `--heads` | `cls qa merged` | Heads to run. `merged` requires both `cls` and `qa` outputs (run them in the same call or beforehand). |
 | `--ckpt-cls` | `ckpts/clinicalbert_cls.pt` | Path to CLS checkpoint. |
 | `--ckpt-qa` | `ckpts/clinicalbert_qa` | Path to QA checkpoint dir. |

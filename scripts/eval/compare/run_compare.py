@@ -140,7 +140,7 @@ def _paired_bootstrap_delta(
 
 def _load_atomic(label: str, parquet_path: Path) -> pd.DataFrame:
     df = pd.read_parquet(parquet_path)
-    keep = ["case_id", "organ", "organ_idx", "field", "subgroup",
+    keep = ["case_id", "dataset", "organ", "organ_idx", "field", "subgroup",
             "attempted", "correct", "wrong", "field_missing",
             "parse_error", "gold_value", "pred_value", "run_id", "method"]
     keep = [c for c in keep if c in df.columns]
@@ -149,18 +149,35 @@ def _load_atomic(label: str, parquet_path: Path) -> pd.DataFrame:
     return df
 
 
+def _key_columns(df: pd.DataFrame) -> list[str]:
+    """Per-cell key for the join. Includes ``dataset`` when present so
+    cross-dataset cells stay separate (cmuh1_5 and tcga1_5 are distinct
+    cases despite sharing an organ/index)."""
+    keys = ["case_id", "organ", "field"]
+    if "dataset" in df.columns:
+        return ["dataset"] + keys
+    return keys
+
+
+def _group_columns(df: pd.DataFrame) -> list[str]:
+    """Per-cell aggregation key for per_field/pairwise. Stratifies by
+    dataset when the column is present."""
+    if "dataset" in df.columns:
+        return ["dataset", "organ", "field"]
+    return ["organ", "field"]
+
+
 def build_wide(per_label: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Pivot per-label atomic tables into a wide (case_id, organ, field) table.
+    """Pivot per-label atomic tables into a wide table.
 
     Multi-run methods (LLM with multiple run_ids) are collapsed by
     majority vote on ``correct``: if any run for a (case, field) was
     correct, the cell is marked correct (lenient). Use the long
     per-field tables for run-level granularity.
     """
-    keys = ["case_id", "organ", "field"]
     out = None
     for label, df in per_label.items():
-        # Collapse runs: per (case, organ, field), take the "best" outcome.
+        keys = _key_columns(df)
         agg = df.groupby(keys, as_index=False).agg({
             "attempted": "max",
             "correct": "max",
@@ -172,20 +189,20 @@ def build_wide(per_label: dict[str, pd.DataFrame]) -> pd.DataFrame:
             "pred_value": f"{label}_pred",
         })
         out = agg if out is None else out.merge(agg, on=keys, how="outer")
-    return out.sort_values(keys).reset_index(drop=True)
+    return out.sort_values(_key_columns(out)).reset_index(drop=True)
 
 
 def per_field_long(per_label: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Long-form per (label, organ, field) accuracy + coverage."""
+    """Long-form per (label, [dataset,] organ, field) accuracy + coverage."""
     rows = []
     for label, df in per_label.items():
         # Collapse runs first.
-        keys = ["case_id", "organ", "field"]
+        keys = _key_columns(df)
         collapsed = df.groupby(keys, as_index=False).agg({
             "attempted": "max",
             "correct": "max",
         })
-        for (organ, field), g in collapsed.groupby(["organ", "field"]):
+        for group_key, g in collapsed.groupby(_group_columns(df)):
             n = len(g)
             attempted = int(g["attempted"].sum())
             correct = int(g["correct"].sum())
@@ -194,12 +211,19 @@ def per_field_long(per_label: dict[str, pd.DataFrame]) -> pd.DataFrame:
             acc_lo, acc_hi = (
                 _wilson_ci(correct, attempted) if attempted else (float("nan"),) * 2
             )
-            rows.append({
-                "label": label, "organ": organ, "field": field,
+            row = {"label": label}
+            if "dataset" in df.columns:
+                ds, organ, field = group_key
+                row.update({"dataset": ds, "organ": organ, "field": field})
+            else:
+                organ, field = group_key
+                row.update({"organ": organ, "field": field})
+            row.update({
                 "n_cases": n, "n_attempted": attempted, "n_correct": correct,
                 "coverage": cov, "accuracy_attempted": acc_attempted,
                 "ci_lo": acc_lo, "ci_hi": acc_hi,
             })
+            rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -207,12 +231,15 @@ def pairwise_table(
     wide: pd.DataFrame, labels: list[str], n_boot: int, seed: int, alpha: float,
 ) -> pd.DataFrame:
     rows = []
+    has_dataset = "dataset" in wide.columns
+    group_cols = (["dataset", "organ", "field"] if has_dataset
+                  else ["organ", "field"])
     for i, a_label in enumerate(labels):
         for b_label in labels[i + 1:]:
             mask = (wide[f"{a_label}_attempted"] == True) & (  # noqa: E712
                 wide[f"{b_label}_attempted"] == True              # noqa: E712
             )
-            for (organ, field), g in wide[mask].groupby(["organ", "field"]):
+            for group_key, g in wide[mask].groupby(group_cols):
                 a_correct = g[f"{a_label}_correct"].fillna(0).infer_objects(copy=False).astype(int).to_numpy()
                 b_correct = g[f"{b_label}_correct"].fillna(0).infer_objects(copy=False).astype(int).to_numpy()
                 n = len(g)
@@ -224,9 +251,14 @@ def pairwise_table(
                 discord_a_only = int(((a_correct == 1) & (b_correct == 0)).sum())
                 discord_b_only = int(((a_correct == 0) & (b_correct == 1)).sum())
                 p = _mcnemar(discord_a_only, discord_b_only)
-                rows.append({
-                    "a_label": a_label, "b_label": b_label,
-                    "organ": organ, "field": field,
+                row = {"a_label": a_label, "b_label": b_label}
+                if has_dataset:
+                    ds, organ, field = group_key
+                    row.update({"dataset": ds, "organ": organ, "field": field})
+                else:
+                    organ, field = group_key
+                    row.update({"organ": organ, "field": field})
+                row.update({
                     "n_paired": n,
                     "acc_a": float(a_correct.mean()),
                     "acc_b": float(b_correct.mean()),
@@ -235,7 +267,34 @@ def pairwise_table(
                     "discord_b_only": discord_b_only,
                     "mcnemar_p": p,
                 })
-            # ALL-fields rollup row for this pair.
+                rows.append(row)
+
+            # Per-dataset ALL/ALL rollup (when dataset is present).
+            if has_dataset:
+                for ds, gds in wide[mask].groupby("dataset"):
+                    ga = gds[f"{a_label}_correct"].fillna(0).infer_objects(copy=False).astype(int).to_numpy()
+                    gb = gds[f"{b_label}_correct"].fillna(0).infer_objects(copy=False).astype(int).to_numpy()
+                    if not ga.size:
+                        continue
+                    delta, ci_lo, ci_hi = _paired_bootstrap_delta(
+                        ga, gb, n_boot=n_boot, seed=seed, alpha=alpha,
+                    )
+                    rows.append({
+                        "a_label": a_label, "b_label": b_label,
+                        "dataset": ds, "organ": "ALL", "field": "ALL",
+                        "n_paired": int(ga.size),
+                        "acc_a": float(ga.mean()),
+                        "acc_b": float(gb.mean()),
+                        "delta": delta, "delta_lo": ci_lo, "delta_hi": ci_hi,
+                        "discord_a_only": int(((ga == 1) & (gb == 0)).sum()),
+                        "discord_b_only": int(((ga == 0) & (gb == 1)).sum()),
+                        "mcnemar_p": _mcnemar(
+                            int(((ga == 1) & (gb == 0)).sum()),
+                            int(((ga == 0) & (gb == 1)).sum()),
+                        ),
+                    })
+
+            # Cross-dataset / cross-field ALL rollup (always emitted).
             mask_all = (wide[f"{a_label}_attempted"] == True) & (  # noqa: E712
                 wide[f"{b_label}_attempted"] == True                  # noqa: E712
             )
@@ -245,8 +304,10 @@ def pairwise_table(
                 delta, ci_lo, ci_hi = _paired_bootstrap_delta(
                     ga, gb, n_boot=n_boot, seed=seed, alpha=alpha,
                 )
-                rows.append({
-                    "a_label": a_label, "b_label": b_label,
+                row = {"a_label": a_label, "b_label": b_label}
+                if has_dataset:
+                    row["dataset"] = "ALL"
+                row.update({
                     "organ": "ALL", "field": "ALL",
                     "n_paired": int(ga.size),
                     "acc_a": float(ga.mean()),
@@ -259,31 +320,53 @@ def pairwise_table(
                         int(((ga == 0) & (gb == 1)).sum()),
                     ),
                 })
+                rows.append(row)
     return pd.DataFrame(rows)
 
 
 def headline_table(per_field: pd.DataFrame) -> pd.DataFrame:
-    """Per-method aggregate across all (organ, field) cells."""
+    """Per-method aggregate across all cells.
+
+    When the input has a ``dataset`` column, emits one row per
+    (label, dataset) plus a (label, ALL) rollup. Otherwise just one
+    row per label.
+    """
+    has_dataset = "dataset" in per_field.columns
     rows = []
-    for label, g in per_field.groupby("label"):
-        n_cases = int(g["n_cases"].sum())
-        n_attempted = int(g["n_attempted"].sum())
-        n_correct = int(g["n_correct"].sum())
-        cov = n_attempted / n_cases if n_cases else float("nan")
-        acc = n_correct / n_attempted if n_attempted else float("nan")
-        lo, hi = (
-            _wilson_ci(n_correct, n_attempted) if n_attempted else (float("nan"),) * 2
-        )
-        rows.append({
-            "label": label,
-            "n_cells_total": n_cases,
-            "n_cells_attempted": n_attempted,
-            "n_cells_correct": n_correct,
-            "coverage": cov,
-            "accuracy_attempted": acc,
-            "ci_lo": lo, "ci_hi": hi,
-        })
-    return pd.DataFrame(rows).sort_values("accuracy_attempted", ascending=False)
+    if has_dataset:
+        for (label, ds), g in per_field.groupby(["label", "dataset"]):
+            rows.append(_headline_row(label, g, dataset=ds))
+        for label, g in per_field.groupby("label"):
+            rows.append(_headline_row(label, g, dataset="ALL"))
+    else:
+        for label, g in per_field.groupby("label"):
+            rows.append(_headline_row(label, g, dataset=None))
+    return pd.DataFrame(rows).sort_values(
+        ["label", "dataset"] if has_dataset else ["label"]
+    )
+
+
+def _headline_row(label: str, g: pd.DataFrame, dataset: str | None) -> dict:
+    n_cases = int(g["n_cases"].sum())
+    n_attempted = int(g["n_attempted"].sum())
+    n_correct = int(g["n_correct"].sum())
+    cov = n_attempted / n_cases if n_cases else float("nan")
+    acc = n_correct / n_attempted if n_attempted else float("nan")
+    lo, hi = (
+        _wilson_ci(n_correct, n_attempted) if n_attempted else (float("nan"),) * 2
+    )
+    row = {"label": label}
+    if dataset is not None:
+        row["dataset"] = dataset
+    row.update({
+        "n_cells_total": n_cases,
+        "n_cells_attempted": n_attempted,
+        "n_cells_correct": n_correct,
+        "coverage": cov,
+        "accuracy_attempted": acc,
+        "ci_lo": lo, "ci_hi": hi,
+    })
+    return row
 
 
 # --- Entry point ------------------------------------------------------------

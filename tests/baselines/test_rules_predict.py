@@ -73,7 +73,7 @@ def test_run_rule_writes_canonical_layout(synthetic_root: Path) -> None:
     cmd = [
         sys.executable, str(RUN_RULE),
         "--folder", str(synthetic_root),
-        "--dataset", "cmuh",
+        "--datasets", "cmuh",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, (
@@ -108,7 +108,7 @@ def test_run_rule_summary_counts(synthetic_root: Path) -> None:
     cmd = [
         sys.executable, str(RUN_RULE),
         "--folder", str(synthetic_root),
-        "--dataset", "tcga",
+        "--datasets", "tcga",
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
@@ -127,7 +127,7 @@ def test_run_rule_overwrite(synthetic_root: Path) -> None:
     cmd_base = [
         sys.executable, str(RUN_RULE),
         "--folder", str(synthetic_root),
-        "--dataset", "cmuh",
+        "--datasets", "cmuh",
     ]
     r1 = subprocess.run(cmd_base, capture_output=True, text=True)
     assert r1.returncode == 0, r1.stderr

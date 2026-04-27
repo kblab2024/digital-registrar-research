@@ -1,23 +1,63 @@
 # Side-by-side comparison
 
-## Default: test-set only (load-bearing for BERT)
+## Defaults
 
-All three convenience wrappers (`eval_rule_vs_llm`, `eval_bert_vs_llm`, `eval_rule_bert_llm`) default to `--split test`. They:
+The convenience wrappers (`eval_rule_vs_llm`, `eval_bert_vs_llm`, `eval_rule_bert_llm`) default to:
 
-1. Resolve `splits.json` for `(folder, dataset)` via `scripts.baselines._split_helpers.load_split` — same fallback chain as `train_bert.py`.
-2. Write the test case-id list to `<out>/cases_test.txt` (one ID per line).
-3. Pass `--cases @<out>/cases_test.txt` to **every** `non_nested` call.
+- `--folder workspace`
+- `--datasets cmuh tcga` (multi-dataset; per-method outputs concatenated with a `dataset` column)
+- `--split test`
 
-So rule, BERT, and LLM are all scored against the **same** test set. This is mandatory when BERT is involved (BERT was trained on the train split — scoring it on training cases would be in-sample memorization), and it also keeps coverage / accuracy comparable for rule-vs-LLM (otherwise rules' per-organ classifier might get penalized for failing on training cases that BERT never sees).
-
-Override with `--split all` (no filter) or `--split train` (only train cases) when needed:
+So a one-liner like:
 
 ```bash
-python scripts/baselines/eval_rule_vs_llm.py --folder dummy --dataset cmuh \
+python scripts/baselines/eval_bert_vs_llm.py --llm-model gpt_oss_20b \
+    --out workspace/results/eval/bert_vs_llm
+```
+
+evaluates BERT vs LLM on cmuh + tcga, restricted to each corpus's test fold, and writes a stratified comparison.
+
+## Test-set restriction (load-bearing for BERT)
+
+The `--split test` default makes the wrappers:
+
+1. Resolve `splits.json` for each `(folder, dataset)` via `scripts.baselines._split_helpers.load_split`.
+2. Write per-dataset test case-id lists to `<out>/cases_test_<dataset>.txt`.
+3. Pass `--cases @<file>` to **every** `non_nested` call (per dataset, per method).
+
+So rule, BERT, and LLM are all scored against the **same** test set per dataset. This is mandatory when BERT is involved (BERT was trained on the train split — scoring it on training cases would be in-sample memorization), and it also keeps coverage / accuracy comparable for rule-vs-LLM.
+
+Override with `--split all` (no filter) or `--split train`:
+
+```bash
+python scripts/baselines/eval_rule_vs_llm.py --folder dummy --datasets cmuh \
     --llm-model gpt_oss_20b \
     --split all \
     --out dummy/results/eval/rule_vs_llm_full
 ```
+
+## Multi-dataset output layout
+
+When `--datasets cmuh tcga` (default), per-method directories carry both per-dataset outputs AND a combined parquet with a `dataset` column:
+
+```
+{--out}/
+├── cases_test_cmuh.txt
+├── cases_test_tcga.txt
+├── non_nested_<label1>/
+│   ├── cmuh/        # full per-dataset non_nested output (per_field_overall.csv etc.)
+│   ├── tcga/        # ditto
+│   └── correctness_table.parquet   # combined (with `dataset` column)
+├── non_nested_<label2>/...
+└── compare/
+    ├── manifest.json
+    ├── wide.csv         # rows now keyed on (dataset, organ, field, case_id)
+    ├── per_field.csv    # stratified by (label, dataset, organ, field)
+    ├── pairwise.csv     # paired-bootstrap deltas per (dataset, organ, field) plus per-dataset ALL/ALL plus cross-dataset ALL/ALL
+    └── headline.csv     # one row per (label, dataset) plus (label, ALL)
+```
+
+If you pass `--datasets cmuh` (single dataset), the `dataset` column is still present (with one value); compare's per_field, pairwise, and headline tables degenerate to the single-dataset case.
 
 ## Generic compare (manual)
 
