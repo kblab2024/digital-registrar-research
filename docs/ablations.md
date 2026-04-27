@@ -6,38 +6,87 @@ type hints, and a per-organ modular decomposition into 5–7 sub-signatures
 chained through an intermediate `ReportJsonize` step. The ablation suite
 attributes the headline accuracy back to those choices, one knob at a time.
 
-## Layout
+## Canonical layout
+
+Every ablation runner uses the same `--folder/--dataset/--model` contract
+as [`scripts/pipeline/run_dspy_ollama_single.py`](../scripts/pipeline/run_dspy_ollama_single.py)
+so input data, output predictions, and model aliases share one directory
+convention with the rest of the toolkit.
+
+```
+{folder}/                                      # 'dummy' | 'workspace' | abs path
+├── data/{dataset}/                            # 'cmuh' | 'tcga'
+│   ├── reports/{organ_n}/{case_id}.txt        # input
+│   └── annotations/gold/{organ_n}/{case_id}.json   # gold for grading
+└── results/ablations/{dataset}/
+    └── {cell_id}/{model_slug}/                # e.g. dspy_monolithic/gpt_oss_20b/
+        ├── _manifest.yaml                     # all runs for this cell × model
+        └── {run_id}/                          # e.g. run01
+            ├── _summary.json                  # n_cases, n_ok, parse_error_rate, ...
+            ├── _log.jsonl                     # per-case row
+            ├── _run.log                       # full-verbosity log
+            ├── _run_meta.json                 # git SHA, UTC, decoding kwargs
+            └── {organ_n}/{case_id}.json       # one prediction per case
+```
+
+`--folder dummy` and `--folder workspace` are the standard shortcuts;
+absolute paths and other relatives are accepted and resolved against
+the repo root via [`_config_loader.resolve_folder`](../scripts/_config_loader.py).
+Models are passed by alias from `models.common.UNIFIED_MODELS`
+(`gptoss | gemma3 | gemma4 | qwen3_5 | medgemmalarge | medgemmasmall`).
+The model slug used in the output path is the same as the pipeline
+runner's — `ollama_chat/gpt-oss:20b` → `gpt_oss_20b`.
 
 ```
 src/digital_registrar_research/ablations/
 ├── runners/
-│   ├── reuse_baseline.py     # Cell A: copy modular outputs into ablations tree
-│   ├── dspy_monolithic.py    # Cell B: one DSPy signature per organ
-│   └── raw_json.py           # Cell C: raw OpenAI-compatible chat API + JSON mode
+│   ├── _base.py              # canonical args, path resolution, run loop
+│   ├── reuse_baseline.py     # Cell A — copy pipeline outputs into ablations tree
+│   ├── dspy_monolithic.py    # Cell B — one DSPy signature per organ
+│   ├── raw_json.py           # Cell C — raw OpenAI-compatible chat API + JSON mode
+│   ├── no_router.py          # A4 — drop the is_cancer router
+│   ├── per_section.py        # A5 — per-section decomposition
+│   ├── str_outputs.py        # B2 — DSPy with str outputs + post-hoc parser
+│   ├── constrained_decoding.py  # B4 — outlines (vLLM/HF backend)
+│   ├── free_text_regex.py    # B6 — degenerate baseline
+│   ├── fewshot_demos.py      # C2/C3 — N curated demos per organ
+│   ├── chain_of_thought.py   # C4 — dspy.ChainOfThought wrap
+│   ├── compiled_dspy.py      # C5 — BootstrapFewShotWithRandomSearch
+│   ├── minimal_prompt.py     # C6 — single-sentence raw prompt
+│   ├── union_schema.py       # F2 — single union schema across organs
+│   └── flat_schema.py        # F3 — denested per-organ schema
 ├── signatures/
-│   └── monolithic.py         # Dynamically merges per-subsection signatures
+│   ├── monolithic.py         # merges per-subsection signatures (B baseline)
+│   ├── str_outputs.py        # strips Literals → str (B2)
+│   └── per_section.py        # per-organ × per-section variant (A5)
+├── extractors/               # post-hoc projection helpers (B2 / B6 / F3)
+├── utils/                    # section_splitter (A5), demos loader (C2/C3)
 └── eval/
-    └── run_ablations.py      # aggregator → ablation_grid / summary / table CSVs
+    ├── run_ablations.py      # canonical-tree aggregator → grid/summary/table CSVs
+    └── stats.py              # paired-bootstrap CI, McNemar, GLMM, Fleiss κ, ...
 
 scripts/ablations/
-├── _common.py                # CELL_MAP, smoke-root layout, aggregator round-trip
-├── run_cell_a.py             # thin wrapper around reuse_baseline.run
-├── run_cell_b.py             # thin wrapper around dspy_monolithic.run
-├── run_cell_c.py             # thin wrapper around raw_json.run
-├── run_cell_smoke.py         # per-cell smoke (1 model × 2 cases, fail-loud)
+├── _common.py                # CELL_MAP, smoke-root, aggregator round-trip
+├── run_cell_<short>.py       # thin per-cell wrappers (a, b, c, a4, …, f3)
+├── run_cell_smoke.py         # per-cell smoke (≤ 2 cases, fail-loud)
 ├── run_grid_smoke.py         # full grid-wide smoke (≤ 10 min)
-└── run_grid.py               # YAML-driven full grid driver
+├── run_grid.py               # YAML-driven full grid driver
+├── run_stats.py              # regenerate the stats pack from ablation_grid.csv
+├── compile_dspy.py           # build the compiled DSPy artifact (C5)
+└── build_fewshot_demos.py    # build configs/ablations/fewshot_demos.yaml (C2/C3)
 
 configs/ablations/
-├── smoke.yaml                # smoke defaults (n, cells, model)
-└── grid_1.yaml               # Grid 1 minimum-viable lesion study
+├── smoke.yaml                # smoke defaults (n, cells, folder, dataset, model)
+├── grid_1.yaml               # Grid 1 minimum-viable lesion study
+├── grid_2.yaml               # Grid 2 27-cell factorial
+├── axes.yaml                 # cell → axis mapping for the stats family correction
+└── fewshot_demos.yaml        # generated by build_fewshot_demos.py
 ```
 
-The runners expose a `run(args: argparse.Namespace)` entry point separate
-from `main()`, so the wrappers under `scripts/ablations/` can construct
-an argparse Namespace directly without sys.argv mutation. The CLI
-surface (`python -m digital_registrar_research.ablations.runners.X`) is
-preserved for ad-hoc invocations.
+The runners expose both a `run(args: argparse.Namespace) -> int` entry
+point and a `main(argv=None) -> int`. Wrappers under
+`scripts/ablations/` go through `main()`; the YAML grid driver
+constructs a Namespace and calls `run()` directly.
 
 ## Ablation axes
 
@@ -53,39 +102,46 @@ what's wired up as a TODO in [run_grid.py](../scripts/ablations/run_grid.py).
 | A1 | Full modular (5–7 signatures per organ) | Cell A — implemented |
 | A2 | Monolithic single signature per organ | Cell B — implemented |
 | A3 | Monolithic, no `ReportJsonize` | Cell B `--skip-jsonize` |
-| A4 | Monolithic, no `is_cancer` router | TODO |
-| A5 | Per-section decomposition (header / dx / comments) | TODO |
+| A4 | Monolithic, no `is_cancer` router | `runners/no_router.py` — implemented (uses gold organ; upper-bound estimate of router contribution) |
+| A5 | Per-section decomposition (header / gross / micro / dx / comments) | `runners/per_section.py` — implemented |
 
 ### Axis 2 — Output structuring discipline
 
 | Level | Description | Status |
 |---|---|---|
 | B1 | DSPy + Literal enums + Pydantic | Cells A, B — current default |
-| B2 | DSPy with `str` outputs + post-hoc parser | TODO |
+| B2 | DSPy with `str` outputs + post-hoc parser | `runners/str_outputs.py` — implemented |
 | B3 | Raw JSON-mode (`response_format=json_object`) | Cell C — implemented |
-| B4 | Constrained decoding (outlines / lm-format-enforcer) | TODO |
-| B5 | GBNF grammar (llama.cpp) | TODO |
-| B6 | Free-text + regex post-extractor | TODO |
+| B4 | Constrained decoding (outlines / lm-format-enforcer) | `runners/constrained_decoding.py` — implemented (requires `outlines` + vLLM/HF backend) |
+| B5 | GBNF grammar (llama.cpp) | skipped (not on Ollama path) |
+| B6 | Free-text + regex post-extractor | `runners/free_text_regex.py` — implemented |
 
 ### Axis 3 — Prompting strategy
 
 | Level | Description | Status |
 |---|---|---|
 | C1 | Zero-shot signature docstring | current default |
-| C2–C3 | + 3 / 5 in-context examples | TODO |
-| C4 | `dspy.ChainOfThought` wrapper | TODO |
-| C5 | Compiled DSPy program (`BootstrapFewShotWithRandomSearch`) | TODO |
-| C6 | Minimal raw prompt (degenerate baseline) | TODO |
+| C2 | + 3 in-context examples (curated from train) | `runners/fewshot_demos.py --n-shots 3` — implemented |
+| C3 | + 5 in-context examples (curated from train) | `runners/fewshot_demos.py --n-shots 5` — implemented |
+| C4 | `dspy.ChainOfThought` wrapper | `runners/chain_of_thought.py` — implemented |
+| C5 | Compiled DSPy program (`BootstrapFewShotWithRandomSearch`) | `runners/compiled_dspy.py` (+ `scripts/ablations/compile_dspy.py`) — implemented |
+| C6 | Minimal raw prompt (degenerate baseline) | `runners/minimal_prompt.py` — implemented |
 
 ### Axes 4–6 — Decoding, model identity, schema specificity
 
-Decoding (temperature / num_ctx / self-consistency), model identity
-(`gemma3:4b/27b`, `gpt-oss:20b`, `qwen3:30b`, `medgemma`, `llama3-med42`),
-and schema-specificity (organ-specific vs union vs flat) are documented
-in the suggestions doc. Decoding is config-driven via
-[`configs/dspy_ollama_<model>.yaml`](../configs/) (no new code needed for
-sweeps); model identity is handled by passing different `--model` keys;
-schema-specificity needs new runners — TODO.
+Decoding (temperature / num_ctx / self-consistency) and model identity
+(`gemma3:4b/27b`, `gpt-oss:20b`, `qwen3:30b`, `medgemma`, `llama3-med42`)
+are config-driven via [`configs/dspy_ollama_<model>.yaml`](../configs/);
+no new runners needed for sweeps along those axes — pass a different
+`--model` key.
+
+Schema specificity (Axis 6) gets two new runners:
+
+| Level | Description | Status |
+|---|---|---|
+| F1 | Per-organ schema | Cell C — current default |
+| F2 | Union schema across all organs | `runners/union_schema.py` — implemented |
+| F3 | Flat (denested) per-organ schema | `runners/flat_schema.py` — implemented |
 
 ## The Grid 1 lesion study
 
@@ -99,11 +155,15 @@ Conditions (suggestions doc §1.3):
 3. **Monolithic DSPy without ReportJsonize** — also drops the
    intermediate JSON structuring step
 4. **No DSPy** — raw OpenAI-compatible JSON-mode against local Ollama
-5. *(TODO)* **No schema** — free-text generation + regex post-extractor
+5. **No schema** — free-text generation + regex post-extractor
 
-Single backbone (`gpt-oss:20b`), single seed for the first pass; for
-multi-seed reproducibility, copy the YAML, change `slug` per seed, and
-bump `decoding.seed` in the model config between invocations.
+Single backbone (`gptoss` → `ollama_chat/gpt-oss:20b`), single seed for
+the first pass; for multi-seed reproducibility, invoke the script
+multiple times — each invocation auto-picks the next free `runNN` slot
+under each cell's directory, and decoding seeds come from
+[`configs/dspy_ollama_<alias>.yaml`](../configs/) (the
+`run_dspy_ollama_multirun.py` driver wraps multiple invocations with a
+master seed for reproducibility).
 
 Wall-clock estimate: ~2–3 days on a single 48 GB GPU.
 
@@ -130,30 +190,29 @@ catastrophic. Every ablation kickoff goes through smoke first.
 ### Per-cell smoke
 
 ```bash
-# Cell C × local gpt-oss:20b — fastest smoke (no DSPy bootstrap)
-python scripts/ablations/run_cell_smoke.py --cell c --model gpt-oss:20b
+# Cell C × local gptoss — fastest smoke (no DSPy bootstrap)
+python scripts/ablations/run_cell_smoke.py --cell c \
+    --folder dummy --dataset tcga --model gptoss
 
-# Cell B × local gpt-oss (uses models.common.model_list keys)
-python scripts/ablations/run_cell_smoke.py --cell b --model gpt --n 2
+# Cell B × local gptoss
+python scripts/ablations/run_cell_smoke.py --cell b \
+    --folder dummy --dataset tcga --model gptoss --n 2
 
-# Cell A — needs a source dir of pre-computed predictions
+# Cell A — copies the most recent completed pipeline run
 python scripts/ablations/run_cell_smoke.py --cell a \
-    --modular-source-dir E:/experiment/20260422/gpt-oss \
-    --model gpt-oss
+    --folder dummy --dataset tcga --model gptoss
 ```
 
 ### Grid-wide smoke
 
 ```bash
-# Smoke Cells B + C (default) on local gpt-oss
-python scripts/ablations/run_grid_smoke.py --model gpt-oss:20b
-
-# Include Cell A too
-python scripts/ablations/run_grid_smoke.py --model gpt-oss:20b \
-    --modular-source-dir E:/experiment/20260422/gpt-oss
+# Smoke the default cells on local gptoss
+python scripts/ablations/run_grid_smoke.py \
+    --folder dummy --dataset tcga --model gptoss
 
 # Subset cells (skip B if Ollama bootstrap is slow on this machine)
-python scripts/ablations/run_grid_smoke.py --model gpt-oss:20b --cells c
+python scripts/ablations/run_grid_smoke.py \
+    --folder dummy --dataset tcga --model gptoss --cells c b6 c6
 ```
 
 ### Recommended pre-push hook
@@ -169,27 +228,35 @@ sweep.
 After a green smoke:
 
 ```bash
-# Edit configs/ablations/grid_1.yaml first — set modular_gpt_oss_dir
-# to point at the parent project's full-pipeline run output.
+# grid_1.yaml ships pointing at folder=dummy / dataset=tcga / model=gptoss.
+# Override --folder / --dataset on the CLI or edit the YAML for workspace runs.
 
 python scripts/ablations/run_grid.py --config configs/ablations/grid_1.yaml
+python scripts/ablations/run_grid.py --config configs/ablations/grid_1.yaml \
+    --folder workspace --dataset tcga
 ```
 
-Each cell writes:
-- `<results_root>/<cell_id>_<slug>/<case_id>.json` — per-case predictions
-- `<results_root>/<cell_id>_<slug>/_ledger.json` — per-case timings
-- `<results_root>/<cell_id>_<slug>/_run_meta.json` — git SHA, UTC, args
+Each runner writes (see canonical layout above):
 
-Top-level: `<results_root>/_grid_meta.json` — full grid manifest.
+- `{cell_id}/{model_slug}/{run_id}/{organ_n}/{case_id}.json` — per-case prediction
+- `{cell_id}/{model_slug}/{run_id}/_summary.json` — run-level totals
+- `{cell_id}/{model_slug}/{run_id}/_log.jsonl` — one row per case
+- `{cell_id}/{model_slug}/{run_id}/_run.log` — full-verbosity log
+- `{cell_id}/{model_slug}/{run_id}/_run_meta.json` — git SHA, UTC, decoding kwargs
+- `{cell_id}/{model_slug}/_manifest.yaml` — accumulated across all runs
+
+Top-level: `{folder}/results/ablations/{dataset}/_grid_meta.json` — full grid manifest.
 
 For ad-hoc per-cell runs without the grid driver, the wrappers all take
 the same args as the underlying runners:
 
 ```bash
-python scripts/ablations/run_cell_b.py --model gpt \
-    --out workspace/results/ablations/dspy_monolithic_gpt-oss
-python scripts/ablations/run_cell_c.py --model gpt-oss:20b \
-    --out workspace/results/ablations/raw_json_gpt-oss
+python scripts/ablations/run_cell_b.py --folder dummy --dataset tcga --model gptoss
+python scripts/ablations/run_cell_c.py --folder dummy --dataset tcga --model gptoss
+python scripts/ablations/run_cell_b6.py --folder dummy --dataset tcga --model gptoss
+python scripts/ablations/run_cell_c2.py --folder dummy --dataset tcga --model gptoss   # 3-shot
+python scripts/ablations/run_cell_c5.py --folder dummy --dataset tcga --model gptoss \
+    --compiled workspace/compiled/dspy_compiled_gptoss.json
 ```
 
 ## Aggregator outputs
@@ -205,13 +272,36 @@ python scripts/ablations/run_cell_c.py --model gpt-oss:20b \
 | `cell_deltas.csv` | A→B and B→C per-field deltas per model |
 | `efficiency.csv` | Mean / median latency, schema-error rate, parse-error rate |
 
+When `--with-stats` is on (default for any non-smoke results-root) the
+aggregator also calls
+[`ablations.eval.stats.run_all`](../src/digital_registrar_research/ablations/eval/stats.py)
+to emit the reviewer-grade statistics pack:
+
+| File | Contents |
+|---|---|
+| `ablation_paired_deltas.csv` | Per (target cell × model × field) Δ vs baseline with paired-bootstrap 95 % CI; McNemar discordant counts + p for binary fields. |
+| `ablation_paired_deltas_corrected.csv` | The same table with `p_holm` (primary endpoints, FWER) and `p_bh` (secondary, FDR), grouped by `(axis, endpoint_tier)` per [`configs/ablations/axes.yaml`](../configs/ablations/axes.yaml) and [`configs/eval_endpoints.yaml`](../configs/eval_endpoints.yaml). |
+| `ablation_glmm.csv` | Per-(cell × field) marginal accuracy from a mixed-effects logistic GLMM with random intercepts for case and seed; falls back to two-source bootstrap when convergence fails. Multi-seed grids only. |
+| `ablation_seed_consistency.csv` | Fleiss κ across seeds, flip rate, min pairwise Spearman ρ — diagnoses cell determinism. |
+| `ablation_factorial.csv` + `ablation_marginal_means.csv` | Grid 2 only: term-level effects from `correct ~ A * B * C + (1|case) + (1|model)` plus per-axis-level marginal accuracy with Wilson CI. |
+| `ablation_efficiency_stats.csv` | Schema/parse error rate with Wilson CI, median latency with bootstrap CI per cell. |
+| `ablation_effect_sizes.csv` | Cohen's d, Cliff's δ, and odds ratio (binary fields, Haldane–Anscombe corrected) for each cell vs baseline. |
+
 Scoring is reused verbatim from
 [`benchmarks.eval.{scope, metrics, completeness}`](eval/index.md) so
 ablation cell numbers slot directly into the benchmark comparison
-tables. Statistical analysis (paired-bootstrap CIs on per-field deltas,
-McNemar at the case level, Fleiss κ across seeds) goes through the
-shared toolkit in [`eval/ci_methods.md`](eval/ci_methods.md) and
-[`eval/multirun.md`](eval/multirun.md).
+tables. The stats module is a thin wrapper over the shared toolkit
+documented in [`eval/ci_methods.md`](eval/ci_methods.md),
+[`eval/multirun.md`](eval/multirun.md), and
+[`eval/multiple_comparisons.md`](eval/multiple_comparisons.md) — it
+does **not** reimplement bootstrap, McNemar, GLMM, Fleiss κ, or
+Holm/BH correction, only wires them to the ablation grid.
+
+To regenerate the stats pack from an existing grid run:
+
+```bash
+python scripts/ablations/run_stats.py --results-root workspace/results/ablations
+```
 
 ## Reading the ablation result for the paper
 

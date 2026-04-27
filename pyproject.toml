@@ -31,8 +31,8 @@ dependencies = [
 
 [project.optional-dependencies]
 annotation  = ["streamlit>=1.35"]
-benchmarks  = ["scikit-learn", "torch", "transformers", "openai", "regex", "matplotlib", "seaborn"]
-ablations   = ["jsonschema", "openai"]
+benchmarks  = ["scikit-learn", "torch", "transformers", "openai", "regex", "matplotlib", "seaborn", "scipy", "statsmodels"]
+ablations   = ["jsonschema", "openai", "scipy", "statsmodels", "pyyaml"]
 dev         = ["pytest>=8", "ruff", "mypy"]
 all         = ["digital-registrar-research[annotation,benchmarks,ablations,dev]"]
 

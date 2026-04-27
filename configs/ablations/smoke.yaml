@@ -1,21 +1,28 @@
 # Smoke-run defaults for scripts/ablations/run_cell_smoke.py and
 # scripts/ablations/run_grid_smoke.py.
 #
-# These are *defaults* — CLI flags (--n, --cells, --model) take
-# precedence whenever they are passed. The smoke wrappers fall back to
-# this config only for unspecified knobs.
-#
-# Read by `_common.smoke_root()` for output-dir layout. Edit `n` to
-# trade smoke-run wall time vs. confidence.
+# These are *defaults* — CLI flags (--n, --cells, --model, --folder,
+# --dataset) take precedence whenever they are passed.
 
-n: 2                  # cases per cell
-cells: ["b", "c"]      # default cells; "a" requires --modular-source-dir
-model: gpt-oss:20b    # default local-LM target for grid smoke
+n: 2                               # cases per organ
+folder: dummy                      # default experiment root
+dataset: tcga                      # default dataset
+model: gptoss                      # default unified model alias
+
+# Default cells: B + C plus the cheap-to-run extensions. Skip the heavy
+# ones (B4 needs vLLM/outlines, C5 needs a compile step) by default —
+# opt in via --cells on the CLI.
+cells: ["b", "c", "b6", "c4", "c6", "f2", "f3"]
 
 # Per-cell smoke knobs
 cell_a:
-  modular_source_dir: null   # MUST be set on CLI when smoking Cell A
+  source_run: null                 # null → most recent completed pipeline run
 cell_b:
   skip_jsonize: false
 cell_c:
-  api_base: null             # null → auto-set to local Ollama for known prefixes
+  api_base: null                   # null → http://localhost:11434/v1
+cell_b4:
+  backend: vllm
+  api_base: null
+cell_c5:
+  compiled: workspace/compiled/dspy_compiled_gptoss.json

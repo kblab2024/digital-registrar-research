@@ -1,16 +1,18 @@
 """
-Cell B — DSPy + monolithic (one big signature per organ).
+A4 — Monolithic DSPy without the ``is_cancer`` router.
 
-Runs the same top-level pipeline as the parent project — ``is_cancer``
-routing, optional ``ReportJsonize``, then **one** organ-specific DSPy
-signature (instead of the 5–7 in the modular baseline).
+Same as Cell B (monolithic) but skips the routing call. The router
+decides BOTH whether-to-extract AND which organ; the cleanest way to
+remove it is to use the gold organ derived from the report's organ
+subdirectory (the canonical layout encodes organ in the path:
+``data/{dataset}/reports/{organ_n}/{case_id}.txt``).
 
-Canonical layout (see ``runners/_base.py``):
+The numeric organ index is mapped to its canonical name via
+:data:`scope.IMPLEMENTED_ORGANS`. This is an upper-bound estimate of
+router contribution: the cell sees the right organ for free.
 
+Canonical layout:
     --folder dummy --dataset tcga --model gptoss [--run runNN]
-
-Output:
-    {root}/results/ablations/{dataset}/dspy_monolithic/{model_slug}/{run}/{organ}/<case_id>.json
 """
 from __future__ import annotations
 
@@ -19,25 +21,36 @@ import logging
 
 import dspy
 
-from ...models.common import ReportJsonize, is_cancer
-from ...models.modellist import organmodels
+from ...benchmarks.eval.scope import IMPLEMENTED_ORGANS
 from ...util.predictiondump import dump_prediction_plain
 from ..signatures.monolithic import get_monolithic_signature
 from . import _base
 
-CELL_ID = "dspy_monolithic"
+CELL_ID = "no_router"
 
 
-class MonolithicPipeline(dspy.Module):
-    """Drop-in replacement for ``CancerPipeline`` with per-organ
-    signatures collapsed into a single monolithic signature."""
+def _organ_from_index(organ_n: str) -> str | None:
+    """Map a numeric organ subdir name (``"1"``, ``"2"``, ...) to the
+    organ key used by the per-organ signatures."""
+    try:
+        idx = int(organ_n)
+    except ValueError:
+        return None
+    if 1 <= idx <= len(IMPLEMENTED_ORGANS):
+        return IMPLEMENTED_ORGANS[idx - 1]
+    return None
 
-    def __init__(self, skip_jsonize: bool = False):
+
+class NoRouterPipeline(dspy.Module):
+    """Monolithic pipeline minus the is_cancer router stage."""
+
+    def __init__(self, skip_jsonize: bool = True):
         super().__init__()
         self.skip_jsonize = skip_jsonize
-        self.analyzer_is_cancer = dspy.Predict(is_cancer)
-        self.jsonize = dspy.Predict(ReportJsonize)
         self._organ_predictors: dict[str, dspy.Predict] = {}
+        if not skip_jsonize:
+            from ...models.common import ReportJsonize
+            self.jsonize = dspy.Predict(ReportJsonize)
 
     def _get_organ_predictor(self, organ: str) -> dspy.Predict:
         if organ not in self._organ_predictors:
@@ -45,27 +58,16 @@ class MonolithicPipeline(dspy.Module):
             self._organ_predictors[organ] = dspy.Predict(sig)
         return self._organ_predictors[organ]
 
-    def forward(self, report: str, logger: logging.Logger,
+    def forward(self, report: str, organ: str, logger: logging.Logger,
                 fname: str = "") -> dict:
-        logger.debug("[monolithic] %s", fname)
+        logger.debug("[no_router] %s organ=%s", fname, organ)
         paragraphs = [p.strip() for p in report.split("\n\n") if p.strip()]
-
-        context_response = self.analyzer_is_cancer(report=paragraphs)
-        if not context_response.cancer_excision_report:
-            return {"cancer_excision_report": False,
-                    "cancer_category": None, "cancer_data": {}}
-
-        organ = context_response.cancer_category
         out: dict = {
             "cancer_excision_report": True,
             "cancer_category": organ,
-            "cancer_category_others_description":
-                context_response.cancer_category_others_description,
             "cancer_data": {},
+            "_router_skipped": True,
         }
-        if organ not in organmodels:
-            return out
-
         report_jsonized: dict = {}
         if not self.skip_jsonize:
             try:
@@ -73,28 +75,22 @@ class MonolithicPipeline(dspy.Module):
                 report_jsonized = jr.output or {}
             except Exception as e:
                 logger.warning("jsonize failed for %s: %s", fname, e)
-
         try:
             predictor = self._get_organ_predictor(organ)
             organ_response = predictor(
                 report=paragraphs, report_jsonized=report_jsonized)
             out["cancer_data"] = dump_prediction_plain(organ_response)
         except Exception as e:
-            logger.error("monolithic %s failed for %s: %s", organ, fname, e)
+            logger.error("no_router %s failed for %s: %s", organ, fname, e)
             out["_error"] = str(e)
         return out
-
-
-# Back-compat shim for callers that imported `_setup_model` from this module.
-def _setup_model(model_alias: str, overrides: dict | None = None) -> dict:
-    return _base.setup_dspy_lm(model_alias, overrides=overrides)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     _base.add_canonical_args(ap)
-    ap.add_argument("--skip-jsonize", action="store_true",
-                    help="ablation-of-ablation: also drop ReportJsonize")
+    ap.add_argument("--include-jsonize", action="store_true",
+                    help="keep the upstream ReportJsonize step (default: skip)")
     return ap.parse_args(argv)
 
 
@@ -103,23 +99,30 @@ def run(args: argparse.Namespace) -> int:
     overrides = _base.load_decoding_overrides(args.model)
     lm_kwargs = _base.setup_dspy_lm(args.model, overrides=overrides)
 
-    logger = _base.make_logger("dspy_monolithic", paths.run_dir(run_name),
+    logger = _base.make_logger("no_router", paths.run_dir(run_name),
                                args.verbose)
     logger.info("cell=%s model=%s slug=%s run=%s organs=%s",
                 CELL_ID, args.model, paths.model_slug, run_name,
                 [o[0] for o in organs])
 
-    pipe = MonolithicPipeline(skip_jsonize=args.skip_jsonize)
+    skip_jsonize = not args.include_jsonize
+    pipe = NoRouterPipeline(skip_jsonize=skip_jsonize)
 
-    def _predict(report_text: str, organ: str, case_id: str) -> dict:
-        return pipe(report=report_text, logger=logger, fname=case_id)
+    def _predict(report_text: str, organ_n: str, case_id: str) -> dict:
+        organ = _organ_from_index(organ_n)
+        if organ is None:
+            return {"cancer_excision_report": True, "cancer_category": None,
+                    "cancer_data": {}, "_router_skipped": True,
+                    "_error": f"cannot infer organ from organ_n={organ_n!r}"}
+        return pipe(report=report_text, organ=organ,
+                    logger=logger, fname=case_id)
 
     summary = _base.run_loop(
         paths, organs, run_name, model_alias=args.model,
         predict=_predict, args=args, logger=logger,
         decoding=lm_kwargs,
-        manifest_extra={"skip_jsonize": args.skip_jsonize},
-        extra_meta={"skip_jsonize": args.skip_jsonize,
+        manifest_extra={"router_skipped": True, "skip_jsonize": skip_jsonize},
+        extra_meta={"router_skipped": True, "skip_jsonize": skip_jsonize,
                     "dspy_lm_kwargs": lm_kwargs},
     )
 

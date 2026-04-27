@@ -1,16 +1,18 @@
 """
-Cell B — DSPy + monolithic (one big signature per organ).
+C4 — Monolithic DSPy with ``dspy.ChainOfThought`` per organ.
 
-Runs the same top-level pipeline as the parent project — ``is_cancer``
-routing, optional ``ReportJsonize``, then **one** organ-specific DSPy
-signature (instead of the 5–7 in the modular baseline).
+Identical structure to Cell B; the only change is that the per-organ
+predictor is wrapped in :class:`dspy.ChainOfThought` instead of
+:class:`dspy.Predict`. ChainOfThought adds an implicit ``reasoning``
+output field that the model fills in before the structured fields.
 
-Canonical layout (see ``runners/_base.py``):
+Captured reasoning is persisted in ``_reasoning`` for inspection but
+stripped from ``cancer_data`` so the grader sees the same fields as
+Cell B. ``--cot-everywhere`` extends the wrap to the router and the
+ReportJsonize step too.
 
-    --folder dummy --dataset tcga --model gptoss [--run runNN]
-
-Output:
-    {root}/results/ablations/{dataset}/dspy_monolithic/{model_slug}/{run}/{organ}/<case_id>.json
+Canonical layout:
+    --folder dummy --dataset tcga --model gptoss [--cot-everywhere] [--run runNN]
 """
 from __future__ import annotations
 
@@ -25,36 +27,37 @@ from ...util.predictiondump import dump_prediction_plain
 from ..signatures.monolithic import get_monolithic_signature
 from . import _base
 
-CELL_ID = "dspy_monolithic"
+CELL_ID = "chain_of_thought"
+REASONING_FIELD = "reasoning"
 
 
-class MonolithicPipeline(dspy.Module):
-    """Drop-in replacement for ``CancerPipeline`` with per-organ
-    signatures collapsed into a single monolithic signature."""
+def _make_predict(sig, use_cot: bool):
+    return dspy.ChainOfThought(sig) if use_cot else dspy.Predict(sig)
 
-    def __init__(self, skip_jsonize: bool = False):
+
+class CoTPipeline(dspy.Module):
+    def __init__(self, skip_jsonize: bool = False, cot_everywhere: bool = False):
         super().__init__()
         self.skip_jsonize = skip_jsonize
-        self.analyzer_is_cancer = dspy.Predict(is_cancer)
-        self.jsonize = dspy.Predict(ReportJsonize)
-        self._organ_predictors: dict[str, dspy.Predict] = {}
+        self.cot_everywhere = cot_everywhere
+        self.analyzer_is_cancer = _make_predict(is_cancer, cot_everywhere)
+        self.jsonize = _make_predict(ReportJsonize, cot_everywhere)
+        self._organ_predictors: dict[str, dspy.Module] = {}
 
-    def _get_organ_predictor(self, organ: str) -> dspy.Predict:
+    def _get_organ_predictor(self, organ: str) -> dspy.Module:
         if organ not in self._organ_predictors:
             sig = get_monolithic_signature(organ)
-            self._organ_predictors[organ] = dspy.Predict(sig)
+            self._organ_predictors[organ] = dspy.ChainOfThought(sig)
         return self._organ_predictors[organ]
 
     def forward(self, report: str, logger: logging.Logger,
                 fname: str = "") -> dict:
-        logger.debug("[monolithic] %s", fname)
+        logger.debug("[cot] %s", fname)
         paragraphs = [p.strip() for p in report.split("\n\n") if p.strip()]
-
         context_response = self.analyzer_is_cancer(report=paragraphs)
         if not context_response.cancer_excision_report:
             return {"cancer_excision_report": False,
                     "cancer_category": None, "cancer_data": {}}
-
         organ = context_response.cancer_category
         out: dict = {
             "cancer_excision_report": True,
@@ -65,7 +68,6 @@ class MonolithicPipeline(dspy.Module):
         }
         if organ not in organmodels:
             return out
-
         report_jsonized: dict = {}
         if not self.skip_jsonize:
             try:
@@ -73,28 +75,27 @@ class MonolithicPipeline(dspy.Module):
                 report_jsonized = jr.output or {}
             except Exception as e:
                 logger.warning("jsonize failed for %s: %s", fname, e)
-
         try:
             predictor = self._get_organ_predictor(organ)
             organ_response = predictor(
                 report=paragraphs, report_jsonized=report_jsonized)
-            out["cancer_data"] = dump_prediction_plain(organ_response)
+            data = dump_prediction_plain(organ_response)
+            reasoning = data.pop(REASONING_FIELD, None)
+            out["cancer_data"] = data
+            if reasoning is not None:
+                out["_reasoning"] = reasoning
         except Exception as e:
-            logger.error("monolithic %s failed for %s: %s", organ, fname, e)
+            logger.error("cot %s failed for %s: %s", organ, fname, e)
             out["_error"] = str(e)
         return out
-
-
-# Back-compat shim for callers that imported `_setup_model` from this module.
-def _setup_model(model_alias: str, overrides: dict | None = None) -> dict:
-    return _base.setup_dspy_lm(model_alias, overrides=overrides)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     _base.add_canonical_args(ap)
-    ap.add_argument("--skip-jsonize", action="store_true",
-                    help="ablation-of-ablation: also drop ReportJsonize")
+    ap.add_argument("--skip-jsonize", action="store_true")
+    ap.add_argument("--cot-everywhere", action="store_true",
+                    help="wrap router and ReportJsonize in ChainOfThought too")
     return ap.parse_args(argv)
 
 
@@ -103,23 +104,26 @@ def run(args: argparse.Namespace) -> int:
     overrides = _base.load_decoding_overrides(args.model)
     lm_kwargs = _base.setup_dspy_lm(args.model, overrides=overrides)
 
-    logger = _base.make_logger("dspy_monolithic", paths.run_dir(run_name),
+    logger = _base.make_logger("chain_of_thought", paths.run_dir(run_name),
                                args.verbose)
-    logger.info("cell=%s model=%s slug=%s run=%s organs=%s",
+    logger.info("cell=%s model=%s slug=%s run=%s cot_everywhere=%s",
                 CELL_ID, args.model, paths.model_slug, run_name,
-                [o[0] for o in organs])
+                args.cot_everywhere)
 
-    pipe = MonolithicPipeline(skip_jsonize=args.skip_jsonize)
+    pipe = CoTPipeline(skip_jsonize=args.skip_jsonize,
+                       cot_everywhere=args.cot_everywhere)
 
-    def _predict(report_text: str, organ: str, case_id: str) -> dict:
+    def _predict(report_text: str, organ_n: str, case_id: str) -> dict:
         return pipe(report=report_text, logger=logger, fname=case_id)
 
     summary = _base.run_loop(
         paths, organs, run_name, model_alias=args.model,
         predict=_predict, args=args, logger=logger,
         decoding=lm_kwargs,
-        manifest_extra={"skip_jsonize": args.skip_jsonize},
+        manifest_extra={"skip_jsonize": args.skip_jsonize,
+                        "cot_everywhere": args.cot_everywhere},
         extra_meta={"skip_jsonize": args.skip_jsonize,
+                    "cot_everywhere": args.cot_everywhere,
                     "dspy_lm_kwargs": lm_kwargs},
     )
 

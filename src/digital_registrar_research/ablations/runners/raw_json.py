@@ -1,50 +1,41 @@
 """
 Cell C — DSPy-less, raw LLM with JSON mode.
 
-The entire pipeline runs without DSPy. We make at most two raw LLM
-calls per report via the OpenAI-compatible chat API:
+The pipeline runs without DSPy. We make at most two raw LLM calls per
+report via the OpenAI-compatible chat API:
 
     Call 1 — classify: {cancer_excision_report, cancer_category}
     Call 2 — extract:  flat cancer_data dict matching the organ schema
 
-Both calls use `response_format={"type": "json_object"}`. For the
-extraction call the JSON schema is inlined in the system prompt (same
-schema the parent pipeline emits at runtime, derived from
-`schemas/schema_builder.py`).
+Both calls use ``response_format={"type": "json_object"}``. For the
+extraction call the JSON schema is inlined in the system prompt.
 
 Local models go through Ollama's OpenAI-compatible endpoint
-(`http://localhost:11434/v1`), so the same `OpenAI` client works for
-both `gpt-oss:20b` and `gpt-4-turbo`.
+(``http://localhost:11434/v1``) — derived from
+:data:`models.common.localaddr` so the alias `--model gptoss` resolves
+to ``gpt-oss:20b`` end-to-end.
 
-Usage:
-    # Cell C × gpt-oss:20b
-    python runners/raw_json.py --model gpt-oss:20b \\
-        --api-base http://localhost:11434/v1 \\
-        --out workspace/results/ablations/raw_json_gpt-oss
-
-    # Cell C × gpt-4-turbo
-    OPENAI_API_KEY=... python runners/raw_json.py --model gpt-4-turbo \\
-        --out workspace/results/ablations/raw_json_gpt4
+Canonical layout:
+    --folder dummy --dataset tcga --model gptoss [--run runNN]
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import time
-from pathlib import Path
 
 from openai import OpenAI
 
-from ...paths import SPLITS_JSON
+from ...paths import SCHEMAS_DATA
 from ...schemas.builder import (
     describe_field_list,
     flatten_schema_for_prompt,
     load_organ_schema,
     validate_cancer_data,
 )
+from . import _base
 
-SPLITS_PATH = SPLITS_JSON
+CELL_ID = "raw_json"
 
 CANCER_CATEGORIES = [
     "stomach", "colorectal", "breast", "esophagus", "lung", "prostate",
@@ -66,10 +57,6 @@ Return ONLY a JSON object with this exact shape:
     "cancer_category": """ + " | ".join(f'"{c}"' for c in CANCER_CATEGORIES) + """ | null,
     "cancer_category_others_description": string | null
   }
-
-`cancer_category` must be null if `cancer_excision_report` is false.
-`cancer_category_others_description` is non-null only when
-`cancer_category` is "others".
 """
 
 EXTRACT_SYSTEM_TEMPLATE = """\
@@ -87,45 +74,33 @@ Schema (field_name (type): description):
 
 
 class RawJSONRunner:
-    def __init__(self, model: str, api_key: str | None,
+    def __init__(self, model_tag: str, api_key: str | None,
                  api_base: str | None):
-        self.model = model
-        kwargs = {"api_key": api_key or "EMPTY"}
+        self.model = model_tag
+        kwargs: dict = {"api_key": api_key or "EMPTY"}
         if api_base:
             kwargs["base_url"] = api_base
         self.client = OpenAI(**kwargs)
         self.validation_retries = 0
 
-    def _chat(self, system: str, user: str,
-              schema_hint: dict | None = None) -> dict:
-        """One JSON-mode chat call. `schema_hint` is passed for models
-        that support `response_format={type: json_schema}` (OpenAI
-        gpt-4-turbo and newer); falls back to `json_object` otherwise."""
+    def _chat(self, system: str, user: str) -> dict:
         try:
             resp = self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
+                messages=[{"role": "system", "content": system},
+                          {"role": "user", "content": user}],
                 response_format={"type": "json_object"},
                 temperature=0.0,
             )
         except Exception:
-            # Some backends (older Ollama versions) reject response_format.
-            # Retry without the constraint.
             resp = self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content":
-                        system + "\n\nIMPORTANT: respond with a single "
-                                 "JSON object only — no prose, no code fences."},
-                    {"role": "user", "content": user},
-                ],
+                messages=[{"role": "system",
+                           "content": system + "\n\nReply with one JSON object only."},
+                          {"role": "user", "content": user}],
                 temperature=0.0,
             )
-        text = resp.choices[0].message.content or "{}"
-        return _parse_json_best_effort(text)
+        return _parse_json_best_effort(resp.choices[0].message.content or "{}")
 
     def classify(self, report: str) -> dict:
         return self._chat(CLASSIFY_SYSTEM, report)
@@ -134,9 +109,8 @@ class RawJSONRunner:
         schema = flatten_schema_for_prompt(load_organ_schema(organ))
         system = EXTRACT_SYSTEM_TEMPLATE.format(
             organ=organ, field_list=describe_field_list(schema))
-        data = self._chat(system, report, schema_hint=schema)
+        data = self._chat(system, report)
         errors = validate_cancer_data(organ, data)
-        # One retry with errors surfaced to the model.
         if errors and len(errors) < 20:
             self.validation_retries += 1
             repair_user = (
@@ -145,7 +119,7 @@ class RawJSONRunner:
                 + f"\n\nFix them and return the corrected JSON only.\n\n"
                 f"Original report:\n{report}"
             )
-            data = self._chat(system, repair_user, schema_hint=schema)
+            data = self._chat(system, repair_user)
             errors = validate_cancer_data(organ, data)
         return data, errors
 
@@ -155,14 +129,13 @@ class RawJSONRunner:
             return {"cancer_excision_report": False,
                     "cancer_category": None, "cancer_data": {}}
         organ = cls.get("cancer_category")
-        out = {
+        out: dict = {
             "cancer_excision_report": True,
             "cancer_category": organ,
             "cancer_category_others_description":
                 cls.get("cancer_category_others_description"),
             "cancer_data": {},
         }
-        from ...paths import SCHEMAS_DATA
         if organ in {"others", None} or not (SCHEMAS_DATA / f"{organ}.json").exists():
             return out
         cancer_data, errors = self.extract(report, organ)
@@ -173,10 +146,8 @@ class RawJSONRunner:
 
 
 def _parse_json_best_effort(text: str) -> dict:
-    """Strip ``` fences, extract the largest {...} block, parse."""
     text = text.strip()
     if text.startswith("```"):
-        # Strip ```json ... ``` fence.
         text = text.split("```", 2)[1]
         if text.startswith("json"):
             text = text[4:]
@@ -185,7 +156,6 @@ def _parse_json_best_effort(text: str) -> dict:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-    # Fallback: pull out the outermost braces.
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
@@ -197,62 +167,53 @@ def _parse_json_best_effort(text: str) -> dict:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--model", required=True,
-                    help="model id (e.g. 'gpt-4-turbo' or 'gpt-oss:20b')")
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    _base.add_canonical_args(ap)
     ap.add_argument("--api-base", default=None,
-                    help="for local Ollama: http://localhost:11434/v1")
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--limit", type=int, default=None)
+                    help=f"override Ollama endpoint (default: {_base.default_api_base()})")
     return ap.parse_args(argv)
 
 
-def run(args: argparse.Namespace) -> None:
-    """Execute the Cell-C run for the given resolved args.
+def run(args: argparse.Namespace) -> int:
+    paths, organs, run_name = _base.resolve_run_paths(args, CELL_ID)
+    api_base = args.api_base or _base.default_api_base()
+    api_key = os.environ.get("OPENAI_API_KEY") or "ollama"
+    model_tag = _base.ollama_tag(args.model)
 
-    Exposed separately from ``main()`` so wrappers under ``scripts/ablations/``
-    (smoke, grid driver) can construct an ``argparse.Namespace`` directly and
-    call ``run()`` without sys.argv mutation."""
-    # Local Ollama default.
-    api_base = args.api_base
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if args.model.startswith(("gpt-oss", "gemma", "qwen", "phi", "llama")):
-        api_base = api_base or "http://localhost:11434/v1"
-        api_key = api_key or "ollama"
+    logger = _base.make_logger("raw_json", paths.run_dir(run_name),
+                               args.verbose)
+    logger.info("cell=%s model=%s slug=%s tag=%s run=%s organs=%s",
+                CELL_ID, args.model, paths.model_slug, model_tag, run_name,
+                [o[0] for o in organs])
 
-    runner = RawJSONRunner(args.model, api_key, api_base)
+    runner = RawJSONRunner(model_tag, api_key, api_base)
 
-    with SPLITS_PATH.open(encoding="utf-8") as f:
-        cases = json.load(f)["test"]
-    if args.limit:
-        cases = cases[:args.limit]
+    def _predict(report_text: str, organ: str, case_id: str) -> dict:
+        return runner.run_case(report_text)
 
-    out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    summary = _base.run_loop(
+        paths, organs, run_name, model_alias=args.model,
+        predict=_predict, args=args, logger=logger,
+        decoding={"temperature": 0.0, "api_base": api_base, "tag": model_tag},
+        manifest_extra={"validation_retries": runner.validation_retries},
+        extra_meta={"validation_retries": runner.validation_retries,
+                    "api_base": api_base, "model_tag": model_tag},
+    )
 
-    ledger = []
-    for case in cases:
-        report = Path(case["report_path"]).read_text(encoding="utf-8")
-        t0 = time.perf_counter()
-        try:
-            result = runner.run_case(report)
-        except Exception as e:
-            result = {"_error": str(e)}
-        elapsed = time.perf_counter() - t0
-        with (out_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-        ledger.append({"id": case["id"], "elapsed_s": elapsed})
-        print(f"  [{case['id']}] {elapsed:.1f}s")
+    print(f"OK={summary.n_ok} ERR={summary.n_pipeline_error} "
+          f"CACHED={summary.n_cached} N={summary.n_cases} "
+          f"WALL={summary.wall_time_s:.1f}s")
+    print(f"run dir: {paths.run_dir(run_name)}")
 
-    with (out_dir / "_ledger.json").open("w", encoding="utf-8") as f:
-        json.dump({"model": args.model,
-                   "validation_retries": runner.validation_retries,
-                   "runs": ledger}, f, ensure_ascii=False, indent=2)
+    if summary.n_pipeline_error > 0 and not args.tolerate_errors:
+        return 1
+    return 0
 
 
-def main() -> None:
-    run(parse_args())
+def main(argv: list[str] | None = None) -> int:
+    return run(parse_args(argv))
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    sys.exit(main())

@@ -1,16 +1,16 @@
 """
-Cell B — DSPy + monolithic (one big signature per organ).
+C2 / C3 — Monolithic DSPy with N curated few-shot demos per organ.
 
-Runs the same top-level pipeline as the parent project — ``is_cancer``
-routing, optional ``ReportJsonize``, then **one** organ-specific DSPy
-signature (instead of the 5–7 in the modular baseline).
+Same pipeline shape as Cell B with each per-organ predictor constructed
+with ``demos=[Example, ...]``. Demo case IDs are pre-registered in
+``configs/ablations/fewshot_demos.yaml`` (build via
+``scripts/ablations/build_fewshot_demos.py``).
 
-Canonical layout (see ``runners/_base.py``):
+``--n-shots`` controls how many of the registered demos to attach (3
+for C2, 5 for C3).
 
-    --folder dummy --dataset tcga --model gptoss [--run runNN]
-
-Output:
-    {root}/results/ablations/{dataset}/dspy_monolithic/{model_slug}/{run}/{organ}/<case_id>.json
+Canonical layout:
+    --folder dummy --dataset tcga --model gptoss --n-shots 3 [--run runNN]
 """
 from __future__ import annotations
 
@@ -23,17 +23,18 @@ from ...models.common import ReportJsonize, is_cancer
 from ...models.modellist import organmodels
 from ...util.predictiondump import dump_prediction_plain
 from ..signatures.monolithic import get_monolithic_signature
+from ..utils.demos import load_demos
 from . import _base
 
-CELL_ID = "dspy_monolithic"
+CELL_ID = "fewshot_demos"
 
 
-class MonolithicPipeline(dspy.Module):
-    """Drop-in replacement for ``CancerPipeline`` with per-organ
-    signatures collapsed into a single monolithic signature."""
-
-    def __init__(self, skip_jsonize: bool = False):
+class FewshotPipeline(dspy.Module):
+    def __init__(self, n_shots: int, skip_jsonize: bool = False):
         super().__init__()
+        if n_shots <= 0:
+            raise ValueError("n_shots must be >= 1 for the C2/C3 cells")
+        self.n_shots = n_shots
         self.skip_jsonize = skip_jsonize
         self.analyzer_is_cancer = dspy.Predict(is_cancer)
         self.jsonize = dspy.Predict(ReportJsonize)
@@ -42,19 +43,21 @@ class MonolithicPipeline(dspy.Module):
     def _get_organ_predictor(self, organ: str) -> dspy.Predict:
         if organ not in self._organ_predictors:
             sig = get_monolithic_signature(organ)
-            self._organ_predictors[organ] = dspy.Predict(sig)
+            predictor = dspy.Predict(sig)
+            demos = load_demos(organ, self.n_shots)
+            if demos:
+                predictor.demos = demos
+            self._organ_predictors[organ] = predictor
         return self._organ_predictors[organ]
 
     def forward(self, report: str, logger: logging.Logger,
                 fname: str = "") -> dict:
-        logger.debug("[monolithic] %s", fname)
+        logger.debug("[fewshot n=%d] %s", self.n_shots, fname)
         paragraphs = [p.strip() for p in report.split("\n\n") if p.strip()]
-
         context_response = self.analyzer_is_cancer(report=paragraphs)
         if not context_response.cancer_excision_report:
             return {"cancer_excision_report": False,
                     "cancer_category": None, "cancer_data": {}}
-
         organ = context_response.cancer_category
         out: dict = {
             "cancer_excision_report": True,
@@ -65,7 +68,6 @@ class MonolithicPipeline(dspy.Module):
         }
         if organ not in organmodels:
             return out
-
         report_jsonized: dict = {}
         if not self.skip_jsonize:
             try:
@@ -73,28 +75,23 @@ class MonolithicPipeline(dspy.Module):
                 report_jsonized = jr.output or {}
             except Exception as e:
                 logger.warning("jsonize failed for %s: %s", fname, e)
-
         try:
             predictor = self._get_organ_predictor(organ)
             organ_response = predictor(
                 report=paragraphs, report_jsonized=report_jsonized)
             out["cancer_data"] = dump_prediction_plain(organ_response)
         except Exception as e:
-            logger.error("monolithic %s failed for %s: %s", organ, fname, e)
+            logger.error("fewshot %s failed for %s: %s", organ, fname, e)
             out["_error"] = str(e)
         return out
-
-
-# Back-compat shim for callers that imported `_setup_model` from this module.
-def _setup_model(model_alias: str, overrides: dict | None = None) -> dict:
-    return _base.setup_dspy_lm(model_alias, overrides=overrides)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     _base.add_canonical_args(ap)
-    ap.add_argument("--skip-jsonize", action="store_true",
-                    help="ablation-of-ablation: also drop ReportJsonize")
+    ap.add_argument("--n-shots", type=int, default=3,
+                    help="how many pre-registered demos per organ to attach")
+    ap.add_argument("--skip-jsonize", action="store_true")
     return ap.parse_args(argv)
 
 
@@ -103,23 +100,25 @@ def run(args: argparse.Namespace) -> int:
     overrides = _base.load_decoding_overrides(args.model)
     lm_kwargs = _base.setup_dspy_lm(args.model, overrides=overrides)
 
-    logger = _base.make_logger("dspy_monolithic", paths.run_dir(run_name),
+    logger = _base.make_logger("fewshot_demos", paths.run_dir(run_name),
                                args.verbose)
-    logger.info("cell=%s model=%s slug=%s run=%s organs=%s",
-                CELL_ID, args.model, paths.model_slug, run_name,
-                [o[0] for o in organs])
+    logger.info("cell=%s model=%s slug=%s run=%s n_shots=%d",
+                CELL_ID, args.model, paths.model_slug, run_name, args.n_shots)
 
-    pipe = MonolithicPipeline(skip_jsonize=args.skip_jsonize)
+    pipe = FewshotPipeline(n_shots=args.n_shots,
+                           skip_jsonize=args.skip_jsonize)
 
-    def _predict(report_text: str, organ: str, case_id: str) -> dict:
+    def _predict(report_text: str, organ_n: str, case_id: str) -> dict:
         return pipe(report=report_text, logger=logger, fname=case_id)
 
     summary = _base.run_loop(
         paths, organs, run_name, model_alias=args.model,
         predict=_predict, args=args, logger=logger,
         decoding=lm_kwargs,
-        manifest_extra={"skip_jsonize": args.skip_jsonize},
-        extra_meta={"skip_jsonize": args.skip_jsonize,
+        manifest_extra={"n_shots": args.n_shots,
+                        "skip_jsonize": args.skip_jsonize},
+        extra_meta={"n_shots": args.n_shots,
+                    "skip_jsonize": args.skip_jsonize,
                     "dspy_lm_kwargs": lm_kwargs},
     )
 
