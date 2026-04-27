@@ -1,7 +1,12 @@
 from pathlib import Path
-
-root = Path(".")
-prefix = "cmuh_"
+#take argument from command line for root path, default to current directory
+import argparse
+parser = argparse.ArgumentParser(description="Rename JSON files by adding a prefix.")
+parser.add_argument("--root", type=str, default=".", help="Root directory to search for JSON files.")
+parser.add_argument("--prefix", type=str, default="cmuh", help="Prefix to add to JSON file names.")
+args = parser.parse_args()
+root = Path(args.root)
+prefix = args.prefix
 
 for path in root.rglob("*.json"):
     if path.name.startswith(prefix):
