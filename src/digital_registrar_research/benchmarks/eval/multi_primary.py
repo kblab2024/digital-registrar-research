@@ -116,7 +116,7 @@ def n_tumors_estimate(annotation: dict[str, Any]) -> int:
         - otherwise → return 1.
 
     This is approximate. Documented as such in
-    ``doc/eval/glossary.md`` and the multi-primary-failure CSV.
+    ``docs/eval/glossary.md`` and the multi-primary-failure CSV.
     """
     cd = annotation.get("cancer_data") or {}
     laterality = normalize(cd.get("cancer_laterality") or annotation.get("cancer_laterality"))

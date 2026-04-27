@@ -75,7 +75,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Score scalar (non-nested) fields with three-way outcome model.",
         description=__doc__,
     )
-    add_common_args(parser)
+    add_common_args(parser, subcommand="non_nested")
     add_model_args(parser)
     parser.set_defaults(_handler=_main)
 

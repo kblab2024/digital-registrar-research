@@ -60,7 +60,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Detailed missingness analysis across methods.",
         description=__doc__,
     )
-    add_common_args(parser)
+    add_common_args(parser, subcommand="completeness")
     parser.add_argument(
         "--methods", nargs="+", required=True,
         help="One or more 'method:model[:run_ids_csv]' triples. "

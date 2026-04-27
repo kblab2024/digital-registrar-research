@@ -1195,7 +1195,17 @@ def build_model_dirs(root: Path) -> None:
 def write_skeleton_gitkeeps(root: Path) -> None:
     """Drop .gitkeep at the root of dummy/data/<ds>/ and dummy/results/ so the
     layout survives even when generated artifacts are wiped or gitignored.
+
+    The dummy ``results/`` tree mirrors the production ``workspace/results/``
+    architecture: ``predictions/``, ``eval/``, ``ablations/``, ``benchmarks/``.
+    The latter three are populated only when the corresponding scripts run
+    against this dummy root; the directories exist as empty placeholders so
+    the layout is discoverable.
     """
+    # Ensure the canonical results/ subtree exists.
+    for sub in ("predictions", "eval", "ablations", "benchmarks"):
+        (root / "results" / sub).mkdir(parents=True, exist_ok=True)
+
     for sub in ("data", "results"):
         sub_root = root / sub
         if not sub_root.exists():

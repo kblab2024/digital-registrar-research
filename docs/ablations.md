@@ -18,13 +18,13 @@ The Digital Registrar pipeline ships with per-organ subsection signatures (5–7
 ```
 src/digital_registrar_research/ablations/
 ├── runners/
-│   ├── reuse_baseline.py       # Cell A: copy modular outputs into results/
+│   ├── reuse_baseline.py       # Cell A: copy modular outputs into workspace/results/ablations/
 │   ├── dspy_monolithic.py      # Cell B: one DSPy signature per organ
 │   └── raw_json.py             # Cell C: raw OpenAI-compatible chat API
 ├── signatures/
 │   └── monolithic.py           # Dynamically merges per-subsection signatures into one
 └── eval/
-    └── run_ablations.py        # aggregator → results/ablations/tables/
+    └── run_ablations.py        # aggregator → workspace/results/ablations/tables/
 ```
 
 ## Why monolithic.py is dynamic
@@ -39,11 +39,11 @@ Cell C bypasses DSPy entirely. To keep the comparison apples-to-apples (same tar
 
 ```bash
 registrar-ablate                                    # runs the eval aggregator
-# Per-cell runners output to results/ablations/<cell>_<model>/
+# Per-cell runners output to workspace/results/ablations/<cell>_<model>/
 python -m digital_registrar_research.ablations.runners.reuse_baseline \
     --modular-gpt-oss-dir <existing modular gpt-oss runs>
-python -m digital_registrar_research.ablations.runners.dspy_monolithic --model gpt --out results/ablations/dspy_monolithic_gpt-oss
-OPENAI_API_KEY=... python -m digital_registrar_research.ablations.runners.raw_json --model gpt-4-turbo --out results/ablations/raw_json_gpt4
+python -m digital_registrar_research.ablations.runners.dspy_monolithic --model gpt --out workspace/results/ablations/dspy_monolithic_gpt-oss
+OPENAI_API_KEY=... python -m digital_registrar_research.ablations.runners.raw_json --model gpt-4-turbo --out workspace/results/ablations/raw_json_gpt4
 ```
 
 ## Output tables

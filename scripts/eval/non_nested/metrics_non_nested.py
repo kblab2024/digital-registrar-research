@@ -9,7 +9,7 @@ All metrics that produce p-values get adjusted via
 not here — so the multiple-comparisons correction applies to the
 correct family.
 
-References (full citations in ``doc/eval/methods_citations.md``):
+References (full citations in ``docs/eval/methods_citations.md``):
     Wilson 1927; Cohen 1960, 1968; Matthews 1975; Pedregosa et al. 2011.
 """
 from __future__ import annotations

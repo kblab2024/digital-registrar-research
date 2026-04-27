@@ -23,10 +23,10 @@ These scripts are **deprecated** and retained only for one transition release. U
 - **Curated semantic-neighbor analysis** — `accuracy_collapsing_neighbors` for clinically-equivalent confusion pairs.
 - **Cross-dataset generalisation** — KL / JS / Wasserstein distribution-shift indicators.
 - **Multiple-comparisons correction** — Holm-Bonferroni for primary, Benjamini-Hochberg for secondary endpoints.
-- **Paper-grade documentation** in `doc/eval/` — every metric carries its package + function + version + original-paper citation.
+- **Paper-grade documentation** in `docs/eval/` — every metric carries its package + function + version + original-paper citation.
 - **Standardised folder layout** — `--root dummy|workspace`, `--dataset cmuh|tcga`, `--annotator <full_subdir_name>`.
 
-See [doc/eval/index.md](../../doc/eval/index.md) for the full documentation tree.
+See [docs/eval/index.md](../../docs/eval/index.md) for the full documentation tree.
 
 ## Removal timeline
 

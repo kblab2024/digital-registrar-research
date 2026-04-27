@@ -14,6 +14,7 @@ This package wraps four research concerns around the slim production extractor:
 | [example data](data.md) | Datasets (cmuh, tcga), layout conventions, dummy skeleton |
 | [experiment protocol](experiment_protocol.md) | 2026-04 experiment cross-product, evaluation questions, invariants |
 | [branching strategy](branching_strategy.md) | 12-branch working model (testing / refactor / experiment state) |
+| [evaluation pipeline](eval/index.md) | Paper-grade metric explanations, recipes, and citations |
 
 ## Why this exists
 

@@ -12,7 +12,7 @@ Usage (from the repo root, with `pip install -e '.[benchmarks]'`):
         --annotations data/tcga_annotation_20251117 \
         --dataset     data/tcga_dataset_20251117 \
         --ckpt        ckpts/clinicalbert_cls.pt \
-        --out         results/benchmarks/clinicalbert_cls
+        --out         workspace/results/benchmarks/clinicalbert_cls
 """
 from __future__ import annotations
 
@@ -75,8 +75,9 @@ def main() -> None:
                     help="Raw reports folder (default: %(default)s).")
     ap.add_argument("--ckpt", default="ckpts/clinicalbert_cls.pt",
                     help="Checkpoint produced by the training script.")
-    ap.add_argument("--out", default="results/benchmarks/clinicalbert_cls",
-                    help="Output folder for per-case prediction JSONs.")
+    ap.add_argument("--out", default=str(paths.BENCHMARKS_RESULTS / "clinicalbert_cls"),
+                    help="Output folder for per-case prediction JSONs "
+                         "(default: %(default)s).")
     ap.add_argument("--skip-rebuild-splits", action="store_true",
                     help="Reuse the existing splits.json instead of rebuilding.")
     args = ap.parse_args()

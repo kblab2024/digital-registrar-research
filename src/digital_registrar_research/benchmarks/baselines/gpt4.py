@@ -11,7 +11,7 @@ Requires:
     set OPENAI_API_KEY=sk-...
 
 Usage:
-    python baselines/gpt4_dspy.py --split test --out ../results/gpt4_dspy
+    python baselines/gpt4_dspy.py --split test --out workspace/results/benchmarks/gpt4_dspy
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import dspy
 
-from ...paths import SPLITS_JSON
+from ...paths import BENCHMARKS_RESULTS, SPLITS_JSON
 from ...pipeline import CancerPipeline
 
 DEFAULT_MODEL = "openai/gpt-4-turbo"  # swap to "openai/gpt-4o" if preferred
@@ -82,8 +82,10 @@ def run_on_split(split_name: str, out_dir: Path, limit: int | None = None,
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="test", choices=["train", "test"])
-    ap.add_argument("--out", default="../results/gpt4_dspy",
-                    help="output directory (relative to this file)")
+    ap.add_argument("--out", default=str(BENCHMARKS_RESULTS / "gpt4_dspy"),
+                    help="Output directory (default: %(default)s). "
+                         "If a relative path is passed, it is resolved "
+                         "relative to this file's directory.")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--model", default=DEFAULT_MODEL)
     args = ap.parse_args()

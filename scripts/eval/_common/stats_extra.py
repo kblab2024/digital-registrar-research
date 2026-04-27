@@ -4,7 +4,7 @@ Default policy: prefer canonical library calls (``sklearn.metrics``,
 ``scipy.stats``, ``statsmodels.stats.multitest``) over custom code so
 the paper's Methods section can cite well-known packages. Each helper
 documents its library source for verbatim copying into
-``doc/eval/methods_citations.md``.
+``docs/eval/methods_citations.md``.
 
 References:
     Holm-Bonferroni: Holm (1979).

@@ -22,11 +22,13 @@ KNOWN_ANNOTATORS: tuple[str, ...] = (
 )
 
 
-def add_common_args(parser: argparse.ArgumentParser) -> None:
+def add_common_args(parser: argparse.ArgumentParser, *, subcommand: str) -> None:
     """Add ``--root``, ``--dataset``, ``--organs``, ``--cases``, ``--out``,
     ``--seed``, ``--alpha``, ``--n-boot``, ``--n-jobs``, ``-v``.
 
-    Every subcommand needs all of these.
+    Every subcommand needs all of these. ``subcommand`` is the name of
+    the calling subcommand (e.g. ``"non_nested"``); it is used to build
+    the default ``--out`` directory ``workspace/results/eval/<subcommand>``.
     """
     parser.add_argument(
         "--root", required=True,
@@ -46,8 +48,10 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
         help="Optional case-id allowlist. Pass either inline IDs or @path/to/list.txt.",
     )
     parser.add_argument(
-        "--out", required=True, type=Path,
-        help="Output directory. A manifest.json will be stamped here.",
+        "--out", type=Path,
+        default=Path("workspace") / "results" / "eval" / subcommand,
+        help="Output directory (default: %(default)s). "
+             "A manifest.json will be stamped here.",
     )
     parser.add_argument(
         "--seed", type=int, default=0,

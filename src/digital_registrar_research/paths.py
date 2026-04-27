@@ -18,8 +18,9 @@ RAW_REPORTS: Path = DATA_ROOT / "tcga_dataset_20251117"
 PREANNOTATIONS: Path = DATA_ROOT / "tcga_result_20251117"
 GOLD_ANNOTATIONS: Path = DATA_ROOT / "tcga_annotation_20251117"
 
-# Runtime artifacts (gitignored)
-RESULTS_ROOT: Path = REPO_ROOT / "results"
+# Runtime artifacts (gitignored). The workspace tree mirrors the dummy/
+# skeleton: workspace/results/{predictions,eval,ablations,benchmarks}/...
+RESULTS_ROOT: Path = REPO_ROOT / "workspace" / "results"
 BENCHMARKS_RESULTS: Path = RESULTS_ROOT / "benchmarks"
 ABLATIONS_RESULTS: Path = RESULTS_ROOT / "ablations"
 

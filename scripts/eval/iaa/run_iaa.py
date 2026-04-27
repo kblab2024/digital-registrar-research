@@ -52,7 +52,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Inter-annotator agreement + preann effect.",
         description=__doc__,
     )
-    add_common_args(parser)
+    add_common_args(parser, subcommand="iaa")
     add_iaa_args(parser)
     parser.add_argument(
         "--pairs", nargs="*", default=None,

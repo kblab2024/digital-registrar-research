@@ -6,7 +6,7 @@ Reuses the scoring harness at
 "field correct", "attempted", and the nested bipartite match are the
 same as in the main comparison tables.
 
-Output files, all under `../results/`:
+Output files, all under ``ABLATIONS_RESULTS`` (``workspace/results/ablations/``):
 
     ablation_grid.csv         long-form: one row per (cell, model, case, field)
     ablation_summary.csv      per-(cell, model, field): accuracy + coverage
@@ -151,7 +151,7 @@ def main() -> None:
 
     method_to_preds = _discover(args.cells, args.models)
     if not method_to_preds:
-        sys.exit("No prediction folders found under results/. "
+        sys.exit(f"No prediction folders found under {RESULTS}. "
                  "Run the cell runners first.")
 
     grid_csv = RESULTS / "ablation_grid.csv"

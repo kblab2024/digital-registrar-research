@@ -5,7 +5,7 @@ The modular DSPy × gpt-oss:20b run IS the parent project's pipeline;
 the authors should already have predictions for the test split in some
 directory (for example, wherever `digitalregistrar/experiment.py`
 writes). This script simply copies those per-case JSONs into
-`results/dspy_modular_<model>/` so every cell has a consistent
+`workspace/results/ablations/dspy_modular_<model>/` so every cell has a consistent
 on-disk layout for the aggregator.
 
 We accept an arbitrary source directory for each model — the script

@@ -15,7 +15,7 @@ entry has:
 Used by:
     - ``scripts/eval/non_nested/metrics_non_nested.py`` to compute
       ``accuracy_collapsing_neighbors`` alongside the strict accuracy.
-    - ``doc/eval/confusion_pairs.md`` to render the curated-neighbor
+    - ``docs/eval/confusion_pairs.md`` to render the curated-neighbor
       table for the writeup.
 
 Neighbors are *symmetric*: ``(a, b)`` implies ``(b, a)``. Lookups via

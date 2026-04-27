@@ -3,7 +3,9 @@ Runs the shared scoring harness across every method and writes the
 result tables.
 
 Assumes each method has already produced per-case JSON predictions in
-`../results/<method>/<case_id>.json`. This script just aggregates.
+``BENCHMARKS_RESULTS / <method> / <case_id>.json`` (i.e.
+``workspace/results/benchmarks/<method>/<case_id>.json``). This script
+just aggregates.
 
 Usage:
     python eval/run_all.py

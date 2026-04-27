@@ -19,7 +19,7 @@ The script is idempotent/resumable: valid existing outputs are skipped.
 Usage:
     python scripts/run_gpt_oss_multirun.py \
         --config configs/multirun_gpt_oss.yaml \
-        --output results/benchmarks/gpt_oss/ \
+        --output workspace/results/benchmarks/gpt_oss/ \
         [--runs run1 run2] [--dry-run]
 """
 from __future__ import annotations
@@ -490,7 +490,7 @@ def main() -> None:
                     help="Frozen protocol YAML (default: configs/local/ if present, "
                          "else configs/multirun_gpt_oss.yaml).")
     ap.add_argument("--output", type=Path,
-                    default=REPO_ROOT / "results/benchmarks/gpt_oss",
+                    default=REPO_ROOT / "workspace" / "results" / "benchmarks" / "gpt_oss",
                     help="Output root (default: %(default)s).")
     ap.add_argument("--runs", nargs="*", default=None,
                     help="Optional subset of run-ids to (re)execute, e.g. run1 run2.")

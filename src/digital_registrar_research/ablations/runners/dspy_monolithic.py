@@ -10,15 +10,15 @@ Supports both backbone models referenced in the parent `model_list`
 
 Usage:
     # Cell B × gpt-oss (local Ollama)
-    python runners/dspy_monolithic.py --model gpt --out results/dspy_monolithic_gpt-oss
+    python runners/dspy_monolithic.py --model gpt --out workspace/results/ablations/dspy_monolithic_gpt-oss
 
     # Cell B × gpt-4-turbo
     OPENAI_API_KEY=... python runners/dspy_monolithic.py \\
-        --model gpt4 --out results/dspy_monolithic_gpt4
+        --model gpt4 --out workspace/results/ablations/dspy_monolithic_gpt4
 
     # Skip the ReportJsonize intermediate step (supplementary variant)
     python runners/dspy_monolithic.py --model gpt --skip-jsonize \\
-        --out results/dspy_monolithic_gpt-oss_nojsonize
+        --out workspace/results/ablations/dspy_monolithic_gpt-oss_nojsonize
 """
 from __future__ import annotations
 

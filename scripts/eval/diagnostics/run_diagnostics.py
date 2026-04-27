@@ -40,8 +40,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Path to iaa output directory.",
     )
     parser.add_argument(
-        "--out", type=Path, required=True,
-        help="Output directory.",
+        "--out", type=Path,
+        default=Path("workspace") / "results" / "eval" / "diagnostics",
+        help="Output directory (default: %(default)s).",
     )
     parser.add_argument(
         "--top-n-worst", type=int, default=20,

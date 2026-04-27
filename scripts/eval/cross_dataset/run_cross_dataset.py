@@ -43,8 +43,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Right non_nested output directory (typically TCGA).",
     )
     parser.add_argument(
-        "--out", type=Path, required=True,
-        help="Output directory.",
+        "--out", type=Path,
+        default=Path("workspace") / "results" / "eval" / "cross_dataset",
+        help="Output directory (default: %(default)s).",
     )
     parser.add_argument(
         "--n-boot", type=int, default=2000,

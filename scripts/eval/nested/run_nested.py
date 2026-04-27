@@ -112,7 +112,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Score nested-list fields (regional_lymph_node, margins, biomarkers).",
         description=__doc__,
     )
-    add_common_args(parser)
+    add_common_args(parser, subcommand="nested")
     add_model_args(parser)
     parser.add_argument(
         "--field", required=True, choices=tuple(SCORERS.keys()),

@@ -10,7 +10,7 @@ Core primitives:
     field_correct(g, p, field)  — per-field scoring with tolerance rules
     match_nested_list(g, p, k)  — bipartite greedy match of list-of-dicts fields
     score_case(gold, pred)      — returns {field: bool/None} across fair scope
-    aggregate_to_csv(method_to_preds) — writes results/by_method.csv
+    aggregate_to_csv(method_to_preds) — writes workspace/results/benchmarks/by_method.csv
 
 Coverage rule
 -------------
@@ -187,7 +187,7 @@ def aggregate_to_csv(method_to_preds: dict[str, Path],
     method_to_preds: {"digital_registrar": Path(".../dr"), "gpt4_dspy": Path(...), ...}
     gold_root: folder of gold annotations (path resolved via splits.json entries)
     splits_path: data/splits.json
-    out_csv: results/by_method.csv
+    out_csv: workspace/results/benchmarks/by_method.csv
     """
     with splits_path.open(encoding="utf-8") as f:
         split = json.load(f)

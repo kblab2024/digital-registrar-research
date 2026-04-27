@@ -24,7 +24,7 @@ src/digital_registrar_research/benchmarks/
 └── eval/
     ├── scope.py                # FAIR_SCOPE whitelist + field-type definitions (canonical)
     ├── metrics.py              # field-level accuracy + nested bipartite matching (canonical)
-    └── run_all.py              # aggregator → results/benchmarks/tables/
+    └── run_all.py              # aggregator → workspace/results/benchmarks/tables/
 ```
 
 ## Scoring
@@ -39,11 +39,11 @@ src/digital_registrar_research/benchmarks/
 # 1. generate the train/test split (run once)
 registrar-split
 
-# 2. run each baseline (each writes to results/benchmarks/<method>/)
+# 2. run each baseline (each writes to workspace/results/benchmarks/<method>/)
 python -m digital_registrar_research.benchmarks.baselines.rules data/tcga_dataset_20251117/tcga1/<some>.txt
-OPENAI_API_KEY=... python -m digital_registrar_research.benchmarks.baselines.gpt4 --split test --out results/benchmarks/gpt4
-python -m digital_registrar_research.benchmarks.baselines.clinicalbert_cls --phase train --ckpt results/benchmarks/clinicalbert_cls/cls.pt
-python -m digital_registrar_research.benchmarks.baselines.clinicalbert_cls --phase predict --ckpt results/benchmarks/clinicalbert_cls/cls.pt
+OPENAI_API_KEY=... python -m digital_registrar_research.benchmarks.baselines.gpt4 --split test --out workspace/results/benchmarks/gpt4
+python -m digital_registrar_research.benchmarks.baselines.clinicalbert_cls --phase train --ckpt workspace/results/benchmarks/clinicalbert_cls/cls.pt
+python -m digital_registrar_research.benchmarks.baselines.clinicalbert_cls --phase predict --ckpt workspace/results/benchmarks/clinicalbert_cls/cls.pt
 
 # 3. aggregate
 registrar-benchmark

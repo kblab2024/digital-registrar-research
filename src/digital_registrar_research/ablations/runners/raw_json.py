@@ -20,11 +20,11 @@ Usage:
     # Cell C × gpt-oss:20b
     python runners/raw_json.py --model gpt-oss:20b \\
         --api-base http://localhost:11434/v1 \\
-        --out results/raw_json_gpt-oss
+        --out workspace/results/ablations/raw_json_gpt-oss
 
     # Cell C × gpt-4-turbo
     OPENAI_API_KEY=... python runners/raw_json.py --model gpt-4-turbo \\
-        --out results/raw_json_gpt4
+        --out workspace/results/ablations/raw_json_gpt4
 """
 from __future__ import annotations
 

@@ -6,7 +6,7 @@ Inputs
 ------
 Expects the Part B artifact layout:
 
-    results/benchmarks/gpt_oss/
+    workspace/results/benchmarks/gpt_oss/
     ├── _manifest.yaml
     ├── run1/<case_id>.json
     ├── run2/<case_id>.json

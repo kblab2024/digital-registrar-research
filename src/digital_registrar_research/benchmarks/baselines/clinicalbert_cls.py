@@ -28,7 +28,7 @@ architectural-scope argument):
 Usage:
     python baselines/clinicalbert_cls.py --phase train
     python baselines/clinicalbert_cls.py --phase predict \\
-        --ckpt ckpts/clinicalbert_cls.pt --out ../results/clinicalbert_cls
+        --ckpt ckpts/clinicalbert_cls.pt --out workspace/results/benchmarks/clinicalbert_cls
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
-from ...paths import SPLITS_JSON
+from ...paths import BENCHMARKS_RESULTS, SPLITS_JSON
 
 # Reuse scope definitions from the eval module.
 from ..eval.scope import (
@@ -257,7 +257,8 @@ def main() -> None:
     ap.add_argument("--phase", choices=["train", "predict"], required=True)
     ap.add_argument("--epochs", type=int, default=5)
     ap.add_argument("--ckpt", default="ckpts/clinicalbert_cls.pt")
-    ap.add_argument("--out", default="../results/clinicalbert_cls")
+    ap.add_argument("--out", default=str(BENCHMARKS_RESULTS / "clinicalbert_cls"),
+                    help="Output dir (default: %(default)s).")
     ap.add_argument(
         "--included-only", action="store_true",
         help="Train only on cases where cancer_excision_report is True "

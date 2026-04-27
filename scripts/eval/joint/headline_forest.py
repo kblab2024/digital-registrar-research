@@ -43,8 +43,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Path to iaa output directory.",
     )
     parser.add_argument(
-        "--out", type=Path, required=True,
-        help="Output directory for headline_forest.csv + manifest.",
+        "--out", type=Path,
+        default=Path("workspace") / "results" / "eval" / "headline",
+        help="Output directory for headline_forest.csv + manifest "
+             "(default: %(default)s).",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true",

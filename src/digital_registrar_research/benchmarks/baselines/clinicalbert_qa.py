@@ -27,7 +27,7 @@ objects without an additional generative decoder.
 Usage:
     python baselines/clinicalbert_qa.py --phase train
     python baselines/clinicalbert_qa.py --phase predict \\
-        --ckpt ckpts/clinicalbert_qa/ --out ../results/clinicalbert_qa
+        --ckpt ckpts/clinicalbert_qa/ --out workspace/results/benchmarks/clinicalbert_qa
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
-from ...paths import SPLITS_JSON
+from ...paths import BENCHMARKS_RESULTS, SPLITS_JSON
 from ..eval.scope import SPAN_FIELDS, get_field_value
 
 MODEL_ID = "emilyalsentzer/Bio_ClinicalBERT"
@@ -222,7 +222,8 @@ def main() -> None:
     ap.add_argument("--phase", choices=["train", "predict"], required=True)
     ap.add_argument("--epochs", type=int, default=3)
     ap.add_argument("--ckpt", default="ckpts/clinicalbert_qa")
-    ap.add_argument("--out", default="../results/clinicalbert_qa")
+    ap.add_argument("--out", default=str(BENCHMARKS_RESULTS / "clinicalbert_qa"),
+                    help="Output dir (default: %(default)s).")
     args = ap.parse_args()
 
     if args.phase == "train":
