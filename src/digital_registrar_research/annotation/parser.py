@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ..paths import SCHEMAS_DATA as SCHEMAS_DIR
+
+_PRECOMPUTED_GROUPS_PATH = Path(__file__).resolve().parent / "_section_groups.json"
+_PRECOMPUTED_GROUPS: dict | None = None
 
 DISPLAY_NAMES = {
     "Nonnested": "General",
@@ -146,8 +151,165 @@ def _derive_display_name(section_name: str) -> str:
     return DISPLAY_NAMES.get(suffix, suffix)
 
 
+def _build_section_from_props(
+    section_name: str,
+    field_names: list[str],
+    props: dict,
+    defs: dict,
+    required: list,
+) -> SectionSpec:
+    """Build one SectionSpec from a subset of top-level schema properties."""
+    flat_fields: list[FieldSpec] = []
+    array_field_name: str | None = None
+    array_item_fields: list[FieldSpec] = []
+    array_item_enum_values: list = []
+    array_field_type: str | None = None
+
+    for fname in field_names:
+        fprop = props.get(fname)
+        if not isinstance(fprop, dict):
+            continue
+        ftype, enum_vals, _ = _detect_field_type(fprop)
+        if ftype in ("array_of_objects", "array_of_strings_enum"):
+            array_field_name = fname
+            array_field_type = ftype
+            if ftype == "array_of_objects":
+                ao = fprop.get("anyOf", [])
+                non_null = [s for s in ao if s.get("type") != "null"]
+                if non_null:
+                    ref = non_null[0].get("items", {}).get("$ref", "")
+                    ref_name = ref.split("/")[-1] if ref else ""
+                    if ref_name and ref_name in defs:
+                        item_def = defs[ref_name]
+                        item_required = item_def.get("required", [])
+                        array_item_fields = _parse_properties(
+                            item_def.get("properties", {}), defs, item_required
+                        )
+            else:
+                array_item_enum_values = enum_vals
+        else:
+            flat_fields.append(
+                FieldSpec(
+                    name=fname,
+                    title=fprop.get("title", fname.replace("_", " ").title()),
+                    description=fprop.get("description", ""),
+                    field_type=ftype,
+                    enum_values=enum_vals,
+                    item_fields=[],
+                    required=fname in required,
+                )
+            )
+
+    return SectionSpec(
+        name=section_name,
+        display_name=_derive_display_name(section_name),
+        flat_fields=flat_fields,
+        array_field_name=array_field_name,
+        array_item_fields=array_item_fields,
+        array_item_enum_values=array_item_enum_values,
+        array_field_type=array_field_type,
+    )
+
+
+def _is_nested_layout(schema_props: dict) -> bool:
+    """Old layout: each top-level property is a section object with its own `properties`."""
+    if not schema_props:
+        return False
+    first = next(iter(schema_props.values()))
+    return isinstance(first, dict) and "properties" in first and first.get("type") == "object"
+
+
+def _load_precomputed_groups() -> dict:
+    """Load the build-time-generated {organ: [[section_name, [field_names]]]} map.
+
+    Shipped in the standalone Windows bundle so the annotation UI does not
+    need to import DSPy/pydantic-derived case-models at runtime. Returns
+    an empty dict if the file is absent (dev source tree) — callers fall
+    back to the dynamic lookup via `..models.modellist`.
+    """
+    global _PRECOMPUTED_GROUPS
+    if _PRECOMPUTED_GROUPS is None:
+        if _PRECOMPUTED_GROUPS_PATH.exists():
+            try:
+                _PRECOMPUTED_GROUPS = json.loads(
+                    _PRECOMPUTED_GROUPS_PATH.read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                _PRECOMPUTED_GROUPS = {}
+        else:
+            _PRECOMPUTED_GROUPS = {}
+    return _PRECOMPUTED_GROUPS
+
+
+def _section_field_groups(cancer_type: str, props: dict) -> list[tuple[str, list[str]]]:
+    """Return [(section_name, [field_names])] for the flat-schema layout.
+
+    Each DSPy signature contributes its OutputField names as one section.
+    Fields are assigned first-wins across signatures — matching the
+    canonical merge order in `schemas.pydantic._builder._merge_fields_for_organ`,
+    so the UI tabs line up with how the Pydantic case-model was built.
+    Any leftover schema property (unlikely, but possible if a field exists
+    in the schema without a sibling DSPy signature) lands in a trailing
+    "Other" section so it still renders.
+
+    Prefers a precomputed map bundled alongside this module (used by the
+    standalone Windows package so the runtime stays DSPy-free); falls back
+    to introspecting the live signature classes in-process.
+    """
+    precomputed = _load_precomputed_groups().get(cancer_type)
+    if precomputed is not None:
+        groups: list[tuple[str, list[str]]] = []
+        assigned: set[str] = set()
+        for sig_name, field_names in precomputed:
+            filtered = [n for n in field_names if n not in assigned and n in props]
+            assigned.update(filtered)
+            if filtered:
+                groups.append((sig_name, filtered))
+        leftover = [n for n in props if n not in assigned]
+        if leftover:
+            groups.append((f"{cancer_type.capitalize()}CancerOther", leftover))
+        return groups
+
+    try:
+        from ..models.modellist import organmodels
+        from ..schemas.pydantic import _builder
+    except Exception:
+        return []
+
+    sig_names = organmodels.get(cancer_type, [])
+    module_globals = sys.modules[_builder.__name__].__dict__
+
+    groups = []
+    assigned = set()
+    for sig_name in sig_names:
+        cls = module_globals.get(sig_name)
+        if cls is None:
+            continue
+        field_names = []
+        for name, _type, _fi in _builder._iter_signature_output_fields(cls):
+            if name in assigned or name not in props:
+                continue
+            assigned.add(name)
+            field_names.append(name)
+        if field_names:
+            groups.append((sig_name, field_names))
+
+    leftover = [n for n in props if n not in assigned]
+    if leftover:
+        groups.append((f"{cancer_type.capitalize()}CancerOther", leftover))
+    return groups
+
+
 def parse_cancer_schema(cancer_type: str) -> list[SectionSpec]:
-    """Parse a cancer schema file and return a list of SectionSpecs."""
+    """Parse a cancer schema file and return a list of SectionSpecs.
+
+    Supports both schema layouts:
+    - Nested (legacy): top-level properties are section objects, each with
+      its own `properties`. Used by `bladder.json`.
+    - Flat (canonical): top-level properties are the individual fields of
+      `<Organ>CancerCase`. Sections are reconstructed by grouping fields
+      per DSPy signature in `organmodels[cancer_type]`.
+    """
     schema_file = CANCER_TO_FILE.get(cancer_type)
     if not schema_file:
         return []
@@ -158,66 +320,31 @@ def parse_cancer_schema(cancer_type: str) -> list[SectionSpec]:
         schema = json.load(f)
 
     defs = schema.get("$defs", {})
-    sections: list[SectionSpec] = []
+    props = schema.get("properties", {})
 
-    for section_name, section_schema in schema.get("properties", {}).items():
-        if not isinstance(section_schema, dict):
-            continue
-        props = section_schema.get("properties", {})
-        required_in_section = section_schema.get("required", [])
-
-        flat_fields: list[FieldSpec] = []
-        array_field_name: str | None = None
-        array_item_fields: list[FieldSpec] = []
-        array_item_enum_values: list = []
-        array_field_type: str | None = None
-
-        for fname, fprop in props.items():
-            ftype, enum_vals, _ = _detect_field_type(fprop)
-            if ftype in ("array_of_objects", "array_of_strings_enum"):
-                array_field_name = fname
-                array_field_type = ftype
-                if ftype == "array_of_objects":
-                    ao = fprop.get("anyOf", [])
-                    non_null = [s for s in ao if s.get("type") != "null"]
-                    if non_null:
-                        ref = non_null[0].get("items", {}).get("$ref", "")
-                        ref_name = ref.split("/")[-1] if ref else ""
-                        if ref_name and ref_name in defs:
-                            item_def = defs[ref_name]
-                            item_required = item_def.get("required", [])
-                            array_item_fields = _parse_properties(
-                                item_def.get("properties", {}), defs, item_required
-                            )
-                else:
-                    array_item_enum_values = enum_vals
-            else:
-                item_fields_for_flat: list[FieldSpec] = []
-                flat_fields.append(
-                    FieldSpec(
-                        name=fname,
-                        title=fprop.get("title", fname.replace("_", " ").title()),
-                        description=fprop.get("description", ""),
-                        field_type=ftype,
-                        enum_values=enum_vals,
-                        item_fields=item_fields_for_flat,
-                        required=fname in required_in_section,
-                    )
+    if _is_nested_layout(props):
+        sections: list[SectionSpec] = []
+        for section_name, section_schema in props.items():
+            if not isinstance(section_schema, dict):
+                continue
+            sub_props = section_schema.get("properties", {})
+            required = section_schema.get("required", [])
+            sections.append(
+                _build_section_from_props(
+                    section_name, list(sub_props.keys()), sub_props, defs, required
                 )
-
-        sections.append(
-            SectionSpec(
-                name=section_name,
-                display_name=_derive_display_name(section_name),
-                flat_fields=flat_fields,
-                array_field_name=array_field_name,
-                array_item_fields=array_item_fields,
-                array_item_enum_values=array_item_enum_values,
-                array_field_type=array_field_type,
             )
-        )
+        return sections
 
-    return sections
+    groups = _section_field_groups(cancer_type, props)
+    if not groups:
+        # Fallback: render everything as one section so the form is still usable.
+        groups = [(f"{cancer_type.capitalize()}CancerAll", list(props.keys()))]
+    required = schema.get("required", [])
+    return [
+        _build_section_from_props(name, fields, props, defs, required)
+        for name, fields in groups
+    ]
 
 
 if __name__ == "__main__":

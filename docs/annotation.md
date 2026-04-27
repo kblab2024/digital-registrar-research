@@ -6,9 +6,44 @@ A Streamlit app for doctors to review GPT-OSS pre-annotations and save corrected
 
 The flow is **GPT-OSS pre-annotates → doctor corrects in app → save as final annotation**. Doctors need to see at a glance what the model pre-filled vs. what they changed; the UI highlights diffs with a `✎` marker plus a "pre-annotated" caption.
 
-## Three-folder data convention
+## Three coexisting entry points
 
-The app expects a base folder with three timestamped sibling subfolders:
+| Command | App | Default base dir | Purpose |
+|---|---|---|---|
+| `registrar-annotate` | `app.py` (legacy) | — (user picks) | Original flat-sibling layout; kept for regression comparison |
+| `registrar-annotate-workspace` | `app_canonical.py` | `<repo>/workspace/` | Live patient data (gitignored) |
+| `registrar-annotate-dummy` | `app_canonical.py` | `<repo>/dummy/` | Public skeleton / demo / smoke test |
+
+The canonical launchers export `REGISTRAR_ANNOTATE_BASE_DIR` before spawning `streamlit run`; setting that env var yourself before calling either command overrides the default.
+
+## Canonical dataset layout (`registrar-annotate-workspace` / `-dummy`)
+
+```
+<base_dir>/
+├── with_preann/
+│   └── data/<dataset>/                             # e.g. cmuh, tcga
+│       ├── reports/<n>/<case_id>.txt
+│       ├── preannotation/gpt_oss_20b/<n>/<case_id>.json
+│       └── annotations/<annotator>/<n>/<case_id>.json
+└── without_preann/
+    └── data/<dataset>/                             # independent subset (no preannotation/)
+        ├── reports/<n>/<case_id>.txt
+        └── annotations/<annotator>/<n>/<case_id>.json
+```
+
+`with_preann` and `without_preann` are fully independent datasets — the mode picker in the sidebar switches between the two subtrees.
+
+Chrome is in 繁體中文. Sidebar selectors:
+
+- **標註者** — who is labelling (e.g. NHC, KPC).
+- **標註模式** — `含預標註 (with_preann)` browses `with_preann/data/<dataset>/`, loads `preannotation/gpt_oss_20b/`, and pre-fills the form; `不含預標註 (without_preann)` browses `without_preann/data/<dataset>/`, hides the pre-annotation panel, and starts from blank. Switching modes re-discovers datasets and samples from scratch.
+- **資料集** — dropdown of subfolders found under `<base_dir>/<mode>/data/` that contain a `reports/` directory (so `cmuh` and `tcga` show up automatically in the bundled `dummy/`).
+
+Pre-annotation source is fixed to `gpt_oss_20b` today (only model present in `dummy/`).
+
+## Legacy layout (`registrar-annotate`)
+
+The original app expects a base folder with three timestamped sibling subfolders:
 
 ```
 <base_dir>/
@@ -17,7 +52,7 @@ The app expects a base folder with three timestamped sibling subfolders:
 └── tcga_annotation_20251117/   # doctor-saved final annotations (auto-created on first save)
 ```
 
-Folder discovery is by regex on `{prefix}_{kind}_{date}` — see `annotation.io.discover_folders`. The packaged TCGA example data under [`data/`](../data) follows this convention so the app works out of the box.
+Folder discovery is by regex on `{prefix}_{kind}_{date}` — see `annotation.io.discover_folders`.
 
 ## JSON contract
 
@@ -43,15 +78,20 @@ This shape is identical to what `CancerPipeline` emits at runtime — the annota
 ## Launching
 
 ```bash
-registrar-annotate                              # spawns `streamlit run` on the app
-registrar-annotate --server.port 8080           # forward args to streamlit
+registrar-annotate-workspace                    # canonical layout, defaults to workspace/
+registrar-annotate-dummy                        # canonical layout, defaults to dummy/
+registrar-annotate                              # legacy layout (flat sibling folders)
+registrar-annotate-workspace --server.port 8502 # forward args to streamlit
 ```
 
 Or directly:
 
 ```bash
-streamlit run src/digital_registrar_research/annotation/app.py
+streamlit run src/digital_registrar_research/annotation/app_canonical.py
+streamlit run src/digital_registrar_research/annotation/app.py             # legacy
 ```
+
+Both apps can run concurrently on different ports for side-by-side comparison.
 
 ## UI principles
 

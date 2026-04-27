@@ -39,6 +39,8 @@ all         = ["digital-registrar-research[annotation,benchmarks,ablations,dev]"
 [project.scripts]
 registrar-pipeline  = "digital_registrar_research.experiment:main"
 registrar-annotate  = "digital_registrar_research.annotation.app:main_cli"
+registrar-annotate-workspace = "digital_registrar_research.annotation.app_canonical:main_cli_workspace"
+registrar-annotate-dummy     = "digital_registrar_research.annotation.app_canonical:main_cli_dummy"
 registrar-benchmark = "digital_registrar_research.benchmarks.eval.run_all:main"
 registrar-ablate    = "digital_registrar_research.ablations.eval.run_ablations:main"
 registrar-split     = "digital_registrar_research.benchmarks.data.split:main"

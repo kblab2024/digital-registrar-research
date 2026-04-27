@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .io import NA_SENTINEL
+
 # ── Scalar equality ────────────────────────────────────────────────────────────
 
 def values_differ(a, b) -> bool:
-    """None, '', and missing are treated as equivalent.
+    """None, '', missing, and NA_SENTINEL are treated as equivalent.
 
     Mirrors the _values_differ helper in app.py: we normalise empties to
     None on save, so a freshly-typed "" must compare equal to a saved None.
+    An NA_SENTINEL in session state also serialises to null, so for diff
+    purposes it counts as empty too.
     """
     if _is_empty(a) and _is_empty(b):
         return False
@@ -20,7 +24,7 @@ def values_differ(a, b) -> bool:
 def _is_empty(v) -> bool:
     if v is None:
         return True
-    if isinstance(v, str) and v == "":
+    if isinstance(v, str) and (v == "" or v == NA_SENTINEL):
         return True
     if isinstance(v, list) and not v:
         return True

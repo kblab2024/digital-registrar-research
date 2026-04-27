@@ -472,14 +472,44 @@ ORGAN_NESTED_LIST: dict[str, set[str]] = {
     "lung":       {"margins", "regional_lymph_node", "biomarkers",
                    "histological_patterns"},
     "colorectal": {"margins", "regional_lymph_node", "biomarkers"},
-    "prostate":   {"involved_margin_list", "regional_lymph_node"},
+    "prostate":   {"regional_lymph_node"},
     "esophagus":  {"margins", "regional_lymph_node"},
     "stomach":    {"margins", "regional_lymph_node"},
     "pancreas":   {"margins", "regional_lymph_node"},
     "thyroid":    {"margins", "regional_lymph_node"},
     "cervix":     {"margins", "regional_lymph_node"},
-    "liver":      {"margins", "regional_lymph_node",
-                   "tumor_extent", "vascular_invasion"},
+    "liver":      {"margins", "regional_lymph_node"},
+}
+
+
+# --- List-of-literals fields per organ ---------------------------------------
+#
+# Distinct from ORGAN_NESTED_LIST (which is list-of-dicts). These are
+# array fields whose items are plain enum strings, e.g.
+# ``vascular_invasion: ["small_vessel", "large_portal_vein"]``. Scored as
+# unordered sets — exact-match for headline accuracy, set-F1 for partial
+# credit.
+
+ORGAN_LIST_OF_LITERALS: dict[str, dict[str, list[str]]] = {
+    "liver": {
+        "tumor_extent": [
+            "hepatic_vein", "portal_vein", "visceral_peritoneum",
+            "gallbladder", "diaphragm", "others",
+        ],
+        "vascular_invasion": [
+            "large_hepatic_vein", "large_portal_vein", "small_vessel",
+        ],
+    },
+    "prostate": {
+        "involved_margin_list": [
+            "right_apical", "left_apical",
+            "right_bladder_neck", "left_bladder_neck",
+            "right_anterior", "left_anterior",
+            "right_lateral", "left_lateral",
+            "right_posterolateral", "left_posterolateral",
+            "right_posterior", "left_posterior",
+        ],
+    },
 }
 
 
@@ -488,4 +518,5 @@ __all__ = [
     "ORGAN_BOOL",
     "ORGAN_SPAN",
     "ORGAN_NESTED_LIST",
+    "ORGAN_LIST_OF_LITERALS",
 ]

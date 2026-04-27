@@ -16,8 +16,11 @@ from pathlib import Path
 
 import streamlit as st
 
-from .annotator_config import RESERVED_SUFFIXES, load_annotators
-from .diff_utils import (
+from digital_registrar_research.annotation.annotator_config import (
+    RESERVED_SUFFIXES,
+    load_annotators,
+)
+from digital_registrar_research.annotation.diff_utils import (
     ARRAY_KEY_FIELDS,
     FieldDiff,
     aggregate_stats,
@@ -25,24 +28,29 @@ from .diff_utils import (
     diff_flat_fields,
     values_differ,
 )
-from .io import (
+from digital_registrar_research.annotation.io import (
+    NA_SENTINEL,
     FolderSet,
     build_save_payload,
     discover_folders,
     list_samples,
     load_json,
     load_report_text,
+    rehydrate_sentinels,
     save_annotation,
     strip_meta,
 )
-from .parser import (
+
+NOT_SET_LABEL = "— not set —"
+NA_LABEL = "— N/A —"
+from digital_registrar_research.annotation.parser import (
     CANCER_CATEGORIES,
     CANCER_TO_FILE,
     FieldSpec,
     SectionSpec,
     parse_cancer_schema,
 )
-from .ui import pick_folder
+from digital_registrar_research.annotation.ui import pick_folder
 
 st.set_page_config(page_title="Compare / Consensus", layout="wide")
 
@@ -194,19 +202,28 @@ def _on_file_change():
 
     sample = samples[idx]
     st.session_state.report_text = load_report_text(sample.dataset_path)
-    st.session_state.annotation_a = strip_meta(load_json(sample.path_a))
+
+    raw_a = load_json(sample.path_a)
+    st.session_state.annotation_a = strip_meta(raw_a)
+    rehydrate_sentinels(st.session_state.annotation_a, raw_a.get("_meta"))
 
     if st.session_state.mode == "consensus":
-        st.session_state.annotation_b = strip_meta(load_json(sample.path_b))
+        raw_b = load_json(sample.path_b)
+        st.session_state.annotation_b = strip_meta(raw_b)
+        rehydrate_sentinels(st.session_state.annotation_b, raw_b.get("_meta"))
         # Gold: resume from existing _gold file if saved; else copy of A.
         if os.path.exists(sample.path_gold):
-            st.session_state.gold_annotation = strip_meta(load_json(sample.path_gold))
+            raw_gold = load_json(sample.path_gold)
+            st.session_state.gold_annotation = strip_meta(raw_gold)
+            rehydrate_sentinels(st.session_state.gold_annotation, raw_gold.get("_meta"))
         else:
             st.session_state.gold_annotation = copy.deepcopy(st.session_state.annotation_a)
     else:
         # Evaluation: B-slot is the machine output JSON (no _meta stripping needed;
         # real result files have no _meta, but strip defensively anyway).
-        st.session_state.annotation_b = strip_meta(load_json(sample.result_path))
+        raw_b = load_json(sample.result_path)
+        st.session_state.annotation_b = strip_meta(raw_b)
+        rehydrate_sentinels(st.session_state.annotation_b, raw_b.get("_meta"))
         st.session_state.gold_annotation = {}  # unused in evaluation mode
 
     st.session_state.last_sample_id = sample.sample_id
@@ -216,8 +233,10 @@ def _on_file_change():
 # ── Value rendering (read-only A/B cells) ──────────────────────────────────────
 
 def _fmt_scalar(v) -> str:
+    if v == NA_SENTINEL:
+        return NA_LABEL
     if v is None or v == "":
-        return "— not set —"
+        return NOT_SET_LABEL
     if isinstance(v, bool):
         return "Yes" if v else "No"
     return str(v).replace("_", " ")
@@ -227,7 +246,7 @@ def _cell_html(v, kind: str) -> str:
     """kind: 'a' | 'b' | 'plain'. Returns an inline-styled markdown span."""
     cls = {"a": "diff-cell-a", "b": "diff-cell-b", "plain": "diff-cell-plain"}[kind]
     display = _fmt_scalar(v)
-    if v is None or v == "":
+    if v is None or v == "" or v == NA_SENTINEL:
         return f"<span class='{cls}'><span class='null-val'>{display}</span></span>"
     return f"<span class='{cls}'>{display}</span>"
 
@@ -251,7 +270,7 @@ def _ensure_container(annotation: dict, section_name: str) -> dict:
 def _gold_input(field: FieldSpec, current_val, key: str, disabled: bool = False):
     help_text = field.description or None
     if field.field_type in ("enum", "int_enum"):
-        options = [None] + list(field.enum_values)
+        options = [None, NA_SENTINEL, *list(field.enum_values)]
         idx = options.index(current_val) if current_val in options else 0
         return st.selectbox(
             "Gold", options=options, index=idx,
@@ -259,8 +278,13 @@ def _gold_input(field: FieldSpec, current_val, key: str, disabled: bool = False)
             label_visibility="collapsed", disabled=disabled,
         )
     if field.field_type == "bool":
-        options = [None, True, False]
-        idx = options.index(current_val) if current_val in options else 0
+        options = [NA_SENTINEL, True, False]
+        if current_val is None or current_val == NA_SENTINEL:
+            idx = 0
+        elif current_val in (True, False):
+            idx = options.index(current_val)
+        else:
+            idx = 0
         return st.selectbox(
             "Gold", options=options, index=idx,
             format_func=_fmt_scalar, key=key, help=help_text,
@@ -268,23 +292,38 @@ def _gold_input(field: FieldSpec, current_val, key: str, disabled: bool = False)
         )
     if field.field_type == "int":
         col_num, col_null = st.columns([3, 1])
-        is_null = current_val is None
+        is_null = current_val is None or current_val == NA_SENTINEL
         with col_null:
             null_checked = st.checkbox("N/A", value=is_null,
                                        key=key + "__null", disabled=disabled)
         with col_num:
+            num_init = (
+                int(current_val)
+                if isinstance(current_val, int) and not isinstance(current_val, bool)
+                else 0
+            )
             num_val = st.number_input(
-                "Gold", value=int(current_val) if current_val is not None else 0,
+                "Gold", value=num_init,
                 min_value=0, step=1, disabled=null_checked or disabled,
                 key=key + "__num", help=help_text,
                 label_visibility="collapsed",
             )
-        return None if null_checked else int(num_val)
+        return NA_SENTINEL if null_checked else int(num_val)
     if field.field_type == "string":
-        raw = st.text_input(
-            "Gold", value=current_val or "", key=key, help=help_text,
-            label_visibility="collapsed", disabled=disabled,
-        )
+        col_text, col_na = st.columns([3, 1])
+        is_na = current_val == NA_SENTINEL
+        with col_na:
+            na_checked = st.checkbox("N/A", value=is_na,
+                                     key=key + "__na", disabled=disabled)
+        with col_text:
+            text_init = "" if is_na else (current_val or "")
+            raw = st.text_input(
+                "Gold", value=text_init,
+                key=key + "__text", help=help_text,
+                label_visibility="collapsed", disabled=na_checked or disabled,
+            )
+        if na_checked:
+            return NA_SENTINEL
         return raw if raw else None
     return current_val
 
@@ -294,9 +333,9 @@ def _gold_input(field: FieldSpec, current_val, key: str, disabled: bool = False)
 def _apply_override(key: str, val):
     """Write an override directly into widget state, clearing stale sub-keys.
 
-    Needed because an `int` widget uses two sub-keys (`__num`, `__null`).
+    Needed because `int` uses `__num`/`__null` and `string` uses `__text`/`__na`.
     """
-    for suffix in ("", "__num", "__null"):
+    for suffix in ("", "__num", "__null", "__text", "__na"):
         st.session_state.pop(key + suffix, None)
     # Leave gold_annotation mutation to the caller.
 

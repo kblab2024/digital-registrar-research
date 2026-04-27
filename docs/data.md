@@ -7,19 +7,25 @@ have to guess which file belongs to which condition.
 ## Top-level layout
 
 ```
-data/
+with_preann/data/
 ├── cmuh/
 │   ├── reports/{organ_n}/{case_id}.txt              # raw pathology reports
 │   ├── preannotation/gpt_oss_20b/{organ_n}/{case_id}.json
 │   ├── annotations/
-│   │   ├── nhc_with_preann/{organ_n}/{case_id}.json
-│   │   ├── nhc_without_preann/{organ_n}/{case_id}.json
-│   │   ├── kpc_with_preann/{organ_n}/{case_id}.json
-│   │   ├── kpc_without_preann/{organ_n}/{case_id}.json
+│   │   ├── nhc/{organ_n}/{case_id}.json
+│   │   ├── kpc/{organ_n}/{case_id}.json
 │   │   └── gold/{organ_n}/{case_id}.json            # consensus
 │   ├── splits.json
 │   └── dataset_manifest.yaml
 └── tcga/                                             # mirrors cmuh/
+
+without_preann/data/
+├── cmuh/                                             # independent subset (no preannotation/)
+│   ├── reports/{organ_n}/{case_id}.txt
+│   ├── annotations/{nhc,kpc,gold}/{organ_n}/{case_id}.json
+│   ├── splits.json
+│   └── dataset_manifest.yaml
+└── tcga/
 
 results/
 ├── predictions/{dataset}/
@@ -50,8 +56,9 @@ models/clinicalbert/{v1_baseline,v2_finetuned}/{checkpoint.pt,config.yaml}
 | Case ID | `{dataset}{N}_{idx}` | `tcga1_37`, `cmuh1_1` |
 | Organ partition | numeric dir | `1/` = breast, `2/` = colorectal (see `dataset_manifest.yaml`) |
 | LLM model | snake_case with size | `gpt_oss_20b`, `gemma4_e2b` |
-| Run directory | zero-padded | `run01`..`run10` |
-| Annotator-mode | `{annotator}_{with,without}_preann` | `nhc_with_preann` |
+| Run directory | zero-padded, optional machine suffix | `run01`..`run10`, or `run01-alpha`..`run10-alpha` |
+| Mode subtree | `{with,without}_preann/` | `with_preann/` |
+| Annotator dir | `{annotator}/` (mode implied by parent path) | `nhc/` |
 | Sidecar files | leading underscore | `_summary.json`, `_manifest.yaml`, `_log.jsonl` |
 | Case files | `{case_id}.json` — annotator/run/model is encoded by the folder | `tcga1_1.json` |
 
@@ -60,15 +67,22 @@ out metadata files: `[p for p in paths if not p.name.startswith("_")]`.
 
 ## The four annotation modes
 
-Two annotators × two conditions = four files per case, plus gold:
+Two annotators × two conditions = four files per case, plus gold. The
+mode is encoded in the top-level subtree (`with_preann/` vs
+`without_preann/`); under each subtree, annotator folders drop the mode
+suffix:
 
-| Folder | Who | What they saw |
+| Path | Who | What they saw |
 |---|---|---|
-| `nhc_with_preann/` | Annotator NHC | gpt-oss:20b pre-annotation pre-filled, reviewer edits in place |
-| `nhc_without_preann/` | Annotator NHC | blank template, annotator fills from scratch |
-| `kpc_with_preann/` | Annotator KPC | gpt-oss:20b pre-annotation pre-filled |
-| `kpc_without_preann/` | Annotator KPC | blank template |
-| `gold/` | Consensus | produced by adjudication of the four above |
+| `with_preann/data/{dataset}/annotations/nhc/` | Annotator NHC | gpt-oss:20b pre-annotation pre-filled, reviewer edits in place |
+| `without_preann/data/{dataset}/annotations/nhc/` | Annotator NHC | blank template, annotator fills from scratch |
+| `with_preann/data/{dataset}/annotations/kpc/` | Annotator KPC | gpt-oss:20b pre-annotation pre-filled |
+| `without_preann/data/{dataset}/annotations/kpc/` | Annotator KPC | blank template |
+| `{mode}/data/{dataset}/annotations/gold/` | Consensus | produced by adjudication of the four above |
+
+`with_preann` and `without_preann` are independent datasets — in
+production, `without_preann` may hold a different (smaller) subset of
+cases than `with_preann`.
 
 This layout enables two comparisons:
 1. **Inter-annotator agreement** (`pairwise_nhc_vs_kpc_with_preann.csv`, `…_without_preann.csv`).
@@ -92,6 +106,22 @@ results/predictions/cmuh/llm/gpt_oss_20b/
 └── _manifest.yaml                    # lists all runs + config hash + validity flags
 ```
 
+### Multi-machine sweeps
+
+When the same `(dataset, model)` is processed on more than one host, set a
+short stable slug per machine so each one writes to a disjoint slot space:
+
+  * Env var (one-shot): `DRR_MACHINE_ID=alpha python scripts/run_…`
+  * Persistent: `machine_id: alpha` in `configs/local/runtime.yaml`
+    (the `configs/local/` tree is gitignored, so each checkout sets its own).
+
+Run dirs then become `run01-alpha .. run10-alpha` on machine *alpha* and
+`run01-beta .. run10-beta` on machine *beta*. Both forms still match the
+`startswith("run")` discovery glob in
+[`benchmarks/eval/multirun.py`](../src/digital_registrar_research/benchmarks/eval/multirun.py),
+so the eval aggregator naturally treats them as additional samples for the
+confidence interval. Slug format: `^[a-z0-9][a-z0-9-]{0,11}$`.
+
 Majority-vote ensembles live under
 `results/evaluation/{dataset}/ensembles/{model}/` and are produced from
 the individual runs — they're a derived artifact, not a separate model.
@@ -104,9 +134,9 @@ Downstream code uses the resolver rather than string literals:
 ```python
 from digital_registrar_research.paths import dataset, predictions_dir, evaluation_dir
 
-ds = dataset("cmuh")                            # -> DatasetPaths
+ds = dataset("cmuh", mode="with_preann")        # -> DatasetPaths
 ds.reports, ds.annotations, ds.preannotation    # Path objects
-ds.gold_dir, ds.mode_dir("nhc", "with_preann")  # annotator helpers
+ds.gold_dir, ds.annotator_dir("nhc")            # annotator helpers (mode is on ds)
 predictions_dir("cmuh", "llm/gpt_oss_20b", run="run03")
 evaluation_dir("cmuh", "iaa")
 ```

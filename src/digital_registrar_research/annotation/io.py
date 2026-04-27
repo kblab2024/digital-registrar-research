@@ -11,6 +11,14 @@ from datetime import datetime
 from pathlib import Path
 
 
+# Sentinel used in session state to represent "intentional N/A".
+# Serialised values are always plain null — this string only lives in
+# Streamlit session state and is converted to None by _clean_value.
+# Paths whose session value equals this sentinel are recorded in
+# _meta.intentional_nulls so the intent survives save → reload.
+NA_SENTINEL = "__NA__"
+
+
 @dataclass
 class SampleRef:
     sample_id: str          # e.g. "tcga1_37"
@@ -159,7 +167,12 @@ def build_save_payload(annotation: dict, filename: str) -> dict:
     Session state mirrors the on-disk layout:
       - top-level: cancer_excision_report, cancer_category, cancer_category_others_description
       - cancer_data: {all cancer-specific fields; includes arrays margins/biomarkers/etc.}
-    Preserves False/0/None; converts empty strings and empty lists to None.
+
+    Every schema-declared field for the chosen cancer is written, defaulting
+    to null when the annotator left it at "— 尚未設定 —". Fields the
+    annotator explicitly marked as N/A also serialise to null, but their
+    paths are additionally recorded in _meta.intentional_nulls so the
+    "intentional" state can be restored on reload.
     """
     output: dict = {
         "_meta": {
@@ -167,10 +180,51 @@ def build_save_payload(annotation: dict, filename: str) -> dict:
             "annotated_at": datetime.now().isoformat(timespec="seconds"),
         }
     }
-    for key, val in annotation.items():
-        if key.startswith("_"):
-            continue
-        output[key] = _clean_value(val)
+
+    # Collect sentinel paths from the raw session annotation BEFORE _clean_value
+    # collapses them to None.
+    na_paths = _collect_sentinel_paths(annotation)
+
+    excision = annotation.get("cancer_excision_report")
+    category = annotation.get("cancer_category")
+    output["cancer_excision_report"] = _clean_value(excision)
+    output["cancer_category"] = _clean_value(category)
+    output["cancer_category_others_description"] = _clean_value(
+        annotation.get("cancer_category_others_description")
+    )
+
+    if excision is False:
+        if na_paths:
+            # Preserve only intent for fields still present in the truncated payload.
+            kept = [p for p in na_paths if p in {
+                "cancer_excision_report",
+                "cancer_category",
+                "cancer_category_others_description",
+            }]
+            if kept:
+                output["_meta"]["intentional_nulls"] = kept
+        return output
+
+    cancer_data = annotation.get("cancer_data") or {}
+    if category and category != "others":
+        from .parser import parse_cancer_schema
+        sections = parse_cancer_schema(category)
+        expanded: dict = {}
+        for sec in sections:
+            for fspec in sec.flat_fields:
+                expanded[fspec.name] = cancer_data.get(fspec.name)
+            if sec.array_field_name:
+                expanded[sec.array_field_name] = cancer_data.get(sec.array_field_name)
+        for k, v in cancer_data.items():
+            if k not in expanded:
+                expanded[k] = v
+        output["cancer_data"] = {k: _clean_value(v) for k, v in expanded.items()}
+    elif cancer_data:
+        output["cancer_data"] = _clean_value(cancer_data)
+
+    if na_paths:
+        output["_meta"]["intentional_nulls"] = na_paths
+
     return output
 
 
@@ -181,9 +235,78 @@ def _clean_value(val):
         if not val:
             return None
         return [_clean_value(v) for v in val]
-    if isinstance(val, str) and val == "":
-        return None
+    if isinstance(val, str):
+        if val == "" or val == NA_SENTINEL:
+            return None
     return val
+
+
+# ── Intentional-null intent tracking ───────────────────────────────────────────
+
+_PATH_SEGMENT_RE = re.compile(r"^([^\[]+)(?:\[(\d+)\])?$")
+
+
+def _collect_sentinel_paths(obj, prefix: str = "") -> list[str]:
+    """Walk a session annotation dict and return dotted paths whose value is NA_SENTINEL.
+
+    Array indices are written as ``field[i]``. The _meta key and any other
+    underscore-prefixed keys are skipped so callers don't accidentally record
+    paths into the meta subtree.
+    """
+    paths: list[str] = []
+    if obj == NA_SENTINEL:
+        if prefix:
+            paths.append(prefix)
+        return paths
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(k, str) and k.startswith("_"):
+                continue
+            next_prefix = f"{prefix}.{k}" if prefix else str(k)
+            paths.extend(_collect_sentinel_paths(v, next_prefix))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            paths.extend(_collect_sentinel_paths(v, f"{prefix}[{i}]"))
+    return paths
+
+
+def _parse_intent_path(path: str) -> list:
+    """Break ``a.b[0].c`` into a flat segment list: ['a', 'b', 0, 'c']."""
+    segments: list = []
+    for part in path.split("."):
+        m = _PATH_SEGMENT_RE.match(part)
+        if not m:
+            return []
+        segments.append(m.group(1))
+        if m.group(2) is not None:
+            segments.append(int(m.group(2)))
+    return segments
+
+
+def rehydrate_sentinels(annotation: dict, meta: dict | None) -> None:
+    """Replace ``None`` with NA_SENTINEL at every path listed in ``_meta.intentional_nulls``.
+
+    Mutates ``annotation`` in place. Paths that no longer resolve (e.g. an
+    array entry that has since been removed) are silently skipped. Only
+    current ``None`` values are replaced — real data is never overwritten.
+    """
+    if not annotation or not isinstance(annotation, dict):
+        return
+    paths = (meta or {}).get("intentional_nulls") or []
+    for path in paths:
+        segments = _parse_intent_path(path)
+        if not segments:
+            continue
+        try:
+            cursor = annotation
+            for seg in segments[:-1]:
+                cursor = cursor[seg]
+            last = segments[-1]
+            current = cursor[last]
+            if current is None:
+                cursor[last] = NA_SENTINEL
+        except (KeyError, IndexError, TypeError):
+            continue
 
 
 def save_annotation(payload: dict, path: str) -> None:

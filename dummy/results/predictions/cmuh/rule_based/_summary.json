@@ -1,7 +1,0 @@
-{
-  "method": "rule_based",
-  "dataset": "cmuh",
-  "n_cases": 6,
-  "implementation": "src/digital_registrar_research/benchmarks/baselines/rules.py",
-  "created_at": "2026-04-23T03:58:59+00:00"
-}

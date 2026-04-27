@@ -40,6 +40,9 @@ import yaml
 logger = logging.getLogger("gpt_oss_multirun")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))  # for _run_id
+
+from _run_id import format_run_id, machine_slug  # noqa: E402
 
 
 # --- Config loading / hashing ------------------------------------------------
@@ -425,16 +428,19 @@ def run_experiment(proto: Protocol, output_root: Path,
     few_shot = _load_few_shot(proto.few_shot_path)
     client = _make_client(proto)
 
+    import socket
     manifest: dict = {
         "experiment_id": proto.experiment_id,
         "config_hash": proto.config_hash,
         "model": {"name": proto.model_name, "serving": proto.serving},
         "started_at": dt.datetime.utcnow().isoformat() + "Z",
+        "host": socket.gethostname(),
+        "machine_id": machine_slug(),
         "runs": {},
     }
 
     for k, seed in enumerate(proto.seeds, start=1):
-        run_id = f"run{k}"
+        run_id = format_run_id(k, padded=False)
         if run_filter and run_id not in run_filter:
             continue
         run_dir = output_root / run_id
@@ -475,8 +481,14 @@ def run_experiment(proto: Protocol, output_root: Path,
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--config", type=Path, required=True,
-                    help="Frozen protocol YAML (configs/multirun_gpt_oss.yaml).")
+    _default_config = (
+        REPO_ROOT / "configs" / "local" / "multirun_gpt_oss.yaml"
+        if (REPO_ROOT / "configs" / "local" / "multirun_gpt_oss.yaml").is_file()
+        else REPO_ROOT / "configs" / "multirun_gpt_oss.yaml"
+    )
+    ap.add_argument("--config", type=Path, default=_default_config,
+                    help="Frozen protocol YAML (default: configs/local/ if present, "
+                         "else configs/multirun_gpt_oss.yaml).")
     ap.add_argument("--output", type=Path,
                     default=REPO_ROOT / "results/benchmarks/gpt_oss",
                     help="Output root (default: %(default)s).")

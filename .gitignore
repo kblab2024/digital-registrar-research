@@ -43,11 +43,29 @@ results/**/*.ckpt
 !results/**/.gitkeep
 workspace/ 
 
-# Dummy experiment root — smoke outputs, never pushed
-dummy/results/
+# Dummy experiment root — configs/models/README tracked; data/results are generated,
+# only the named folder skeleton is kept (via .gitkeep)
+/dummy/data/**
+/dummy/results/**
+!/dummy/data/**/
+!/dummy/results/**/
+!/dummy/data/**/.gitkeep
+!/dummy/results/**/.gitkeep
+
+# Live annotator workspace — real patient data, never pushed
+/workspace/
+
+# Windows-bundle build artifacts — packaging/ scripts are tracked, outputs are not
+/packaging/_downloads/
+/packaging/build/
+/packaging/dist/
 
 # Annotation tool — per-deployment annotator list (rebuilt from DEFAULTS)
 src/digital_registrar_research/annotation/annotators.json
+
+# Local configs — machine-specific, never pushed
+configs/local/*
+!configs/local/.gitkeep
 
 # API keys / secrets
 .env
