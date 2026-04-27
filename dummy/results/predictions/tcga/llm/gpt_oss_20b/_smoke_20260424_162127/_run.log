@@ -1,0 +1,36 @@
+[32m16:21:27 | INFO     | experiment_logger | smoke dir: /home/cmu-pathology/research/digital-registrar-research/dummy/results/predictions/tcga/llm/gpt_oss_20b/_smoke_20260424_162127[0m
+[32m16:21:27 | INFO     | experiment_logger | dataset: tcga[0m
+[32m16:21:27 | INFO     | experiment_logger | model: gptoss (ollama_chat/gpt-oss:20b) → slug=gpt_oss_20b[0m
+[32m16:21:27 | INFO     | experiment_logger | sampled 3 / 151 reports (seed=0)[0m
+[32m16:21:27 | INFO     | experiment_logger |   - tcga2_7.txt (organ=2)[0m
+[32m16:21:27 | INFO     | experiment_logger |   - tcga3_18.txt (organ=3)[0m
+[32m16:21:27 | INFO     | experiment_logger |   - tcga1_19.txt (organ=1)[0m
+[32m16:21:27 | INFO     | experiment_logger | Processing report: tcga2_7[0m
+[32m16:21:59 | INFO     | experiment_logger | This is a cancer excision report.[0m
+[32m16:21:59 | INFO     | experiment_logger | Cancer category is colorectal.[0m
+[32m16:22:06 | INFO     | experiment_logger | Processing organ-specific model: ColonCancerNonnested at 2026-04-24 16:22:06 for colorectal cancer for tcga2_7[0m
+[32m16:22:14 | INFO     | experiment_logger | Processing organ-specific model: ColonCancerStaging at 2026-04-24 16:22:14 for colorectal cancer for tcga2_7[0m
+[32m16:22:18 | INFO     | experiment_logger | Processing organ-specific model: ColonCancerMargins at 2026-04-24 16:22:18 for colorectal cancer for tcga2_7[0m
+[32m16:22:22 | INFO     | experiment_logger | Processing organ-specific model: ColonCancerLN at 2026-04-24 16:22:22 for colorectal cancer for tcga2_7[0m
+[32m16:22:26 | INFO     | experiment_logger | Processing organ-specific model: ColonCancerBiomarkers at 2026-04-24 16:22:26 for colorectal cancer for tcga2_7[0m
+[32m16:22:27 | INFO     | experiment_logger | [_smoke_20260424_162127/2/tcga2_7] ok (60.28s, cancer=True, category=colorectal)[0m
+[32m16:22:27 | INFO     | experiment_logger | Processing report: tcga3_18[0m
+[32m16:22:35 | INFO     | experiment_logger | This is a cancer excision report.[0m
+[32m16:22:35 | INFO     | experiment_logger | Cancer category is esophagus.[0m
+[32m16:22:52 | INFO     | experiment_logger | Processing organ-specific model: EsophagusCancerNonnested at 2026-04-24 16:22:52 for esophagus cancer for tcga3_18[0m
+[32m16:22:57 | INFO     | experiment_logger | Processing organ-specific model: EsophagusCancerStaging at 2026-04-24 16:22:57 for esophagus cancer for tcga3_18[0m
+[32m16:23:31 | INFO     | experiment_logger | Processing organ-specific model: EsophagusCancerMargins at 2026-04-24 16:23:31 for esophagus cancer for tcga3_18[0m
+[32m16:23:35 | INFO     | experiment_logger | Processing organ-specific model: EsophagusCancerLN at 2026-04-24 16:23:35 for esophagus cancer for tcga3_18[0m
+[32m16:23:42 | INFO     | experiment_logger | [_smoke_20260424_162127/3/tcga3_18] ok (74.98s, cancer=True, category=esophagus)[0m
+[32m16:23:42 | INFO     | experiment_logger | Processing report: tcga1_19[0m
+[32m16:23:44 | INFO     | experiment_logger | This is a cancer excision report.[0m
+[32m16:23:44 | INFO     | experiment_logger | Cancer category is breast.[0m
+[32m16:24:01 | INFO     | experiment_logger | Processing organ-specific model: BreastCancerNonnested at 2026-04-24 16:24:01 for breast cancer for tcga1_19[0m
+[32m16:24:05 | INFO     | experiment_logger | Processing organ-specific model: DCIS at 2026-04-24 16:24:05 for breast cancer for tcga1_19[0m
+[32m16:24:08 | INFO     | experiment_logger | Processing organ-specific model: BreastCancerGrading at 2026-04-24 16:24:08 for breast cancer for tcga1_19[0m
+[32m16:24:11 | INFO     | experiment_logger | Processing organ-specific model: BreastCancerStaging at 2026-04-24 16:24:11 for breast cancer for tcga1_19[0m
+[32m16:24:16 | INFO     | experiment_logger | Processing organ-specific model: BreastCancerMargins at 2026-04-24 16:24:16 for breast cancer for tcga1_19[0m
+[32m16:24:25 | INFO     | experiment_logger | Processing organ-specific model: BreastCancerLN at 2026-04-24 16:24:25 for breast cancer for tcga1_19[0m
+[32m16:24:29 | INFO     | experiment_logger | Processing organ-specific model: BreastCancerBiomarkers at 2026-04-24 16:24:29 for breast cancer for tcga1_19[0m
+[32m16:24:36 | INFO     | experiment_logger | [_smoke_20260424_162127/1/tcga1_19] ok (53.48s, cancer=True, category=breast)[0m
+[32m16:24:36 | INFO     | experiment_logger | SMOKE OK=3 ERR=0 N=3[0m
