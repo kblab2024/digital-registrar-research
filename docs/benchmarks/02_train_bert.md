@@ -2,6 +2,46 @@
 
 ClinicalBERT is the only baseline that needs training. Rule-based is deterministic; LLMs are zero / few-shot.
 
+## Train/test separation (read this first)
+
+Train and test cases are pinned by `splits.json`, which lives at:
+
+- `{folder}/data/{dataset}/splits.json` (created by `gen_dummy_skeleton.py` for dummy, `registrar-split` for workspace).
+- Packaged TCGA fallback at `src/digital_registrar_research/benchmarks/data/splits.json` when no per-folder file exists for `dataset=tcga`.
+
+**The split is the contract.** `train_bert.py` loads the train half; `run_bert.py:predict()` loads the test half; the eval wrappers default to `--split test` so the encoder is never scored on its own training cases.
+
+`train_bert.py` runs an explicit pre-flight at the top of every training run:
+
+```
+============================================================
+Dataset separation step (train/test split)
+============================================================
+split source: {folder}/data/{dataset}/splits.json (or packaged TCGA fallback)
+[cmuh] train=30  test=20  (sum=50)
+  organ 1: train=3  test=2
+  organ 2: train=3  test=2
+  ...
+[tcga] train=30  test=20  (sum=50)
+  ...
+============================================================
+pooled: train=60  test=40
+============================================================
+```
+
+It fails fast if `splits.json` is missing for any requested dataset, or if the train/test lists overlap (which would indicate a corrupted split file). **Refusing to train is the right behavior** — the alternative is silent data leakage.
+
+The exact list of training case IDs is then **embedded in the saved checkpoint**:
+
+- CLS: `torch.save(...)` includes a `"train_case_ids"` key.
+- QA: a sidecar `{ckpt_dir}/_train_meta.json` carries the IDs (HuggingFace `save_pretrained` doesn't pass through custom keys).
+
+`run_bert.py:predict()` reads these back at inference time and **refuses to predict** if any of the test cases overlap with the training set. This belt-and-suspenders check protects against:
+
+- A corrupted `splits.json` that violates the train/test contract.
+- A user who points `--folder` at the wrong data root post-hoc.
+- A bug in the data loader that returns train cases when asked for test.
+
 ## What the two heads do
 
 | Head | What it predicts | Loss | Output shape |

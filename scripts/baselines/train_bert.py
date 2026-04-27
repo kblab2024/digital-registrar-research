@@ -42,6 +42,9 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from _config_loader import resolve_folder  # noqa: E402
+from baselines._split_helpers import (  # noqa: E402
+    load_split, per_organ_counts,
+)
 
 DATASETS = ("cmuh", "tcga")
 DEFAULT_HEADS = ("cls", "qa")
@@ -123,6 +126,58 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
+def _print_split_summary(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Pre-flight: log per-dataset / per-organ train and test counts.
+
+    Resolves ``splits.json`` for each dataset (via the canonical fallback
+    chain in ``_split_helpers.load_split``) and prints a table so the
+    user sees exactly which cases the encoder will be trained on AND
+    which ones eval will score it against. Fails fast if any dataset's
+    train list is empty.
+    """
+    logger.info("=" * 60)
+    logger.info("Dataset separation step (train/test split)")
+    logger.info("=" * 60)
+    logger.info("split source: {folder}/data/{dataset}/splits.json "
+                "(or packaged TCGA fallback)")
+    total_train = total_test = 0
+    for ds in args.datasets:
+        try:
+            sp = load_split(args.experiment_root, ds)
+        except FileNotFoundError as e:
+            raise SystemExit(
+                f"refusing to train: {e}. Train and test cases must be "
+                f"disjoint and pinned by splits.json before training."
+            )
+        train_n = len(sp["train"])
+        test_n = len(sp["test"])
+        total_train += train_n
+        total_test += test_n
+        logger.info("[%s] train=%d  test=%d  (sum=%d)",
+                    ds, train_n, test_n, train_n + test_n)
+        train_per_organ = per_organ_counts(sp["train"])
+        test_per_organ = per_organ_counts(sp["test"])
+        all_organs = sorted(set(train_per_organ) | set(test_per_organ))
+        for organ in all_organs:
+            logger.info(
+                "  organ %s: train=%d  test=%d",
+                organ, train_per_organ.get(organ, 0),
+                test_per_organ.get(organ, 0),
+            )
+        # Fail-fast leakage check — the splits.json MUST already be
+        # disjoint.
+        overlap = set(sp["train"]) & set(sp["test"])
+        if overlap:
+            raise SystemExit(
+                f"splits.json for dataset={ds!r} has {len(overlap)} cases "
+                f"in BOTH train and test (sample: "
+                f"{', '.join(sorted(overlap)[:5])}). Refusing to train."
+            )
+    logger.info("=" * 60)
+    logger.info("pooled: train=%d  test=%d", total_train, total_test)
+    logger.info("=" * 60)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(
@@ -134,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("experiment_root: %s", args.experiment_root)
     logger.info("datasets: %s", args.datasets)
     logger.info("heads: %s", args.heads)
+
+    _print_split_summary(args, logger)
 
     if "cls" in args.heads:
         train_cls(args, logger)

@@ -3,7 +3,17 @@
 Each wrapper script (eval_rule_vs_llm, eval_bert_vs_llm,
 eval_rule_bert_llm) runs ``scripts.eval.cli non_nested`` for each
 method, then ``scripts.eval.compare.run_compare`` to join the outputs.
-This module factors out the orchestration so the wrappers stay tiny.
+
+Split-aware by default: every wrapper resolves the train/test split
+from ``{folder}/data/{dataset}/splits.json`` (or the packaged TCGA
+fallback) and restricts every ``non_nested`` call to the test set via
+``--cases @<test_ids.txt>``. This is **load-bearing** when BERT is
+involved — BERT is trained on the train split, so scoring it on
+training cases would be in-sample memorization. Restricting all
+methods to the same test set keeps coverage comparable.
+
+Override with ``--split all`` to disable the filter (e.g. for rule-vs-
+LLM only, where there's no leakage concern).
 """
 from __future__ import annotations
 
@@ -12,6 +22,11 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+
+from baselines._split_helpers import (
+    SplitName, per_organ_counts, resolve_case_allowlist, write_allowlist_file,
+)
+from _config_loader import resolve_folder
 
 logger = logging.getLogger("scripts.baselines.eval_pipeline")
 
@@ -27,7 +42,8 @@ class MethodSpec:
         self.run_ids = run_ids or []
 
     def non_nested_args(self, root: str, dataset: str, out: Path,
-                         organs: list[str] | None) -> list[str]:
+                         organs: list[str] | None,
+                         cases_file: Path | None) -> list[str]:
         cmd = [
             sys.executable, "-m", "scripts.eval.cli", "non_nested",
             "--root", root, "--dataset", dataset,
@@ -41,18 +57,24 @@ class MethodSpec:
             cmd += ["--run-ids", *self.run_ids]
         if organs:
             cmd += ["--organs", *organs]
+        if cases_file is not None:
+            cmd += ["--cases", f"@{cases_file}"]
         return cmd
 
 
 def run_non_nested(spec: MethodSpec, *, root: str, dataset: str, out_dir: Path,
-                    organs: list[str] | None) -> Path:
+                    organs: list[str] | None,
+                    cases_file: Path | None) -> Path:
     """Invoke scripts.eval.cli non_nested for a single method.
 
     Returns the output directory containing correctness_table.parquet.
     Raises ``CalledProcessError`` on failure.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = spec.non_nested_args(root=root, dataset=dataset, out=out_dir, organs=organs)
+    cmd = spec.non_nested_args(
+        root=root, dataset=dataset, out=out_dir, organs=organs,
+        cases_file=cases_file,
+    )
     logger.info("[%s] %s", spec.label, " ".join(cmd))
     subprocess.run(cmd, check=True)
     parquet = out_dir / "correctness_table.parquet"
@@ -87,9 +109,46 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--out", type=Path, required=True,
                     help="Output root. Subdirs non_nested_<label>/ and compare/ "
                          "are created under it.")
+    ap.add_argument("--split", default="test", choices=("test", "train", "all"),
+                    help="Which split of cases to score (default: test). "
+                         "BERT is trained on the train split, so default 'test' "
+                         "prevents in-sample scoring. Use 'all' to disable the "
+                         "filter (rule-vs-LLM only — no leakage concern).")
     ap.add_argument("--n-boot", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("-v", "--verbose", action="store_true")
+
+
+def _resolve_cases_file(args: argparse.Namespace) -> Path | None:
+    """If args.split != 'all', resolve splits.json and write a case allowlist file.
+
+    Returns the path to ``<out>/cases_<split>.txt``, or ``None`` if no
+    filter is applied.
+    """
+    split: SplitName = args.split
+    if split == "all":
+        logger.info("split=all: scoring every gold case (no --cases filter)")
+        return None
+    folder = resolve_folder(args.folder)
+    case_ids = resolve_case_allowlist(folder, args.dataset, split)
+    if not case_ids:
+        raise SystemExit(
+            f"split={split!r} resolved to an empty case list for "
+            f"({args.folder}, {args.dataset}). Refusing to run an eval "
+            f"on zero cases."
+        )
+    args.out.mkdir(parents=True, exist_ok=True)
+    out_file = args.out / f"cases_{split}.txt"
+    write_allowlist_file(case_ids, out_file)
+    counts = per_organ_counts(case_ids)
+    pretty_counts = ", ".join(
+        f"organ {organ}: {n}" for organ, n in sorted(counts.items())
+    )
+    logger.info(
+        "split=%s: %d cases (%s) → %s",
+        split, len(case_ids), pretty_counts, out_file,
+    )
+    return out_file
 
 
 def run_pipeline(specs: list[MethodSpec], args: argparse.Namespace) -> int:
@@ -98,12 +157,13 @@ def run_pipeline(specs: list[MethodSpec], args: argparse.Namespace) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    cases_file = _resolve_cases_file(args)
     non_nested_dirs: dict[str, Path] = {}
     for spec in specs:
         out = args.out / f"non_nested_{spec.label}"
         run_non_nested(
             spec, root=args.folder, dataset=args.dataset, out_dir=out,
-            organs=args.organs,
+            organs=args.organs, cases_file=cases_file,
         )
         non_nested_dirs[spec.label] = out
 

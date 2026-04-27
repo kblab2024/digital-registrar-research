@@ -201,6 +201,7 @@ def train(args) -> None:
 
     ckpt_path = Path(args.ckpt)
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+    train_case_ids = sorted(c["id"] for c in cases)
     torch.save({"state": model.state_dict(),
                 "field_to_idx": field_to_idx,
                 "card": card,
@@ -208,7 +209,12 @@ def train(args) -> None:
                 "organs": sorted(organs),
                 "datasets": datasets,
                 "n_train_cases": len(cases),
-                "per_dataset_counts": counts}, ckpt_path)
+                "per_dataset_counts": counts,
+                # Embed the exact case ids the encoder saw at training
+                # time. The eval pipeline reads this back so it can guard
+                # against in-sample scoring (see scripts/baselines/
+                # _split_helpers.py + _eval_pipeline.py).
+                "train_case_ids": train_case_ids}, ckpt_path)
     print(f"Saved checkpoint to {ckpt_path}")
 
 
@@ -241,6 +247,25 @@ def predict(args) -> None:
     counts = per_dataset_counts(cases)
     pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
     print(f"Predicting on {len(cases)} cases ({pretty})  organs={sorted(organs)}")
+
+    # Leakage guard: refuse to silently score the encoder on cases it
+    # was trained on. The checkpoint carries train_case_ids since the
+    # split-aware refactor; older checkpoints predate it and skip the
+    # check (with a warning).
+    train_ids = set(ckpt.get("train_case_ids") or [])
+    if not train_ids:
+        print("[warn] checkpoint lacks 'train_case_ids' — leakage guard "
+              "disabled. Retrain with the current train_bert.py to enable.")
+    else:
+        overlap = [c["id"] for c in cases if c["id"] in train_ids]
+        if overlap:
+            sample = ", ".join(overlap[:5])
+            raise SystemExit(
+                f"refusing to predict: {len(overlap)} of {len(cases)} test "
+                f"cases overlap with the checkpoint's training set "
+                f"(sample: {sample}). Check splits.json — train and test "
+                f"must be disjoint."
+            )
 
     for case in tqdm(cases, desc="predict"):
         report = Path(case["report_path"]).read_text(encoding="utf-8")

@@ -1,5 +1,26 @@
 # Side-by-side comparison
 
+## Default: test-set only (load-bearing for BERT)
+
+All three convenience wrappers (`eval_rule_vs_llm`, `eval_bert_vs_llm`, `eval_rule_bert_llm`) default to `--split test`. They:
+
+1. Resolve `splits.json` for `(folder, dataset)` via `scripts.baselines._split_helpers.load_split` — same fallback chain as `train_bert.py`.
+2. Write the test case-id list to `<out>/cases_test.txt` (one ID per line).
+3. Pass `--cases @<out>/cases_test.txt` to **every** `non_nested` call.
+
+So rule, BERT, and LLM are all scored against the **same** test set. This is mandatory when BERT is involved (BERT was trained on the train split — scoring it on training cases would be in-sample memorization), and it also keeps coverage / accuracy comparable for rule-vs-LLM (otherwise rules' per-organ classifier might get penalized for failing on training cases that BERT never sees).
+
+Override with `--split all` (no filter) or `--split train` (only train cases) when needed:
+
+```bash
+python scripts/baselines/eval_rule_vs_llm.py --folder dummy --dataset cmuh \
+    --llm-model gpt_oss_20b \
+    --split all \
+    --out dummy/results/eval/rule_vs_llm_full
+```
+
+## Generic compare (manual)
+
 Once each method has its own `non_nested` output (with `correctness_table.parquet`), the comparison step joins them on (case_id, organ, field) and produces:
 
 - **`wide.csv`** — one row per cell, columns per method (e.g. `rule_based_correct`, `bert_merged_correct`, `llm_correct`, plus `_attempted` and `_pred` columns). For spreadsheet inspection.
