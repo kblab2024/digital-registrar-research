@@ -1,39 +1,45 @@
 """
 ClinicalBERT extractive QA baseline.
 
-For numeric / span-style fields (tumor size, margin distance, grade
-scores, etc.) we frame extraction as SQuAD-style extractive QA:
+For numeric / span-style fields (tumor size, AJCC version, grade as
+integer in colorectal, etc.) we frame extraction as SQuAD-style
+extractive QA:
     question = "What is the tumor size in mm?"
     context  = <report>
 and train a span-prediction head over Bio_ClinicalBERT.
 
 Design notes
 ------------
-* Span supervision is **weak / silver**: at train time we auto-locate
-  each gold numeric value inside the report with a best-effort regex
-  search around the field-specific phrase. Cases where the value is not
-  findable in the text are dropped (logged).
-* At inference we query every `(question × test_report)` pair and keep
-  the highest-confidence span per field.
+* Span supervision is **silver / weak**: at train time we auto-locate
+  each gold numeric value inside the report with a best-effort
+  substring search (with mm/cm variants). Cases where the value is not
+  findable in the text are dropped (counted in per-organ stats).
+* At inference we ask the per-organ question subset against the test
+  report and keep the highest-confidence span per field.
+* Training pools cmuh.train + tcga.train so the encoder sees enough
+  pathology language to fine-tune meaningfully (modest annotated pool
+  per organ otherwise).
 * This module complements `clinicalbert_cls.py` (which handles
-  categorical fields). Together they populate the scoped-comparison
-  fields for ClinicalBERT.
+  categorical / boolean / enum-grade fields). Together they populate
+  the BERT-eligible fields for the head-to-head comparison.
 
-Scope NOT covered: nested lists (`margins: [...]`, `biomarkers: [...]`,
-`regional_lymph_node: [...]`). These are reported as N/A in the results
-table — encoder-only architectures cannot emit variable-length nested
-objects without an additional generative decoder.
+Scope NOT covered: nested lists (`margins`, `biomarkers`,
+`regional_lymph_node`) and free-text fields. These are reported as N/A
+in the results table — encoder-only architectures cannot emit
+variable-length nested objects without an additional generative decoder.
 
 Usage:
-    python baselines/clinicalbert_qa.py --phase train
-    python baselines/clinicalbert_qa.py --phase predict \\
-        --ckpt ckpts/clinicalbert_qa/ --out workspace/results/benchmarks/clinicalbert_qa
+    python -m digital_registrar_research.benchmarks.baselines.clinicalbert_qa \
+        --phase train --data-root dummy
+    python -m digital_registrar_research.benchmarks.baselines.clinicalbert_qa \
+        --phase predict --data-root dummy --dataset both
 """
 from __future__ import annotations
 
 import argparse
 import json
 import re
+from collections import defaultdict
 from pathlib import Path
 
 import torch
@@ -45,42 +51,66 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
-from ...paths import BENCHMARKS_RESULTS, SPLITS_JSON
-from ..eval.scope import SPAN_FIELDS, get_field_value
+from ...paths import BENCHMARKS_RESULTS
+from ..eval.scope import get_field_value
+from ._data import load_cases, per_dataset_counts
 
 MODEL_ID = "emilyalsentzer/Bio_ClinicalBERT"
 MAX_LEN = 512
 DOC_STRIDE = 128
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-SPLITS_PATH = SPLITS_JSON
+DEFAULT_ORGANS = ["breast", "colorectal", "esophagus", "liver", "stomach"]
+DEFAULT_DATASETS = ["cmuh", "tcga"]
 
-QUESTIONS = {
-    "tumor_size":        "What is the tumor size in millimeters?",
-    "dcis_size":         "What is the size of ductal carcinoma in situ in millimeters?",
-    "maximal_ln_size":   "What is the maximal size of the metastatic lymph node in millimeters?",
-    # Grade scores (numeric within a bounded range — QA keeps gradient
-    # signal stronger than a 4-way classifier would).
-    "grade":             "What is the histologic grade?",
-    "nuclear_grade":     "What is the nuclear grade?",
-    "tubule_formation":  "What is the tubule formation score?",
-    "mitotic_rate":      "What is the mitotic rate score?",
-    "total_score":       "What is the Nottingham total score?",
+# Per-organ question bank. Only fields whose gold value is a literal
+# number that should appear in the report belong here. Enum-valued
+# fields (breast nuclear_grade, esophagus grade, ...) live in
+# clinicalbert_cls.py.
+ORGAN_QUESTIONS: dict[str, dict[str, str]] = {
+    "breast": {
+        "tumor_size":   "What is the tumor size in millimeters?",
+        "dcis_size":    "What is the size of the ductal carcinoma in situ in millimeters?",
+        "ajcc_version": "Which AJCC edition is used for staging?",
+    },
+    "colorectal": {
+        "grade":         "What is the histologic grade?",
+        "tumor_budding": "What is the tumor budding score?",
+        "ajcc_version":  "Which AJCC edition is used for staging?",
+    },
+    "esophagus": {
+        "ajcc_version": "Which AJCC edition is used for staging?",
+    },
+    "liver": {
+        "tumor_size":   "What is the tumor size in millimeters?",
+        "ajcc_version": "Which AJCC edition is used for staging?",
+    },
+    "stomach": {
+        "ajcc_version": "Which AJCC edition is used for staging?",
+    },
 }
 
 
 # --- Silver span alignment ----------------------------------------------------
 
-def find_span(report: str, value: str | int | float) -> tuple[int, int] | None:
+def find_span(report: str, value) -> tuple[int, int] | None:
     """Best-effort locate the gold value as a literal substring."""
     if value is None:
         return None
     s = str(value)
-    for variant in [s, f"{s} mm", f"{s}mm", f"{s} cm", f"{s}cm"]:
-        idx = report.lower().find(variant.lower())
+    variants = [s, f"{s} mm", f"{s}mm"]
+    if s.isdigit():
+        cm = float(s) / 10
+        variants += [
+            f"{s} cm", f"{s}cm",
+            f"{cm:g} cm", f"{cm:g}cm",
+            f"{cm:.1f} cm", f"{cm:.1f}cm",
+        ]
+    lower = report.lower()
+    for v in variants:
+        idx = lower.find(v.lower())
         if idx != -1:
-            return idx, idx + len(variant)
-    # For numeric grades (1, 2, 3) fall back to regex around the question topic.
+            return idx, idx + len(v)
     m = re.search(rf"\b{re.escape(s)}\b", report)
     if m:
         return m.start(), m.end()
@@ -88,22 +118,27 @@ def find_span(report: str, value: str | int | float) -> tuple[int, int] | None:
 
 
 class QADataset(Dataset):
-    """Builds (question, context, answer_span) triples from gold annotations."""
+    """(question, context, answer_span) triples from gold annotations."""
 
     def __init__(self, cases: list[dict], tokenizer):
         self.examples: list[dict] = []
         self.tok = tokenizer
+        seen: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0])
         for c in cases:
+            organ = c.get("cancer_category")
+            qbank = ORGAN_QUESTIONS.get(organ, {})
+            if not qbank:
+                continue
             report = Path(c["report_path"]).read_text(encoding="utf-8")
             with open(c["annotation_path"], encoding="utf-8") as f:
                 gold = json.load(f)
-            for field, question in QUESTIONS.items():
-                if field not in SPAN_FIELDS:
-                    continue
+            for field, question in qbank.items():
+                seen[(organ, field)][1] += 1
                 val = get_field_value(gold, field)
                 span = find_span(report, val) if val is not None else None
                 if span is None:
                     continue
+                seen[(organ, field)][0] += 1
                 self.examples.append({
                     "question": question,
                     "context": report,
@@ -111,6 +146,8 @@ class QADataset(Dataset):
                     "answer_text": report[span[0]:span[1]],
                 })
         print(f"Silver-aligned training examples: {len(self.examples)}")
+        for (organ, field), (hits, total) in sorted(seen.items()):
+            print(f"  {organ}.{field}: {hits}/{total} aligned")
 
     def __len__(self) -> int:
         return len(self.examples)
@@ -138,16 +175,33 @@ class QADataset(Dataset):
         return {k: torch.tensor(v) for k, v in enc.items()}
 
 
-def load_cases(split_name: str) -> list[dict]:
-    with SPLITS_PATH.open(encoding="utf-8") as f:
-        return json.load(f)[split_name]
+def parse_csv(s: str) -> list[str]:
+    return [x.strip() for x in s.split(",") if x.strip()]
 
 
 def train(args) -> None:
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
     model = AutoModelForQuestionAnswering.from_pretrained(MODEL_ID).to(DEVICE)
 
-    ds = QADataset(load_cases("train"), tok)
+    organs = set(parse_csv(args.organs))
+    datasets = parse_csv(args.datasets)
+    cases = load_cases(
+        datasets=datasets,
+        split="train",
+        root=Path(args.data_root),
+        organs=organs,
+        included_only=True,  # QA needs a real cancer_category to pick a question bank
+    )
+    counts = per_dataset_counts(cases)
+    pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
+    print(f"Training cases: {len(cases)} ({pretty})  organs={sorted(organs)}")
+    if not cases:
+        raise SystemExit("no training cases — check --data-root, --datasets, --organs")
+
+    ds = QADataset(cases, tok)
+    if len(ds) == 0:
+        raise SystemExit("no silver-aligned training examples — every gold value was "
+                         "missing from its report. Check --data-root or the question bank.")
     loader = DataLoader(ds, batch_size=8, shuffle=True)
 
     opt = torch.optim.AdamW(model.parameters(), lr=3e-5)
@@ -178,13 +232,32 @@ def predict(args) -> None:
     model = AutoModelForQuestionAnswering.from_pretrained(args.ckpt).to(DEVICE)
     model.eval()
 
-    out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    organs = set(parse_csv(args.organs))
+    datasets = parse_csv(args.datasets) if args.dataset == "both" else [args.dataset]
 
-    for case in load_cases("test"):
+    out_root = Path(args.out)
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    cases = load_cases(
+        datasets=datasets,
+        split="test",
+        root=Path(args.data_root),
+        organs=organs,
+    )
+    counts = per_dataset_counts(cases)
+    pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
+    print(f"Predicting on {len(cases)} cases ({pretty})  organs={sorted(organs)}")
+
+    for case in tqdm(cases, desc="predict"):
         report = Path(case["report_path"]).read_text(encoding="utf-8")
+        organ = case.get("cancer_category")
+        # Fall back to the union of every organ's questions when the
+        # case has no category (e.g. 'others' / non-excision).
+        qbank = ORGAN_QUESTIONS.get(organ) or {
+            f: q for org_q in ORGAN_QUESTIONS.values() for f, q in org_q.items()
+        }
         cancer_data: dict = {}
-        for field, question in QUESTIONS.items():
+        for field, question in qbank.items():
             enc = tok(question, report, max_length=MAX_LEN,
                       truncation="only_second", padding="max_length",
                       return_offsets_mapping=True, return_tensors="pt")
@@ -199,21 +272,23 @@ def predict(args) -> None:
             start_char = int(offsets[s][0])
             end_char = int(offsets[e][1])
             answer = report[start_char:end_char].strip()
-            # Coerce numerics.
             m = re.search(r"\d+(?:\.\d+)?", answer)
             if m:
                 val = float(m.group())
                 cancer_data[field] = int(val) if val.is_integer() else val
 
-        # This module intentionally only populates span fields — the
-        # categorical/cancer_category side is handled in clinicalbert_cls.py.
+        # QA only populates cancer_data scalars — categorical/cancer_category
+        # routing is handled by clinicalbert_cls.py and merged offline by
+        # eval/run_all.py:merge_clinicalbert_outputs.
         result = {
             "cancer_excision_report": None,
             "cancer_category": None,
             "cancer_category_others_description": None,
             "cancer_data": cancer_data,
         }
-        with (out_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
+        ds_dir = out_root / case["dataset"]
+        ds_dir.mkdir(parents=True, exist_ok=True)
+        with (ds_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 
 
@@ -223,7 +298,16 @@ def main() -> None:
     ap.add_argument("--epochs", type=int, default=3)
     ap.add_argument("--ckpt", default="ckpts/clinicalbert_qa")
     ap.add_argument("--out", default=str(BENCHMARKS_RESULTS / "clinicalbert_qa"),
-                    help="Output dir (default: %(default)s).")
+                    help="Output dir; per-dataset subdirs are created under it.")
+    ap.add_argument("--data-root", default="dummy",
+                    help="Root containing data/<dataset>/ subtrees (default: dummy).")
+    ap.add_argument("--organs", default=",".join(DEFAULT_ORGANS),
+                    help="CSV of cancer_category values to include.")
+    ap.add_argument("--datasets", default=",".join(DEFAULT_DATASETS),
+                    help="CSV of dataset names to pool over.")
+    ap.add_argument("--dataset", default="both",
+                    choices=["cmuh", "tcga", "both"],
+                    help="Predict-time dataset selector. 'both' uses --datasets.")
     args = ap.parse_args()
 
     if args.phase == "train":
