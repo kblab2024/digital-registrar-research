@@ -196,7 +196,7 @@ def _parse_json_best_effort(text: str) -> dict:
     return {"_parse_error": text[:500]}
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True,
                     help="model id (e.g. 'gpt-4-turbo' or 'gpt-oss:20b')")
@@ -204,8 +204,15 @@ def main() -> None:
                     help="for local Ollama: http://localhost:11434/v1")
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=None)
-    args = ap.parse_args()
+    return ap.parse_args(argv)
 
+
+def run(args: argparse.Namespace) -> None:
+    """Execute the Cell-C run for the given resolved args.
+
+    Exposed separately from ``main()`` so wrappers under ``scripts/ablations/``
+    (smoke, grid driver) can construct an ``argparse.Namespace`` directly and
+    call ``run()`` without sys.argv mutation."""
     # Local Ollama default.
     api_base = args.api_base
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -241,6 +248,10 @@ def main() -> None:
         json.dump({"model": args.model,
                    "validation_retries": runner.validation_retries,
                    "runs": ledger}, f, ensure_ascii=False, indent=2)
+
+
+def main() -> None:
+    run(parse_args())
 
 
 if __name__ == "__main__":

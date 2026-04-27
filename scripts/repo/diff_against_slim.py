@@ -8,8 +8,8 @@ is the research tip-of-tree. This script prints a per-file diff so you can
 see what's drifted before backporting to the slim release.
 
 Usage:
-    python scripts/diff_against_slim.py
-    python scripts/diff_against_slim.py --slim-dir /path/to/digitalregistrar
+    python scripts/repo/diff_against_slim.py
+    python scripts/repo/diff_against_slim.py --slim-dir /path/to/digitalregistrar
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import difflib
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SLIM = REPO_ROOT.parent / "digitalregistrar"
 RESEARCH_ROOT = REPO_ROOT / "src" / "digital_registrar_research"
 

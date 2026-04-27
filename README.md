@@ -27,7 +27,7 @@ The core install (no extras) gives you the DSPy extraction pipeline plus the can
 After cloning, install the local pre-commit hook so lint errors are caught before they hit CI:
 
 ```bash
-bash scripts/install_git_hooks.sh
+bash scripts/repo/install_git_hooks.sh
 ```
 
 ## What's in the box
@@ -49,7 +49,7 @@ Data and results use a flat, convention-driven layout covering
 `data/{dataset}/reports|preannotation|annotations/` and
 `results/predictions/{dataset}/{llm,clinicalbert,rule_based}/...` —
 see [docs/data.md](docs/data.md) for the full tree, and
-[scripts/gen_dummy_skeleton.py](scripts/gen_dummy_skeleton.py) to
+[scripts/data/gen_dummy_skeleton.py](scripts/data/gen_dummy_skeleton.py) to
 generate a runnable dummy under `dummy/`.
 
 ## Console scripts

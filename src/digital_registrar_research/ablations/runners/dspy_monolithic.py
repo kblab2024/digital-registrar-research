@@ -135,7 +135,7 @@ def _setup_model(model_key: str) -> None:
     autoconf_dspy(model_key)
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True,
                     help="key in parent's model_list (e.g. 'gpt') or 'gpt4'")
@@ -144,8 +144,15 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--skip-jsonize", action="store_true",
                     help="ablation-of-ablation: also drop ReportJsonize")
-    args = ap.parse_args()
+    return ap.parse_args(argv)
 
+
+def run(args: argparse.Namespace) -> None:
+    """Execute the Cell-B run for the given resolved args.
+
+    Exposed separately from ``main()`` so wrappers under ``scripts/ablations/``
+    (smoke, grid driver) can construct an ``argparse.Namespace`` directly and
+    call ``run()`` without sys.argv mutation."""
     _setup_model(args.model)
     pipe = MonolithicPipeline(skip_jsonize=args.skip_jsonize)
 
@@ -179,6 +186,10 @@ def main() -> None:
     with (out_dir / "_ledger.json").open("w", encoding="utf-8") as f:
         json.dump({"model": args.model, "skip_jsonize": args.skip_jsonize,
                    "runs": ledger}, f, ensure_ascii=False, indent=2)
+
+
+def main() -> None:
+    run(parse_args())
 
 
 if __name__ == "__main__":

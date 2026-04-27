@@ -40,4 +40,4 @@ registrar-annotate                        # launch the annotation UI
 
 ## Relationship to the slim release
 
-The `digitalregistrar/` repo (sibling folder, untouched) is still the pip-installable home for production users. The vendored copy under `src/digital_registrar_research/` is the **research tip-of-tree**. When research-side improvements stabilise, backport them to the slim release manually; `scripts/diff_against_slim.py` shows what has diverged.
+The `digitalregistrar/` repo (sibling folder, untouched) is still the pip-installable home for production users. The vendored copy under `src/digital_registrar_research/` is the **research tip-of-tree**. When research-side improvements stabilise, backport them to the slim release manually; `scripts/repo/diff_against_slim.py` shows what has diverged.

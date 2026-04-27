@@ -50,17 +50,33 @@ def _copy_matching(src_dir: Path, dst_dir: Path, case_ids: list[str]) -> int:
     return n
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--modular-gpt-oss-dir", type=Path, default=None,
                     help="directory with Cell A × gpt-oss predictions")
     ap.add_argument("--modular-gpt4-dir", type=Path, default=None,
                     help="directory with Cell A × gpt-4-turbo predictions")
-    args = ap.parse_args()
+    ap.add_argument("--out-root", type=Path, default=None,
+                    help="override ABLATIONS_RESULTS as the destination root "
+                         "(used by smoke/grid drivers to redirect into "
+                         "_smoke_<ts>/ subdirs)")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="cap how many matching cases to copy "
+                         "(used by smoke; default = all matches)")
+    return ap.parse_args(argv)
 
+
+def run(args: argparse.Namespace) -> None:
+    """Execute the Cell-A copy operation for the given resolved args.
+
+    Exposed separately from ``main()`` so wrappers under ``scripts/ablations/``
+    (smoke, grid driver) can construct an ``argparse.Namespace`` directly and
+    redirect output via ``--out-root``."""
     from ...paths import ABLATIONS_RESULTS
     case_ids = _case_ids()
-    results_root = ABLATIONS_RESULTS
+    if args.limit:
+        case_ids = case_ids[:args.limit]
+    results_root = args.out_root if args.out_root else ABLATIONS_RESULTS
 
     if args.modular_gpt_oss_dir:
         n = _copy_matching(args.modular_gpt_oss_dir,
@@ -73,6 +89,10 @@ def main() -> None:
                            results_root / "dspy_modular_gpt4",
                            case_ids)
         print(f"Copied {n} gpt-4-turbo predictions")
+
+
+def main() -> None:
+    run(parse_args())
 
 
 if __name__ == "__main__":

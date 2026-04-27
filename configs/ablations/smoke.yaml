@@ -1,0 +1,21 @@
+# Smoke-run defaults for scripts/ablations/run_cell_smoke.py and
+# scripts/ablations/run_grid_smoke.py.
+#
+# These are *defaults* — CLI flags (--n, --cells, --model) take
+# precedence whenever they are passed. The smoke wrappers fall back to
+# this config only for unspecified knobs.
+#
+# Read by `_common.smoke_root()` for output-dir layout. Edit `n` to
+# trade smoke-run wall time vs. confidence.
+
+n: 2                  # cases per cell
+cells: ["b", "c"]      # default cells; "a" requires --modular-source-dir
+model: gpt-oss:20b    # default local-LM target for grid smoke
+
+# Per-cell smoke knobs
+cell_a:
+  modular_source_dir: null   # MUST be set on CLI when smoking Cell A
+cell_b:
+  skip_jsonize: false
+cell_c:
+  api_base: null             # null → auto-set to local Ollama for known prefixes

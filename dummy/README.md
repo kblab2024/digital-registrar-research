@@ -1,10 +1,10 @@
 # Dummy fixture (synthetic, regenerable)
 
-This tree is produced by `scripts/gen_dummy_skeleton.py`. The toolkit is
+This tree is produced by `scripts/data/gen_dummy_skeleton.py`. The toolkit is
 checked in; the output is not. Regenerate any time:
 
 ```
-python scripts/gen_dummy_skeleton.py --out dummy --clean
+python scripts/data/gen_dummy_skeleton.py --out dummy --clean
 ```
 
 Defaults: cmuh = 100 × 10 organs, tcga = 50 × 10 organs, 80% cancer / 20% non-cancer, 3 LLM runs.

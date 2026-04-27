@@ -72,10 +72,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 # Make the in-tree package importable without requiring `pip install -e .`.
 sys.path.insert(0, str(REPO_ROOT / "src"))
-sys.path.insert(0, str(REPO_ROOT / "scripts"))  # for _config_loader
+sys.path.insert(0, str(REPO_ROOT / "scripts"))  # for _config_loader, _run_id
 
 from _config_loader import (  # noqa: E402
     load_model_config,

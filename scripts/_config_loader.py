@@ -1,11 +1,11 @@
 """Auto-loader for per-model decoding-override YAMLs.
 
-The consolidated runners ``scripts/run_dspy_ollama_{single,smoke}.py`` read an
-optional YAML of the form ``configs/dspy_ollama_{model}.yaml`` so decoding
-params (``temperature``, ``top_p``, ``num_ctx``, ...) and smoke defaults
-(``smoke.n``, ``smoke.seed``) can be tuned without editing code. If the
-config file is absent, or every override is null, the per-model defaults in
-``models.common.MODEL_PROFILES`` are used unchanged.
+The consolidated runners ``scripts/pipeline/run_dspy_ollama_{single,smoke}.py``
+read an optional YAML of the form ``configs/dspy_ollama_{model}.yaml`` so
+decoding params (``temperature``, ``top_p``, ``num_ctx``, ...) and smoke
+defaults (``smoke.n``, ``smoke.seed``) can be tuned without editing code. If
+the config file is absent, or every override is null, the per-model defaults
+in ``models.common.MODEL_PROFILES`` are used unchanged.
 """
 from __future__ import annotations
 

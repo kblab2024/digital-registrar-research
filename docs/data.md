@@ -111,7 +111,7 @@ results/predictions/cmuh/llm/gpt_oss_20b/
 When the same `(dataset, model)` is processed on more than one host, set a
 short stable slug per machine so each one writes to a disjoint slot space:
 
-  * Env var (one-shot): `DRR_MACHINE_ID=alpha python scripts/run_…`
+  * Env var (one-shot): `DRR_MACHINE_ID=alpha python scripts/pipeline/run_…`
   * Persistent: `machine_id: alpha` in `configs/local/runtime.yaml`
     (the `configs/local/` tree is gitignored, so each checkout sets its own).
 
@@ -143,7 +143,7 @@ evaluation_dir("cmuh", "iaa")
 
 ## Dummy skeleton
 
-`python scripts/gen_dummy_skeleton.py --out dummy --clean` writes the
+`python scripts/data/gen_dummy_skeleton.py --out dummy --clean` writes the
 entire layout with schema-valid but trivial content — 2 datasets × 2 organs × 3 cases
 — so eval scripts can be smoke-tested before real data lands. Regenerate
 anytime; it is deterministic (seed = `20251117`).

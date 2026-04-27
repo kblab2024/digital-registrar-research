@@ -1,0 +1,57 @@
+# Grid 1 — minimum-viable lesion study (suggestions doc §1.3).
+#
+# Single backbone (gpt-oss:20b), five conditions:
+#   full → −LiteralEnums → −ReportJsonize → −DSPy (raw JSON) → −Schema (free text)
+#
+# Wall-time estimate: ~2-3 days on a single 48 GB GPU (Ollama).
+#
+# NOTE on seeds: Grid 1 in the doc calls for 5 seeds × 5 conditions =
+# 25 cells. The runners don't yet expose a per-run seed override (the
+# seed is currently set in `configs/dspy_ollama_<model>.yaml`). To run
+# multiple seeds: copy this file, change the `slug` per seed, and bump
+# `decoding.seed` in the model config between invocations.
+#
+# Conditions implemented in this revision (4 of the 5 — the
+# "−LiteralEnums" condition needs a new runner per suggestions §1.2 B2):
+
+name: grid_1
+description: "Minimum-viable lesion study × gpt-oss:20b, single seed (10)"
+results_root: null    # null → digital_registrar_research.paths.ABLATIONS_RESULTS
+
+runs:
+  # Condition 1: FULL pipeline (modular DSPy + ReportJsonize + Literal enums)
+  - cell: dspy_modular
+    model: gpt-oss
+    slug: gpt-oss
+    args:
+      # Point at wherever the parent project's full-pipeline run wrote its
+      # per-case JSONs. Edit before launch. Example:
+      modular_gpt_oss_dir: workspace/results/predictions/tcga/llm/gpt-oss
+
+  # Condition 2: monolithic DSPy (drops the modular per-section chain)
+  - cell: dspy_monolithic
+    model: gpt
+    slug: gpt-oss-monolithic
+    args: {}
+
+  # Condition 3: monolithic DSPy without ReportJsonize
+  - cell: dspy_monolithic
+    model: gpt
+    slug: gpt-oss-nojsonize
+    args:
+      skip_jsonize: true
+
+  # Condition 4: no DSPy at all — raw JSON-mode against local Ollama
+  - cell: raw_json
+    model: gpt-oss:20b
+    slug: gpt-oss-rawjson
+    args:
+      # api_base auto-set to http://localhost:11434/v1 for ollama models
+      api_base: null
+
+  # Condition 5 (TODO): −Schema (free-text + regex). Needs a new runner
+  # per suggestions doc §1.2 B6. Uncomment once the runner exists:
+  # - cell: free_text_regex
+  #   model: gpt-oss:20b
+  #   slug: gpt-oss-freetext
+  #   args: {}

@@ -47,13 +47,14 @@ def _method_key(cell: str, model: str) -> str:
     return f"{cell}_{model}"
 
 
-def _discover(cells: list[str], models: list[str]) -> dict[str, Path]:
+def _discover(cells: list[str], models: list[str],
+              results_root: Path = RESULTS) -> dict[str, Path]:
     """Build the `method_to_preds` dict expected by benchmarks/eval/metrics.py.
     Keys are `<cell>_<model>`; missing folders are dropped with a warning."""
     method_to_preds: dict[str, Path] = {}
     for cell in cells:
         for model in models:
-            p = RESULTS / f"{cell}_{model}"
+            p = results_root / f"{cell}_{model}"
             if p.exists() and any(p.glob("*.json")):
                 method_to_preds[_method_key(cell, model)] = p
             else:
@@ -61,12 +62,13 @@ def _discover(cells: list[str], models: list[str]) -> dict[str, Path]:
     return method_to_preds
 
 
-def compute_efficiency(cells: list[str], models: list[str]) -> pd.DataFrame:
+def compute_efficiency(cells: list[str], models: list[str],
+                       results_root: Path = RESULTS) -> pd.DataFrame:
     """Pull timings + error counts from each cell's `_ledger.json`."""
     rows = []
     for cell in cells:
         for model in models:
-            ledger = RESULTS / f"{cell}_{model}" / "_ledger.json"
+            ledger = results_root / f"{cell}_{model}" / "_ledger.json"
             if not ledger.exists():
                 continue
             with ledger.open(encoding="utf-8") as f:
@@ -76,7 +78,7 @@ def compute_efficiency(cells: list[str], models: list[str]) -> pd.DataFrame:
                          if isinstance(r.get("elapsed_s"), (int, float))]
             schema_errors = 0
             parse_errors = 0
-            for path in (RESULTS / f"{cell}_{model}").glob("*.json"):
+            for path in (results_root / f"{cell}_{model}").glob("*.json"):
                 if path.name.startswith("_"):
                     continue
                 with path.open(encoding="utf-8") as f:
@@ -143,23 +145,29 @@ def compute_cell_deltas(long_df: pd.DataFrame,
     return pd.DataFrame(rows)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cells", nargs="+", default=DEFAULT_CELLS)
     ap.add_argument("--models", nargs="+", default=DEFAULT_MODELS)
-    args = ap.parse_args()
+    ap.add_argument("--results-root", type=Path, default=None,
+                    help="override the default ABLATIONS_RESULTS root "
+                         "(used by smoke runners that route output into "
+                         "workspace/results/_smoke_<ts>/ instead)")
+    args = ap.parse_args(argv)
 
-    method_to_preds = _discover(args.cells, args.models)
+    results_root = args.results_root if args.results_root else RESULTS
+
+    method_to_preds = _discover(args.cells, args.models, results_root)
     if not method_to_preds:
-        sys.exit(f"No prediction folders found under {RESULTS}. "
+        sys.exit(f"No prediction folders found under {results_root}. "
                  "Run the cell runners first.")
 
-    grid_csv = RESULTS / "ablation_grid.csv"
+    grid_csv = results_root / "ablation_grid.csv"
     long_df = _bench_aggregate(method_to_preds, GOLD_ROOT, SPLITS_PATH, grid_csv)
     print(f"Wrote {grid_csv}  ({len(long_df)} rows)")
 
     summary = summary_table(long_df)
-    summary_path = RESULTS / "ablation_summary.csv"
+    summary_path = results_root / "ablation_summary.csv"
     summary.to_csv(summary_path, index=False)
     print(f"Wrote {summary_path}")
 
@@ -168,16 +176,16 @@ def main() -> None:
         index="field", columns="method",
         values="accuracy_attempted", aggfunc="first",
     )
-    pivot.to_csv(RESULTS / "ablation_table.csv")
-    print(f"Wrote {RESULTS / 'ablation_table.csv'}")
+    pivot.to_csv(results_root / "ablation_table.csv")
+    print(f"Wrote {results_root / 'ablation_table.csv'}")
 
     deltas = compute_cell_deltas(long_df, args.cells, args.models)
-    deltas.to_csv(RESULTS / "cell_deltas.csv", index=False)
-    print(f"Wrote {RESULTS / 'cell_deltas.csv'}")
+    deltas.to_csv(results_root / "cell_deltas.csv", index=False)
+    print(f"Wrote {results_root / 'cell_deltas.csv'}")
 
-    eff = compute_efficiency(args.cells, args.models)
-    eff.to_csv(RESULTS / "efficiency.csv", index=False)
-    print(f"Wrote {RESULTS / 'efficiency.csv'}")
+    eff = compute_efficiency(args.cells, args.models, results_root)
+    eff.to_csv(results_root / "efficiency.csv", index=False)
+    print(f"Wrote {results_root / 'efficiency.csv'}")
 
     print("\nper-method mean accuracy:")
     print(pivot.mean().to_string())
