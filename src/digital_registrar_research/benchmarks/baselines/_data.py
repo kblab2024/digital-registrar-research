@@ -26,7 +26,7 @@ from ...paths import GOLD_ANNOTATIONS, RAW_REPORTS, SPLITS_JSON
 
 
 def _organ_n(case_id: str, dataset: str) -> str:
-    m = re.match(rf"{re.escape(dataset)}(\d+)_", case_id)
+    m = re.match(rf"{re.escape(dataset)}(\d+)_", case_id["id"])
     if not m:
         raise ValueError(
             f"could not parse organ_n from id {case_id!r} for dataset {dataset!r}"
