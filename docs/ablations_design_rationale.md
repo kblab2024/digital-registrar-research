@@ -4,19 +4,48 @@ This document records the reasoning behind each ablation cell and how
 the results should be read. Decisions here should carry forward if the
 ablation grid is extended.
 
+## Entanglement caveat — why this isn't a clean factorial
+
+A reviewer's natural framing of the ablation is "what does each
+component contribute?". The honest answer is that the components are
+**not orthogonal**:
+
+- **DSPy is itself a prompting framework.** "Removing DSPy"
+  simultaneously removes the framework's automated prompt construction,
+  parse-retry logic, structured-output handling, *and* its `Literal[…]`-
+  typed output channel.
+- **The schema constraint is realised through DSPy's `Literal` type
+  hints.** "Removing schema constraints" without removing DSPy means
+  swapping enum-typed outputs for `str` outputs and parsing post-hoc —
+  a hybrid lesion, not an isolated one.
+- **The router (`is_cancer`) and intermediate JSON step (`ReportJsonize`)
+  themselves use DSPy.** Removing DSPy from one stage and not another
+  introduces a discontinuity worth reporting separately.
+
+We therefore frame the ablations as **lesion studies on engineering
+choices** (modular-vs-monolithic decomposition, with-vs-without
+ReportJsonize, DSPy-vs-raw-JSON output channel) rather than as a clean
+factorial of independent components. Where one knob necessarily co-varies
+with another we say so explicitly and report both endpoints separately.
+
+This caveat is the rebuttal-paragraph from
+[`workspace/reviewer-response-suggestions.md` §1.7](../workspace/reviewer-response-suggestions.md)
+(gitignored) — it should also appear as a footnote in the manuscript's
+ablation section.
+
 ## Why these three cells?
 
 The published Digital Registrar pipeline makes two joint design
-choices:
+choices that are candidate explanations for its accuracy:
 
 1. It splits each organ's extraction into 5–7 small DSPy signatures
    (e.g. `BreastCancerNonnested`, `BreastCancerStaging`,
    `BreastCancerMargins`, `BreastCancerLN`, `BreastCancerBiomarkers`,
    `BreastCancerGrading`, `DCIS`).
-2. It uses DSPy as the LM-calling framework.
+2. It uses DSPy as the LM-calling framework, which carries the
+   schema constraint via `Literal[…]` type hints.
 
-Either choice could in principle be the one doing the real work. To
-disentangle them we need a 2×2:
+A 2×2 separates them:
 
 |          | Modular                 | Monolithic                |
 |----------|-------------------------|---------------------------|
@@ -36,6 +65,12 @@ the questions the ablation is meant to answer:
 The chain lets us attribute any A→C gap to modularity (A→B) and
 framework (B→C) separately.
 
+A **fourth condition** in the lesion sequence — Cell B with
+`--skip-jsonize` — isolates the contribution of the intermediate
+`ReportJsonize` structuring step. See
+[ablations.md](ablations.md) "The Grid 1 lesion study" for the full
+sequence.
+
 ## Parts held constant
 
 To isolate the modularity and framework variables, three upstream
@@ -49,69 +84,146 @@ components stay the same across all cells:
 2. **`ReportJsonize` step** — the intermediate "rough JSON structuring"
    signature. Kept on by default in Cells A, B (matches the baseline);
    omitted in Cell C (the monolithic raw call already has the full
-   report as context). The `--skip-jsonize` flag on `dspy_monolithic.py`
-   can be used to add a supplementary "no jsonize" variant of Cell B
-   if we want to isolate that step too.
+   report as context). The `--skip-jsonize` flag on
+   [`scripts/ablations/run_cell_b.py`](../scripts/ablations/run_cell_b.py)
+   adds a supplementary "no jsonize" variant of Cell B for the lesion
+   study.
 3. **Test split** — the 51-case stratified test split is loaded from
-   `../digitalregistrar-benchmarks/data/splits.json`. Every cell
-   predicts on the exact same cases.
+   `digital_registrar_research.paths.SPLITS_JSON`. Every cell predicts
+   on the exact same cases.
 
 ## Schema source of truth
 
-The raw-JSON runner in Cell C loads its per-organ JSON schemas from
-`../digitalregistrar-annotation/schemas/*.json`. These schemas were
-previously generated from the same DSPy signatures used by Cell A, so
-any agreement between Cells A and C reflects only model / framework
-behaviour, not schema drift.
+The raw-JSON runner in Cell C loads its per-organ JSON schemas via
+`digital_registrar_research.schemas.load_json_schema(organ)` — the
+**same** JSON the annotation UI consumes, generated from the **same**
+Pydantic case-models the DSPy pipeline targets. Agreement between
+Cells A/B/C therefore reflects only model and framework behaviour, not
+schema drift.
 
 ## Model-framework interaction
 
-Running each cell against both `gpt-oss:20b` and `gpt-4-turbo` lets us
-see whether DSPy's scaffolding (structured output parsing, retry on
-schema violation, per-field descriptions propagated into prompts) is
-more valuable for the smaller local model than the frontier model.
-A priori we expect:
+Running each cell against multiple models (locally:
+`gpt-oss:20b`, `gemma3:27b`, `qwen3:30b`; cloud: `gpt-4-turbo`) lets us
+see whether DSPy's scaffolding is more valuable for smaller local
+models than for frontier models. A priori we expect:
 
-- On `gpt-oss:20b`: **A > B ≫ C**. Modularity saves context; DSPy
-  saves JSON reliability on a smaller model.
+- On `gpt-oss:20b` and similar local LMs: **A > B ≫ C**. Modularity
+  saves context; DSPy saves JSON reliability on smaller models.
 - On `gpt-4-turbo`: **A ≈ B ≈ C**. Frontier models handle both a full
   organ schema in one shot and raw JSON output reliably.
 
-If this pattern is observed, it directly supports the paper's
-core narrative that the Digital Registrar's schema-first modular
-design is what makes a local LLM competitive in the first place.
+If this pattern is observed, it directly supports the paper's core
+narrative that the Digital Registrar's schema-first modular design is
+what makes a local LLM competitive in the first place — i.e. the
+contribution is **the engineering**, not the model.
+
+## Future axes (not yet wired into the runners)
+
+The full menu of ablation axes from the reviewer-response suggestions
+doc §1.2 includes:
+
+- **Output structuring discipline** — beyond the DSPy-Literal vs raw-
+  JSON contrast, integrate constrained decoding (`outlines`,
+  `lm-format-enforcer`) or GBNF grammars for a stronger structuring
+  baseline (axis B4 / B5).
+- **Prompting strategy** — few-shot demos, `dspy.ChainOfThought`,
+  compiled DSPy programs (`BootstrapFewShotWithRandomSearch`) — the
+  axes that actually answer the reviewer's "prompting" question rather
+  than the framework question (axes C2–C5).
+- **Schema specificity** — narrow per-organ Literal enums (current) vs
+  union-across-organs vs flat schema (axes F1–F3).
+
+Each of these requires a new cell-runner under
+[`src/digital_registrar_research/ablations/runners/`](../src/digital_registrar_research/ablations/runners/);
+[`scripts/ablations/run_grid.py`](../scripts/ablations/run_grid.py)
+already has TODO markers in `CELL_DISPATCH` showing where to register
+them. See [`workspace/reviewer-response-suggestions.md`](../workspace/reviewer-response-suggestions.md)
+(gitignored) for the prioritisation.
 
 ## Metrics
 
 All cells use the shared evaluator in
-`../digitalregistrar-benchmarks/eval/` — same field definitions, same
+[`benchmarks.eval`](eval/index.md) — same field definitions, same
 bipartite match for nested lists, same coverage accounting. Headline
 per-cell numbers:
 
-- `overall_field_acc` — mean field-level accuracy over the full
-  schema (not just the fair-scope subset — all cells can populate
-  every field in principle).
-- `structural_validity_rate` — fraction of outputs that parse as
-  valid JSON matching the organ schema. We expect this to drop
-  sharply for Cell C on `gpt-oss:20b`.
-- `mean_tokens_per_case` — proxy for context/cost. Monolithic
-  per-organ cells use ~1× the context of the raw fallback but
-  ~1/5–1/7× the context of the modular pipeline (since they make one
-  call rather than N). Useful for the "efficiency" axis of the paper.
-- `retry_rate` — fraction of cases that required a framework-level
-  retry (DSPy's automatic parse retry). Only populated for Cells A
-  and B; Cell C exposes this as the manual Pydantic-validation
-  retry count.
+- **Per-field macro accuracy on `FAIR_SCOPE`** — primary endpoint
+  (Wilson 95 % CI; paired-bootstrap CI vs. the full pipeline). Uses the
+  fair-scope whitelist in
+  [`scope.py`](../src/digital_registrar_research/benchmarks/eval/scope.py)
+  to ensure every cell competes on fields it can actually populate.
+- **Completeness breakdown** — `parse_error / field_missing / attempted /
+  correct` from
+  [`completeness.py`](../src/digital_registrar_research/benchmarks/eval/completeness.py).
+  We expect Cell C's `parse_error` rate to spike on `gpt-oss:20b` vs.
+  Cells A/B, demonstrating the DSPy framework's structural-validity
+  contribution.
+- **Nested-list F1** — bipartite-matched F1 for margins, biomarkers,
+  regional lymph nodes ([`nested_metrics.md`](eval/nested_metrics.md)).
+  Modularity's main payoff lives here — monolithic single-call cells
+  tend to exhaust context on multi-list organs first.
+- **Per-cell latency** — mean / median seconds from each
+  `_ledger.json`. Useful for the "efficiency" axis of the paper:
+  modular pays N× the DSPy-bootstrap cost; monolithic pays once;
+  raw-JSON pays once with no DSPy overhead.
+- **Retry / validation rate** — DSPy's automatic parse retry (Cells A,
+  B); manual Pydantic-validation retry count (Cell C, populated by
+  `RawJSONRunner.validation_retries`).
+
+Statistical analysis (Wilson + BCa + paired bootstrap CIs, McNemar at
+the case level, Fleiss κ across seeds, Holm-Bonferroni within axis,
+Cohen's d / Cliff's δ effect sizes) goes through the shared toolkit at
+[`benchmarks.eval.ci`](eval/ci_methods.md),
+[`benchmarks.eval.multirun`](eval/multirun.md), and
+[`scripts/eval/_common/stats_extra.py`](../scripts/eval/_common/stats_extra.py).
 
 ## Known risks / threats to validity
 
-- The `gpt-oss:20b` monolithic cell may *also* be context-window
-  limited for breast (≥7 nested field groups) — specifically the
-  biomarkers + LN + margins combination can overflow a 16k-token
-  context when combined with a long report. We detect and flag this
-  in `runners/dspy_monolithic.py`; if it fires, the finding itself
-  is the result (modularity is not merely *helpful* but *necessary*).
-- The schemas shipped in `../digitalregistrar-annotation/schemas/`
-  may drift from the DSPy signatures over time. Keep a sanity check
-  in `schemas/schema_builder.py` to assert the top-level keys match
-  the expected `Literal[...]` field names.
+- **Context-window saturation on `gpt-oss:20b` × monolithic**. The
+  monolithic Cell B may *also* be context-window limited for breast
+  (≥ 7 nested field groups) — specifically the biomarkers + LN +
+  margins combination can overflow a 16k-token context when combined
+  with a long report. We detect and flag this in
+  [`runners/dspy_monolithic.py`](../src/digital_registrar_research/ablations/runners/dspy_monolithic.py);
+  if it fires, the finding itself is a result (modularity is not
+  merely *helpful* but *necessary* for that organ at that model size).
+- **Schema drift**. The JSON schemas shipped under
+  [`schemas/data/`](../src/digital_registrar_research/schemas/data/)
+  may drift from the DSPy signatures over time. The
+  `registrar-schemas --check` console script asserts top-level
+  Literal-vocab parity in CI; run it before every ablation kickoff.
+- **DSPy version pinning**. DSPy's prompt-construction behaviour has
+  changed materially between minor releases. Pin the version in
+  [`pyproject.toml`](../pyproject.toml) and capture it in the run
+  manifest via `_run_meta.json`'s git SHA + DSPy version field.
+- **Seed scope**. Currently the seed is set in
+  [`configs/dspy_ollama_<model>.yaml`](../configs/) and applies to all
+  cells using that model. To run multi-seed ablations, copy the grid
+  YAML, change `slug` per seed, and bump `decoding.seed` between
+  invocations. Per-run seed override is on the TODO list in
+  [run_grid.py](../scripts/ablations/run_grid.py).
+
+## Smoke-first discipline
+
+Before any multi-day grid, run [grid-wide smoke](ablations.md#grid-wide-smoke)
+end-to-end and confirm exit code 0 + non-empty `ablation_summary.csv`.
+The smoke contract is documented in [ablations.md §
+"Smoke runners"](ablations.md#smoke-runners--pre-flight-before-a-multi-day-sweep).
+Cost: ≤ 10 minutes. Insurance value: catching a typo or a schema-binding
+regression before it consumes 8 hours of a real sweep.
+
+## Pre-registration
+
+Before kicking off a real grid:
+1. Lock the test split — verify the hash of the packaged splits.json.
+2. Pre-register primary + secondary endpoints in
+   [`configs/eval_endpoints.yaml`](../configs/eval_endpoints.yaml).
+3. Lock the decoding seed in the relevant model config; capture it in
+   `_run_meta.json` per cell.
+4. Reference the locked endpoint config (with git SHA) in the response
+   letter / paper Methods.
+
+This pre-registration is what reviewer-1's "statistical rigor" concern
+is really asking for. See
+[`workspace/reviewer-response-suggestions.md` §2.3](../workspace/reviewer-response-suggestions.md).

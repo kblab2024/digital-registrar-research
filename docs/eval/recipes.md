@@ -103,6 +103,66 @@ python -m scripts.eval.cli completeness \
 cat workspace/results/eval/completeness/modularity_advantage.csv | head
 ```
 
+## Ablation grid — smoke before sweep
+
+Pre-flight one cell against a 2-case sample. Cell C (raw JSON) is the fastest because there's no DSPy bootstrapping; use it as the canonical smoke target.
+
+```
+python scripts/ablations/run_cell_smoke.py --cell c --model gpt-oss:20b --n 2
+```
+
+The smoke writes to `workspace/results/_smoke_<YYYYMMDD-HHMM>/` (the leading underscore keeps it out of the regular aggregator's directory glob), round-trips through the aggregator, and asserts `ablation_summary.csv` is non-empty before exiting 0.
+
+Grid-wide smoke (Cells B + C, ≤ 10 minutes):
+
+```
+python scripts/ablations/run_grid_smoke.py --model gpt-oss:20b --n 2
+```
+
+To include Cell A (which copies pre-computed modular-DSPy predictions), point at the source directory:
+
+```
+python scripts/ablations/run_grid_smoke.py --model gpt-oss:20b --n 2 \
+    --modular-source-dir E:/experiment/20260422/gpt-oss
+```
+
+Both smoke runners are **fail-loud** — any cell exception or empty aggregator CSV propagates as a non-zero exit. A green smoke is the go/no-go for a real sweep.
+
+## Ablation grid — full sweep (Grid 1)
+
+After a green smoke, edit [`configs/ablations/grid_1.yaml`](../../configs/ablations/grid_1.yaml) to point `modular_gpt_oss_dir` at the parent project's full-pipeline output, then:
+
+```
+python scripts/ablations/run_grid.py --config configs/ablations/grid_1.yaml
+```
+
+Per-cell outputs land at `workspace/results/ablations/<cell_id>_<slug>/{<case_id>.json, _ledger.json, _run_meta.json}`. The driver runs the aggregator at the end; outputs match `registrar-ablate` (`ablation_grid.csv`, `ablation_summary.csv`, `ablation_table.csv`, `cell_deltas.csv`, `efficiency.csv`).
+
+For ad-hoc per-cell runs that bypass the grid driver:
+
+```
+python scripts/ablations/run_cell_b.py --model gpt \
+    --out workspace/results/ablations/dspy_monolithic_gpt-oss
+
+python scripts/ablations/run_cell_c.py --model gpt-oss:20b \
+    --out workspace/results/ablations/raw_json_gpt-oss
+```
+
+See [ablations.md](../ablations.md) for the per-cell argument reference and the lesion-study reading guide.
+
+## Ablation aggregator across smoke + real outputs
+
+The aggregator's `--results-root` flag scopes discovery to a specific tree, which is what the smoke runners use under the hood:
+
+```
+python -m digital_registrar_research.ablations.eval.run_ablations \
+    --results-root workspace/results/_smoke_20260427-1015 \
+    --cells dspy_monolithic raw_json \
+    --models gpt-oss-20b
+```
+
+Without `--results-root` it defaults to `workspace/results/ablations/` — the canonical location for real-sweep outputs.
+
 ## Reviewer-rebuttal diagnostics
 
 After running `non_nested` and `iaa`:
