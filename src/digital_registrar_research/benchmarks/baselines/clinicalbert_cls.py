@@ -264,9 +264,12 @@ def predict(args) -> None:
             "cancer_data": cancer_data,
         }
 
-        ds_dir = out_root / case["dataset"]
-        ds_dir.mkdir(parents=True, exist_ok=True)
-        with (ds_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
+        # Canonical layout: <out>/<organ_n>/<case_id>.json. The caller
+        # (scripts/baselines/run_bert.py) sets <out> to
+        # {folder}/results/predictions/{dataset}/clinicalbert/cls/.
+        organ_dir = out_root / case["organ_n"]
+        organ_dir.mkdir(parents=True, exist_ok=True)
+        with (organ_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 
 
@@ -276,7 +279,7 @@ def main() -> None:
     ap.add_argument("--epochs", type=int, default=5)
     ap.add_argument("--ckpt", default="ckpts/clinicalbert_cls.pt")
     ap.add_argument("--out", default=str(BENCHMARKS_RESULTS / "clinicalbert_cls"),
-                    help="Output dir; per-dataset subdirs are created under it.")
+                    help="Output dir; per-organ subdirs are created under it.")
     ap.add_argument("--data-root", default="dummy",
                     help="Root containing data/<dataset>/ subtrees (default: dummy).")
     ap.add_argument("--organs", default=",".join(DEFAULT_ORGANS),

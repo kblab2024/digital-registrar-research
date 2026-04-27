@@ -277,18 +277,20 @@ def predict(args) -> None:
                 val = float(m.group())
                 cancer_data[field] = int(val) if val.is_integer() else val
 
-        # QA only populates cancer_data scalars — categorical/cancer_category
-        # routing is handled by clinicalbert_cls.py and merged offline by
-        # eval/run_all.py:merge_clinicalbert_outputs.
+        # QA only populates cancer_data scalars — categorical / cancer_category
+        # routing is handled by clinicalbert_cls.py. The merge step under
+        # scripts/baselines/run_bert.py reconciles the two heads into
+        # clinicalbert/merged/.
         result = {
             "cancer_excision_report": None,
             "cancer_category": None,
             "cancer_category_others_description": None,
             "cancer_data": cancer_data,
         }
-        ds_dir = out_root / case["dataset"]
-        ds_dir.mkdir(parents=True, exist_ok=True)
-        with (ds_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
+        # Canonical layout: <out>/<organ_n>/<case_id>.json.
+        organ_dir = out_root / case["organ_n"]
+        organ_dir.mkdir(parents=True, exist_ok=True)
+        with (organ_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 
 

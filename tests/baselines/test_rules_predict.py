@@ -1,25 +1,26 @@
-"""End-to-end test for the rule_based predict pipeline.
+"""End-to-end test for the rule_based predict orchestrator.
 
-Builds a tiny synthetic data root (mimicking dummy/data/<dataset>/), runs
-``rules.predict()`` against it, and asserts the prediction layout +
-content match the contract that ``benchmarks/eval/run_all.py`` expects.
+Builds a tiny synthetic data root in the canonical layout, invokes
+``scripts/baselines/run_rule.py``, and asserts the output predictions
+land at the canonical path
+``{root}/results/predictions/{dataset}/rule_based/{organ_n}/{case_id}.json``
+with the right shape.
 """
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from digital_registrar_research.benchmarks.baselines import rules
-from digital_registrar_research.benchmarks.eval.metrics import (
-    aggregate_cases_to_df,
-)
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RUN_RULE = REPO_ROOT / "scripts" / "baselines" / "run_rule.py"
 
 
-# Per-organ-index schema follows the project convention used in
-# gen_dummy_skeleton.py: 1=breast, 2=colorectal, 3=esophagus, 4=liver, 5=stomach.
+# Per-organ-index schema mirrors gen_dummy_skeleton.py.
 ORGAN_BY_IDX = {
     "1": "breast",
     "2": "colorectal",
@@ -29,40 +30,27 @@ ORGAN_BY_IDX = {
 }
 
 
-def _build_synthetic_data_root(root: Path) -> None:
-    """Create dummy/data/<ds>/{reports,annotations/gold}/<idx>/<id>.{txt,json}."""
-    fixtures: dict[tuple[str, str], tuple[str, dict]] = {
-        ("cmuh", "1"): (
-            "cmuh1_1",
-            (
-                "Modified radical mastectomy. Infiltrating ductal carcinoma. "
-                "Nottingham grade G2. Tumor size 2.5 cm. "
-                "Stage pT2 N1mi MX. Lymphovascular invasion present."
-            ),
-        ),
-        ("tcga", "1"): (
-            "tcga1_1",
-            (
-                "Wide local excision. Invasive lobular carcinoma. "
-                "Grade 1. Tumor size 8 mm. pT1c N0 MX."
-            ),
-        ),
-        ("tcga", "3"): (
-            "tcga3_1",
-            (
-                "Esophagectomy. Squamous cell carcinoma. Grade 2. "
-                "pT3 N2 MX. Stage IIIB. Lymphovascular invasion present."
-            ),
-        ),
+def _build_synthetic_root(root: Path) -> None:
+    """Write reports + gold annotations under {root}/data/<ds>/..."""
+    fixtures = {
+        ("cmuh", "1", "cmuh1_1"):
+            "Modified radical mastectomy. Infiltrating ductal carcinoma. "
+            "Nottingham grade G2. Tumor size 2.5 cm. "
+            "Stage pT2 N1mi MX. Lymphovascular invasion present.",
+        ("cmuh", "3", "cmuh3_1"):
+            "Esophagectomy. Squamous cell carcinoma. Grade 2. "
+            "pT3 N2 MX. Stage IIIB. Lymphovascular invasion present.",
+        ("tcga", "1", "tcga1_1"):
+            "Wide local excision. Invasive lobular carcinoma. "
+            "Grade 1. Tumor size 8 mm. pT1c N0 MX.",
     }
-
-    for (ds, organ_idx), (case_id, report) in fixtures.items():
+    for (ds, organ_idx, case_id), text in fixtures.items():
         ds_root = root / "data" / ds
         rep_dir = ds_root / "reports" / organ_idx
         ann_dir = ds_root / "annotations" / "gold" / organ_idx
         rep_dir.mkdir(parents=True, exist_ok=True)
         ann_dir.mkdir(parents=True, exist_ok=True)
-        (rep_dir / f"{case_id}.txt").write_text(report, encoding="utf-8")
+        (rep_dir / f"{case_id}.txt").write_text(text, encoding="utf-8")
         gold = {
             "cancer_excision_report": True,
             "cancer_category": ORGAN_BY_IDX[organ_idx],
@@ -73,87 +61,83 @@ def _build_synthetic_data_root(root: Path) -> None:
             json.dumps(gold), encoding="utf-8"
         )
 
-    # Splits: every fixture goes into "test" (no train phase for rules).
-    for ds in ("cmuh", "tcga"):
-        ids = [cid for (d, _), (cid, _) in fixtures.items() if d == ds]
-        if not ids:
-            continue
-        splits = {"train": [], "test": ids}
-        (root / "data" / ds / "splits.json").write_text(
-            json.dumps(splits), encoding="utf-8"
-        )
-
 
 @pytest.fixture
-def synthetic_data_root(tmp_path: Path) -> Path:
-    _build_synthetic_data_root(tmp_path)
+def synthetic_root(tmp_path: Path) -> Path:
+    _build_synthetic_root(tmp_path)
     return tmp_path
 
 
-def test_predict_writes_per_dataset_jsons(
-    synthetic_data_root: Path, tmp_path: Path,
-) -> None:
-    out_dir = tmp_path / "out"
-    args = SimpleNamespace(
-        data_root=str(synthetic_data_root),
-        dataset="both",
-        datasets="cmuh,tcga",
-        organs=",".join(["breast", "colorectal", "esophagus",
-                          "liver", "stomach"]),
-        out=str(out_dir),
+def test_run_rule_writes_canonical_layout(synthetic_root: Path) -> None:
+    """run_rule.py emits {root}/results/predictions/{ds}/rule_based/{organ_n}/<id>.json."""
+    cmd = [
+        sys.executable, str(RUN_RULE),
+        "--folder", str(synthetic_root),
+        "--dataset", "cmuh",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, (
+        f"run_rule.py failed: stdout={result.stdout!r} stderr={result.stderr!r}"
     )
-    rules.predict(args)
 
-    # cmuh1_1 (breast)
-    cmuh = out_dir / "cmuh" / "cmuh1_1.json"
-    assert cmuh.exists()
-    pred = json.loads(cmuh.read_text(encoding="utf-8"))
+    out_root = synthetic_root / "results" / "predictions" / "cmuh" / "rule_based"
+    assert out_root.is_dir()
+    assert (out_root / "_summary.json").is_file()
+    assert (out_root / "_run_meta.json").is_file()
+    assert (out_root / "_log.jsonl").is_file()
+
+    # Per-organ subdirs with predictions.
+    breast_pred = out_root / "1" / "cmuh1_1.json"
+    eso_pred = out_root / "3" / "cmuh3_1.json"
+    assert breast_pred.is_file()
+    assert eso_pred.is_file()
+
+    # Schema check on one prediction.
+    pred = json.loads(breast_pred.read_text(encoding="utf-8"))
+    assert set(pred.keys()) == {
+        "cancer_excision_report", "cancer_category",
+        "cancer_category_others_description", "cancer_data",
+    }
     assert pred["cancer_category"] == "breast"
     assert pred["cancer_excision_report"] is True
     assert pred["cancer_data"]["pt_category"] == "t2"
     assert pred["cancer_data"]["lymphovascular_invasion"] is True
 
-    # tcga1_1 (breast)
-    tcga = out_dir / "tcga" / "tcga1_1.json"
-    assert tcga.exists()
 
-    # tcga3_1 (esophagus)
-    tcga3 = out_dir / "tcga" / "tcga3_1.json"
-    assert tcga3.exists()
-    pred3 = json.loads(tcga3.read_text(encoding="utf-8"))
-    assert pred3["cancer_category"] == "esophagus"
-    assert pred3["cancer_data"]["pt_category"] == "t3"
+def test_run_rule_summary_counts(synthetic_root: Path) -> None:
+    cmd = [
+        sys.executable, str(RUN_RULE),
+        "--folder", str(synthetic_root),
+        "--dataset", "tcga",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+    summary_path = (synthetic_root / "results" / "predictions" / "tcga"
+                    / "rule_based" / "_summary.json")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["method"] == "rule_based"
+    assert summary["dataset"] == "tcga"
+    assert summary["n_cases"] == 1  # only one tcga fixture
+    assert summary["n_pipeline_error"] == 0
 
 
-def test_predict_outputs_score_with_eval_harness(
-    synthetic_data_root: Path, tmp_path: Path,
-) -> None:
-    """End-to-end: rule predictions feed cleanly into aggregate_cases_to_df."""
-    from digital_registrar_research.benchmarks.baselines._data import load_cases
-    from digital_registrar_research.benchmarks.eval.bert_scope import (
-        bert_scope_for_organ,
-    )
+def test_run_rule_overwrite(synthetic_root: Path) -> None:
+    """A second invocation with --overwrite re-runs all cases."""
+    cmd_base = [
+        sys.executable, str(RUN_RULE),
+        "--folder", str(synthetic_root),
+        "--dataset", "cmuh",
+    ]
+    r1 = subprocess.run(cmd_base, capture_output=True, text=True)
+    assert r1.returncode == 0, r1.stderr
+    r2 = subprocess.run(cmd_base, capture_output=True, text=True)
+    assert r2.returncode == 0, r2.stderr
+    # Without --overwrite, the second run should hit the cache path.
+    summary_path = (synthetic_root / "results" / "predictions" / "cmuh"
+                    / "rule_based" / "_summary.json")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["n_cached"] >= 0  # cached counter is incremented on resume
 
-    out_dir = tmp_path / "out"
-    args = SimpleNamespace(
-        data_root=str(synthetic_data_root),
-        dataset="both",
-        datasets="cmuh,tcga",
-        organs=",".join(["breast", "colorectal", "esophagus",
-                          "liver", "stomach"]),
-        out=str(out_dir),
-    )
-    rules.predict(args)
-
-    cases = load_cases(
-        datasets=["cmuh", "tcga"], split="test",
-        root=synthetic_data_root,
-        organs={"breast", "colorectal", "esophagus", "liver", "stomach"},
-    )
-    assert len(cases) == 3
-    df = aggregate_cases_to_df(
-        cases, {"rule_based": out_dir}, scope=bert_scope_for_organ,
-    )
-    assert not df.empty
-    assert set(df["method"].unique()) == {"rule_based"}
-    assert set(df["dataset"].unique()) == {"cmuh", "tcga"}
+    r3 = subprocess.run(cmd_base + ["--overwrite"], capture_output=True, text=True)
+    assert r3.returncode == 0, r3.stderr

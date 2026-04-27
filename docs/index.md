@@ -9,7 +9,7 @@ This package wraps four research concerns around the slim production extractor:
 | [`digital_registrar_research.pipeline` + `models/` + `util/`](pipeline.md) | Core DSPy extraction (vendored from the slim `digitalregistrar` release) |
 | [`digital_registrar_research.schemas`](schemas.md) | Canonical Pydantic case-models → generated JSON schemas |
 | [`digital_registrar_research.annotation`](annotation.md) | Streamlit UI for doctors to review GPT-OSS pre-annotations |
-| [`digital_registrar_research.benchmarks`](benchmarks.md) | Comparison vs GPT-4 / ClinicalBERT / rule-based |
+| [`digital_registrar_research.benchmarks`](benchmarks/README.md) | Comparison vs LLM / ClinicalBERT / rule-based — canonical run + eval workflow |
 | [`digital_registrar_research.ablations`](ablations.md) | Modular vs monolithic DSPy × DSPy vs raw-JSON grid |
 | [example data](data.md) | Datasets (cmuh, tcga), layout conventions, dummy skeleton |
 | [experiment protocol](experiment_protocol.md) | 2026-04 experiment cross-product, evaluation questions, invariants |

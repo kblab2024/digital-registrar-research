@@ -9,23 +9,20 @@ for the head-to-head comparison against ClinicalBERT and LLM methods.
 Coverage policy
 ---------------
 A field is **emitted only when the regex/lexicon matches with confidence**.
-Missing keys count as "not attempted" in
-:func:`metrics.field_correct` — they drop out of the accuracy
-denominator rather than counting as wrong. This is the right behavior
-for a deterministic floor and produces honest per-field coverage
-asymmetry vs ClinicalBERT (which always emits a class).
+Missing keys count as "not attempted" in the eval metrics — they drop
+out of the accuracy denominator rather than counting as wrong. This is
+the right behavior for a deterministic floor and produces honest per-
+field coverage asymmetry vs ClinicalBERT (which always emits a class).
 
 Usage
 -----
-Single-report (legacy)::
+This module is a pure extractor. The batch predict orchestrator lives at
+``scripts/baselines/run_rule.py`` (canonical layout, mirrors
+``scripts/pipeline/run_dspy_ollama_single.py``). For ad-hoc debugging on
+a single report::
 
     python -m digital_registrar_research.benchmarks.baselines.rules \\
         --report path/to/report.txt
-
-Batch predict (mirrors clinicalbert_cls)::
-
-    python -m digital_registrar_research.benchmarks.baselines.rules \\
-        --phase predict --data-root dummy --dataset both
 """
 from __future__ import annotations
 
@@ -34,13 +31,9 @@ import json
 import re
 from pathlib import Path
 
-from tqdm import tqdm
-
-from ...paths import BENCHMARKS_RESULTS
 from ..eval.bert_scope import bert_scope_for_organ
 from ..eval.scope import IMPLEMENTED_ORGANS
 from ..eval.scope_organs import ORGAN_BOOL, ORGAN_CATEGORICAL, ORGAN_SPAN
-from ._data import load_cases, per_dataset_counts
 
 
 # ============================================================================
@@ -1154,88 +1147,36 @@ def _extract_breast_biomarkers(report: str) -> list[dict]:
 
 
 # ============================================================================
-# Predict CLI
+# Single-report debug CLI
 # ============================================================================
-
-DEFAULT_ORGANS = ["breast", "colorectal", "esophagus", "liver", "stomach"]
-DEFAULT_DATASETS = ["cmuh", "tcga"]
-
-
-def _parse_csv(s: str) -> list[str]:
-    return [x.strip() for x in s.split(",") if x.strip()]
-
-
-def predict(args) -> None:
-    """Batch predict on the dummy/production data root, mirroring clinicalbert_cls."""
-    organs = set(_parse_csv(args.organs))
-    if args.dataset == "both":
-        datasets = _parse_csv(args.datasets)
-    else:
-        datasets = [args.dataset]
-
-    out_root = Path(args.out)
-    out_root.mkdir(parents=True, exist_ok=True)
-
-    cases = load_cases(
-        datasets=datasets, split="test",
-        root=Path(args.data_root), organs=organs,
-    )
-    counts = per_dataset_counts(cases)
-    pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
-    print(f"Predicting on {len(cases)} cases ({pretty})  organs={sorted(organs)}")
-
-    for case in tqdm(cases, desc="rule-predict"):
-        report = Path(case["report_path"]).read_text(encoding="utf-8")
-        organ = case.get("cancer_category")
-        result = extract_for_organ(report, organ)
-
-        ds_dir = out_root / case["dataset"]
-        ds_dir.mkdir(parents=True, exist_ok=True)
-        with (ds_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+#
+# Batch prediction lives in ``scripts/baselines/run_rule.py`` (canonical
+# layout). This entry point is for ad-hoc debugging only — extract the
+# fields from one file and print the JSON.
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Rule-based pathology extraction baseline.",
+        description="Rule-based pathology extractor — single-file debug CLI. "
+                    "For batch prediction, use scripts/baselines/run_rule.py.",
     )
     ap.add_argument(
-        "--phase", choices=["predict"], default="predict",
-        help="Rules are deterministic — no train phase.",
+        "--report", type=Path, required=True,
+        help="Path to a pathology report .txt file.",
     )
     ap.add_argument(
-        "--out", default=str(BENCHMARKS_RESULTS / "rule_based"),
-        help="Output dir; per-dataset subdirs created under it.",
-    )
-    ap.add_argument(
-        "--data-root", default="dummy",
-        help="Root containing data/<dataset>/ subtrees (default: dummy).",
-    )
-    ap.add_argument(
-        "--organs", default=",".join(DEFAULT_ORGANS),
-        help="CSV of cancer_category values to include.",
-    )
-    ap.add_argument(
-        "--datasets", default=",".join(DEFAULT_DATASETS),
-        help="CSV of dataset names; predict pools these unless --dataset overrides.",
-    )
-    ap.add_argument(
-        "--dataset", default="both", choices=["cmuh", "tcga", "both"],
-        help="Predict-time dataset selector (default: both).",
-    )
-    ap.add_argument(
-        "--report", type=Path, default=None,
-        help="Optional: extract from a single report file (legacy CLI mode). "
-             "Bypasses --phase predict entirely.",
+        "--organ", default=None,
+        help="Optional: skip lexicon classification and dispatch to "
+             "this organ directly. Useful for debugging per-organ helpers.",
     )
     args = ap.parse_args()
 
-    if args.report is not None:
-        report_text = args.report.read_text(encoding="utf-8")
-        print(json.dumps(extract(report_text), ensure_ascii=False, indent=2))
-        return
-
-    predict(args)
+    report_text = args.report.read_text(encoding="utf-8")
+    if args.organ is not None:
+        result = extract_for_organ(report_text, args.organ)
+    else:
+        result = extract(report_text)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
