@@ -31,7 +31,7 @@ DEFAULT_METHODS = [
     "digital_registrar",
     "gpt4_dspy",
     "clinicalbert_merged",
-    "rules",
+    "rule_based",
 ]
 DEFAULT_DATASETS = ["cmuh", "tcga"]
 DEFAULT_ORGANS = ["breast", "colorectal", "esophagus", "liver", "stomach"]
