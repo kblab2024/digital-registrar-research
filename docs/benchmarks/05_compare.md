@@ -1,40 +1,53 @@
 # Side-by-side comparison
 
-## Defaults
+## Defaults (cross-corpus baseline)
 
 The convenience wrappers (`eval_rule_vs_llm`, `eval_bert_vs_llm`, `eval_rule_bert_llm`) default to:
 
 - `--folder workspace`
-- `--datasets cmuh tcga` (multi-dataset; per-method outputs concatenated with a `dataset` column)
-- `--split test`
+- `--datasets tcga` (the LLM-comparable held-out corpus)
+- `--split all` (no test-fold filter — TCGA was never in training)
 
-So a one-liner like:
+So a one-liner:
 
 ```bash
 python scripts/baselines/eval_bert_vs_llm.py --llm-model gpt_oss_20b \
     --out workspace/results/eval/bert_vs_llm
 ```
 
-evaluates BERT vs LLM on cmuh + tcga, restricted to each corpus's test fold, and writes a stratified comparison.
+evaluates BERT (trained on CMUH) vs LLM (TCGA-only) on the full TCGA corpus.
 
-## Test-set restriction (load-bearing for BERT)
+## Why no test-fold filter by default
 
-The `--split test` default makes the wrappers:
+The legacy default was `--split test` to prevent scoring BERT on its training cases. Under the cross-corpus contract, BERT is trained on CMUH and predicted on TCGA — there's no overlap, so the test-fold filter is unnecessary.
+
+The leakage guard in `clinicalbert_*.predict` is still active and will refuse to run if any predict case is in the checkpoint's `train_case_ids` — so the safety net is at the predict step, not the eval step.
+
+## When to override
+
+For an intra-corpus ablation (e.g. CMUH-trained BERT evaluated on CMUH test):
+
+```bash
+python scripts/baselines/eval_bert_vs_llm.py \
+    --datasets cmuh --split test \
+    --llm-model gpt_oss_20b \
+    --out workspace/results/eval/bert_vs_llm_intra_cmuh
+```
+
+For both corpora at once with proper test-fold filtering everywhere:
+
+```bash
+python scripts/baselines/eval_rule_bert_llm.py \
+    --datasets cmuh tcga --split test \
+    --llm-model gpt_oss_20b \
+    --out workspace/results/eval/rule_bert_llm_both
+```
+
+In the cross-dataset case the wrappers:
 
 1. Resolve `splits.json` for each `(folder, dataset)` via `scripts.baselines._split_helpers.load_split`.
 2. Write per-dataset test case-id lists to `<out>/cases_test_<dataset>.txt`.
 3. Pass `--cases @<file>` to **every** `non_nested` call (per dataset, per method).
-
-So rule, BERT, and LLM are all scored against the **same** test set per dataset. This is mandatory when BERT is involved (BERT was trained on the train split — scoring it on training cases would be in-sample memorization), and it also keeps coverage / accuracy comparable for rule-vs-LLM.
-
-Override with `--split all` (no filter) or `--split train`:
-
-```bash
-python scripts/baselines/eval_rule_vs_llm.py --folder dummy --datasets cmuh \
-    --llm-model gpt_oss_20b \
-    --split all \
-    --out dummy/results/eval/rule_vs_llm_full
-```
 
 ## Multi-dataset output layout
 

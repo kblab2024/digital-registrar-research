@@ -9,23 +9,29 @@ three outputs land under the canonical prediction tree::
     {folder}/results/predictions/{dataset}/clinicalbert/qa/{organ_n}/<case_id>.json
     {folder}/results/predictions/{dataset}/clinicalbert/merged/{organ_n}/<case_id>.json
 
-ClinicalBERT predictions are gated to the **test split** (per
-``benchmarks/data/splits.json``) — the model was trained on the train
-split, so scoring it on training cases would be memorization rather
-than generalization. LLM and rule baselines have no training phase and
-predict on every report.
-
-Mirrors the CLI shape of ``scripts/pipeline/run_dspy_ollama_single.py``
-so the rule, BERT, and LLM runners feel uniform.
+Defaults are aligned to the cross-corpus baseline contract: BERT is
+trained on CMUH (only) and predicted on the **full** TCGA corpus
+(``--split all``), since TCGA is held out from training. The leakage
+guard in ``clinicalbert_*.predict`` will refuse to run if any predict
+case overlaps the checkpoint's ``train_case_ids`` — so if you actually
+do want to predict on CMUH (intra-corpus ablation), pass
+``--split test`` so the guard passes against CMUH's test fold.
 
 Usage
 -----
+    # Default: predict on TCGA, full corpus (held out from CMUH training).
     python scripts/baselines/run_bert.py \\
-        --folder dummy --dataset tcga \\
-        [--heads cls qa merged] \\
         [--ckpt-cls ckpts/clinicalbert_cls.pt] \\
         [--ckpt-qa  ckpts/clinicalbert_qa] \\
-        [--organs breast colorectal] [--overwrite] [-v]
+        [--heads cls qa merged]
+
+    # Intra-corpus ablation (BERT trained on CMUH, predicted on CMUH test).
+    python scripts/baselines/run_bert.py \\
+        --datasets cmuh --split test
+
+    # Both datasets (CMUH test + full TCGA).
+    python scripts/baselines/run_bert.py \\
+        --datasets cmuh tcga --split test
 
 Output side files (under each head dir, e.g. ``clinicalbert/cls/``):
     _summary.json   per-head totals
@@ -56,6 +62,9 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from _config_loader import resolve_folder  # noqa: E402
 
 DATASETS = ("cmuh", "tcga")
+DEFAULT_PREDICT_DATASETS = ("tcga",)  # Cross-corpus default: BERT trains on CMUH,
+                                       # predicts on TCGA (held-out) for fair LLM
+                                       # comparison via OpenAI API.
 DEFAULT_HEADS = ("cls", "qa", "merged")
 DEFAULT_ORGANS = ("breast", "colorectal", "esophagus", "liver", "stomach")
 LOGGER_NAME = "scripts.baselines.run_bert"
@@ -154,6 +163,7 @@ def run_cls(
         dataset=args.dataset,
         datasets=args.dataset,
         data_root=str(args.experiment_root),
+        split=getattr(args, "split", "all"),
     )
     t0 = time.perf_counter()
     clinicalbert_cls.predict(predict_args)
@@ -188,6 +198,7 @@ def run_qa(
         dataset=args.dataset,
         datasets=args.dataset,
         data_root=str(args.experiment_root),
+        split=getattr(args, "split", "all"),
     )
     t0 = time.perf_counter()
     clinicalbert_qa.predict(predict_args)
@@ -258,9 +269,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--folder", dest="experiment_root", default="workspace",
                     type=resolve_folder,
                     help="Experiment root (default: workspace; dummy / abs path).")
-    ap.add_argument("--datasets", nargs="+", default=list(DATASETS),
+    ap.add_argument("--datasets", nargs="+", default=list(DEFAULT_PREDICT_DATASETS),
                     choices=DATASETS,
-                    help="Dataset name(s) (default: both cmuh and tcga).")
+                    help="Dataset name(s) to predict on (default: tcga — held "
+                         "out from CMUH-only training). Pass 'cmuh' for intra-"
+                         "corpus ablation; the leakage guard will require "
+                         "--split test in that case.")
+    ap.add_argument("--split", default="all", choices=("train", "test", "all"),
+                    help="Which split to predict on (default: all, since the "
+                         "default predict corpus is held out from training). "
+                         "Use --split test for intra-corpus prediction so the "
+                         "leakage guard passes.")
     ap.add_argument("--heads", nargs="+", default=list(DEFAULT_HEADS),
                     choices=("cls", "qa", "merged"),
                     help="Which heads to run. 'merged' requires both cls and "

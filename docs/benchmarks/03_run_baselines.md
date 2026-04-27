@@ -6,14 +6,14 @@ Each baseline has a dedicated runner under `scripts/baselines/` (and `scripts/pi
 
 ```bash
 python scripts/baselines/run_rule.py \
-    [--folder workspace] [--datasets cmuh tcga] \
+    [--folder workspace] [--datasets tcga] \
     [--organs 1 2 3] [--limit 50] [--overwrite] [-v]
 ```
 
 | Flag | Default | Effect |
 |---|---|---|
 | `--folder` | `workspace` | Experiment root (`dummy` / `workspace` / abs path). |
-| `--datasets` | `cmuh tcga` | One or more datasets. Default loops over both. |
+| `--datasets` | `tcga` | The LLM-comparable evaluation corpus. Pass `cmuh tcga` for both, or `cmuh` for intra-corpus ablations. |
 | `--organs` | Numeric organ subdirs to keep, e.g. `1 2 3`. Default: every organ subdir under `reports/` that has at least one `.txt`. |
 | `--limit N` | Cap cases per organ (debugging). |
 | `--overwrite` | Reprocess cases even if a valid output already exists. |
@@ -31,7 +31,7 @@ Output: `{folder}/results/predictions/{dataset}/rule_based/{organ_n}/{case_id}.j
 
 ```bash
 python scripts/baselines/run_bert.py \
-    [--folder workspace] [--datasets cmuh tcga] \
+    [--folder workspace] [--datasets tcga] [--split all] \
     [--heads cls qa merged] \
     [--ckpt-cls ckpts/clinicalbert_cls.pt] \
     [--ckpt-qa  ckpts/clinicalbert_qa] \
@@ -41,7 +41,8 @@ python scripts/baselines/run_bert.py \
 | Flag | Default | Effect |
 |---|---|---|
 | `--folder` | `workspace` | Experiment root. |
-| `--datasets` | `cmuh tcga` | One or more datasets. Default loops over both. |
+| `--datasets` | `tcga` | TCGA is held out from CMUH-only training. Pass `cmuh` for intra-corpus ablation; the leakage guard then requires `--split test`. |
+| `--split` | `all` | Which split to predict on. `all` = full corpus (the default since TCGA is held out). For intra-corpus ablation use `test`. |
 | `--heads` | `cls qa merged` | Heads to run. `merged` requires both `cls` and `qa` outputs (run them in the same call or beforehand). |
 | `--ckpt-cls` | `ckpts/clinicalbert_cls.pt` | Path to CLS checkpoint. |
 | `--ckpt-qa` | `ckpts/clinicalbert_qa` | Path to QA checkpoint dir. |
@@ -50,7 +51,7 @@ python scripts/baselines/run_bert.py \
 
 **Notes:**
 
-- Predicts on the **test split** (per `splits.json`) — BERT was trained on the train split, so scoring it on training cases is memorization, not generalization. By contrast, rule and LLM predict on every report (they have no training phase).
+- Default predicts on the **full TCGA corpus** (`--split all`) since TCGA was held out from CMUH-only training. The leakage guard in `clinicalbert_*.predict` will refuse to run if any predict case overlaps the checkpoint's `train_case_ids` — which would happen if you `--datasets cmuh` without `--split test`.
 - Device auto-detected: MPS / CUDA / CPU.
 - `merged` does a per-case key-merge: CLS provides the base (carries `cancer_category` + `cancer_excision_report`); QA's `cancer_data` scalars overlay onto CLS's, with CLS winning on collisions.
 

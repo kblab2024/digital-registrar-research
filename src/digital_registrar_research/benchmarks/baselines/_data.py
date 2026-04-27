@@ -68,18 +68,36 @@ def _resolve_production(case: dict, dataset: str) -> dict:
     }
 
 
+def _split_entries(data: dict, split: str) -> list:
+    """Return the entries for ``split`` from a parsed splits.json.
+
+    Accepts ``train``, ``test``, or ``all`` (concat of train + test).
+    """
+    if split == "all":
+        return list(data.get("train") or []) + list(data.get("test") or [])
+    if split not in data:
+        raise KeyError(f"split={split!r} not found in splits.json")
+    return list(data[split])
+
+
 def _load_one_dataset(dataset: str, split: str, root: Path) -> list[dict]:
-    """Try dummy layout first, fall back to packaged TCGA splits."""
+    """Try dummy/canonical layout first, fall back to packaged TCGA splits.
+
+    ``split`` accepts ``train``, ``test``, or ``all`` — the last concatenates
+    both folds (used when the predict corpus is held-out from training).
+    """
     dummy_splits = root / "data" / dataset / "splits.json"
     if dummy_splits.exists():
         with dummy_splits.open(encoding="utf-8") as f:
             data = json.load(f)
-        return [_resolve_dummy(root, dataset, cid) for cid in data[split]]
+        return [_resolve_dummy(root, dataset, cid)
+                for cid in _split_entries(data, split)]
 
     if dataset == "tcga" and SPLITS_JSON.exists():
         with SPLITS_JSON.open(encoding="utf-8") as f:
             data = json.load(f)
-        return [_resolve_production(c, dataset) for c in data[split]]
+        return [_resolve_production(c, dataset)
+                for c in _split_entries(data, split)]
 
     print(f"[warn] no splits.json for dataset={dataset!r} under {root}")
     return []

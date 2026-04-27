@@ -59,6 +59,9 @@ from digital_registrar_research.benchmarks.baselines.rules import (  # noqa: E40
 )
 
 DATASETS = ("cmuh", "tcga")
+DEFAULT_PREDICT_DATASETS = ("tcga",)  # Privacy-aligned: TCGA is the LLM-comparable
+                                       # evaluation corpus. Override with
+                                       # --datasets cmuh for intra-corpus ablations.
 LOGGER_NAME = "scripts.baselines.run_rule"
 
 
@@ -324,9 +327,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="Experiment root containing data/ and results/. "
                          "Default: workspace. Shorthand 'dummy' or absolute "
                          "path also accepted.")
-    ap.add_argument("--datasets", nargs="+", default=list(DATASETS),
+    ap.add_argument("--datasets", nargs="+", default=list(DEFAULT_PREDICT_DATASETS),
                     choices=DATASETS,
-                    help="Dataset name(s) under data/ (default: both cmuh and tcga).")
+                    help="Dataset name(s) to predict on (default: tcga only — "
+                         "the LLM-comparable evaluation corpus). Pass 'cmuh tcga' "
+                         "for both, or 'cmuh' for intra-corpus ablation.")
     ap.add_argument("--organs", nargs="*", default=None,
                     help="Only run these numeric organ directories, e.g. 1 2 "
                          "(default: every organ subdir of reports/).")

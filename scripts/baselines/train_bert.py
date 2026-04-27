@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
 """ClinicalBERT — canonical-layout trainer for CLS and QA heads.
 
-Trains the CLS and/or QA head on the **pooled** train split across both
-configured datasets (cmuh + tcga). The pooled-training contract is
-load-bearing: the annotated pool is too small to train each head on a
-single dataset, so we pool train and evaluate per-dataset later.
+Trains the CLS and/or QA head on the **CMUH train split** by default.
+TCGA is held out so it can serve as the cross-corpus evaluation set
+against LLMs (which, via the OpenAI API, can only see TCGA for privacy
+reasons). For ablations that need pooled training, pass
+``--datasets cmuh tcga``.
 
 Output: checkpoints under ``ckpts/`` (default), or wherever ``--ckpt-*``
 points. The predict step (``run_bert.py``) loads from these paths.
 
 Usage
 -----
-    # Train both heads on dummy data (smoke test):
+    # Default canonical training: CMUH only, pooled over the train split.
     python scripts/baselines/train_bert.py \\
-        --folder dummy --datasets cmuh tcga \\
-        --heads cls qa \\
-        [--epochs-cls 5] [--epochs-qa 3] [-v]
+        --heads cls qa --epochs-cls 5 --epochs-qa 3
 
-    # Train CLS only on real workspace data:
+    # Pooled training (ablation only — destroys TCGA's held-out status):
     python scripts/baselines/train_bert.py \\
-        --folder workspace --datasets cmuh tcga \\
-        --heads cls --epochs-cls 5
+        --datasets cmuh tcga --heads cls qa
+
+    # Smoke train on dummy data:
+    python scripts/baselines/train_bert.py \\
+        --folder dummy --datasets cmuh \\
+        --heads cls qa --epochs-cls 1 --epochs-qa 1
 
 Mac note: MPS (Apple Silicon) is auto-detected; otherwise CUDA → CPU.
 """
@@ -47,6 +50,8 @@ from baselines._split_helpers import (  # noqa: E402
 )
 
 DATASETS = ("cmuh", "tcga")
+DEFAULT_TRAIN_DATASETS = ("cmuh",)  # Privacy-driven: TCGA stays held-out for the
+                                     # cross-corpus baseline against OpenAI-API LLMs.
 DEFAULT_HEADS = ("cls", "qa")
 DEFAULT_ORGANS = ("breast", "colorectal", "esophagus", "liver", "stomach")
 LOGGER_NAME = "scripts.baselines.train_bert"
@@ -106,9 +111,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--folder", dest="experiment_root", default="workspace",
                     type=resolve_folder,
                     help="Experiment root (default: workspace; dummy / abs path).")
-    ap.add_argument("--datasets", nargs="+", default=list(DATASETS),
+    ap.add_argument("--datasets", nargs="+", default=list(DEFAULT_TRAIN_DATASETS),
                     choices=DATASETS,
-                    help="Datasets to pool for training (default: both cmuh and tcga).")
+                    help="Datasets to train on (default: cmuh only — TCGA is "
+                         "held out for cross-corpus evaluation against the LLM, "
+                         "which can only see TCGA via OpenAI API). Pass "
+                         "'cmuh tcga' for pooled training (ablation).")
     ap.add_argument("--heads", nargs="+", default=list(DEFAULT_HEADS),
                     choices=("cls", "qa"),
                     help="Heads to train (default: both).")

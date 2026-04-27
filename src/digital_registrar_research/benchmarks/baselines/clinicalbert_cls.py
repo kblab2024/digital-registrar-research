@@ -238,15 +238,17 @@ def predict(args) -> None:
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
 
+    predict_split = getattr(args, "split", None) or "all"
     cases = load_cases(
         datasets=datasets,
-        split="test",
+        split=predict_split,
         root=Path(args.data_root),
         organs=organs,
     )
     counts = per_dataset_counts(cases)
     pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
-    print(f"Predicting on {len(cases)} cases ({pretty})  organs={sorted(organs)}")
+    print(f"Predicting on {len(cases)} cases ({pretty})  "
+          f"organs={sorted(organs)}  split={predict_split}")
 
     # Leakage guard: refuse to silently score the encoder on cases it
     # was trained on. The checkpoint carries train_case_ids since the

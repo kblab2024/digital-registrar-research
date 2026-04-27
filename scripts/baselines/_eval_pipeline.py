@@ -7,20 +7,25 @@ eval_rule_bert_llm) runs ``scripts.eval.cli non_nested`` for each
 (with a ``dataset`` column added), then calls
 ``scripts.eval.compare.run_compare`` to join across methods.
 
-Defaults
---------
+Defaults (cross-corpus baseline contract)
+------------------------------------------
 - ``--folder workspace`` (override to ``dummy`` or absolute path).
-- ``--datasets cmuh tcga`` (pass one to focus on a single dataset).
-- ``--split test`` (rule, BERT, and LLM all scored on the test fold of
-  ``splits.json``). Use ``--split all`` to disable.
+- ``--datasets tcga`` — TCGA is the LLM-comparable evaluation corpus
+  (privacy: OpenAI API can't see CMUH). BERT trains on CMUH only, so
+  TCGA is fully held out.
+- ``--split all`` — score every TCGA case (no test-fold filter needed
+  since TCGA was never in training).
 
-Split-aware
------------
-``--split test`` resolves ``splits.json`` per (folder, dataset) and
-writes ``cases_<split>.txt`` for each dataset, then passes
-``--cases @<file>`` to the underlying ``non_nested`` call. This keeps
-BERT-vs-anything comparisons honest (BERT is trained on the train half;
-scoring it on training cases would be in-sample).
+For intra-corpus ablations (e.g. CMUH-only benchmark), pass
+``--datasets cmuh --split test`` so the leakage guard passes.
+
+Split-aware filtering
+---------------------
+When ``--split`` is ``test`` or ``train``, the wrapper resolves
+``splits.json`` per (folder, dataset), writes
+``cases_<split>_<dataset>.txt``, and passes ``--cases @<file>`` to the
+underlying ``non_nested`` call so all methods are scored on the same
+case set.
 """
 from __future__ import annotations
 
@@ -39,7 +44,10 @@ from _config_loader import resolve_folder
 
 logger = logging.getLogger("scripts.baselines.eval_pipeline")
 
-DEFAULT_DATASETS = ("cmuh", "tcga")
+DEFAULT_DATASETS = ("tcga",)  # Cross-corpus default: TCGA is the LLM-comparable
+                               # held-out corpus. Override with `cmuh` or
+                               # `cmuh tcga` for ablations.
+ALL_DATASETS = ("cmuh", "tcga")
 
 
 class MethodSpec:
@@ -132,18 +140,19 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     help="Experiment root (default: workspace; dummy / abs path "
                          "also accepted). Passed to scripts.eval.cli non_nested as --root.")
     ap.add_argument("--datasets", nargs="+", default=list(DEFAULT_DATASETS),
-                    choices=DEFAULT_DATASETS,
-                    help="Dataset(s) to evaluate (default: both cmuh and tcga). "
-                         "Pass one to focus on a single dataset.")
+                    choices=ALL_DATASETS,
+                    help="Dataset(s) to evaluate on (default: tcga — the LLM-"
+                         "comparable held-out corpus). Pass 'cmuh' or 'cmuh tcga' "
+                         "for intra-corpus ablations (then use --split test).")
     ap.add_argument("--organs", nargs="*", default=None,
                     help="Restrict to organ indices (1..10) or names.")
     ap.add_argument("--out", type=Path, required=True,
                     help="Output root. Subdirs non_nested_<label>/ and compare/ "
                          "are created under it.")
-    ap.add_argument("--split", default="test", choices=("test", "train", "all"),
-                    help="Which split to score (default: test). BERT is trained "
-                         "on the train half — default 'test' prevents in-sample "
-                         "scoring. Use 'all' to disable the filter.")
+    ap.add_argument("--split", default="all", choices=("test", "train", "all"),
+                    help="Which split to score (default: all, since the default "
+                         "eval corpus is TCGA which is held out from CMUH-only "
+                         "training). Use 'test' for intra-corpus ablations.")
     ap.add_argument("--n-boot", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("-v", "--verbose", action="store_true")

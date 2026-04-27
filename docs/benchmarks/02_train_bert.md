@@ -2,7 +2,23 @@
 
 ClinicalBERT is the only baseline that needs training. Rule-based is deterministic; LLMs are zero / few-shot.
 
-## Train/test separation (read this first)
+## Default: CMUH-only training (cross-corpus baseline)
+
+The default training set is **CMUH only**. This is driven by the privacy constraint that the LLM comparator (especially the OpenAI API) cannot see CMUH — TCGA is the only corpus all three methods can be evaluated on. To make BERT a fair baseline against the LLM on TCGA, BERT must NOT have seen TCGA at training time.
+
+```bash
+# Default: trains on cmuh, both heads.
+python scripts/baselines/train_bert.py
+```
+
+The acknowledged trade-off: a 110M-parameter encoder trained on ~100 CMUH cases is undertrained. That's accepted as the methodologically honest baseline — pooling would let BERT see TCGA at training time and the cross-method comparison would no longer be cross-domain. For an upper-bound ablation, pass `--datasets cmuh tcga`:
+
+```bash
+# Pooled-training ablation (NOT the canonical baseline).
+python scripts/baselines/train_bert.py --datasets cmuh tcga
+```
+
+## Train/test separation
 
 Train and test cases are pinned by `splits.json`, which lives at:
 
@@ -54,8 +70,8 @@ The two heads are trained **independently** on the **pooled** train split across
 ## Training command
 
 ```bash
+# Default canonical training: CMUH-only.
 python scripts/baselines/train_bert.py \
-    --folder workspace --datasets cmuh tcga \
     --heads cls qa \
     --ckpt-cls ckpts/clinicalbert_cls.pt \
     --ckpt-qa  ckpts/clinicalbert_qa \
@@ -66,8 +82,8 @@ Arguments:
 
 | Flag | Default | What it controls |
 |---|---|---|
-| `--folder` | required | Experiment root: `dummy`, `workspace`, or absolute path. Reads inputs from `{folder}/data/{dataset}/`. |
-| `--datasets` | `cmuh tcga` | Datasets to **pool** for training (concat `cmuh.train ∪ tcga.train`). Pooling is load-bearing — the annotated pool is too small to train per-dataset heads. |
+| `--folder` | `workspace` | Experiment root (`dummy` / `workspace` / abs path). |
+| `--datasets` | `cmuh` | Training datasets. Default is CMUH only (TCGA held out for cross-corpus eval). Pass `cmuh tcga` for the pooled-training ablation. |
 | `--heads` | `cls qa` | Which heads to train. Both run sequentially in a single invocation. |
 | `--organs` | breast colorectal esophagus liver stomach | Cancer-category names to keep. Other organs' rows are dropped from the train set. |
 | `--ckpt-cls` | `ckpts/clinicalbert_cls.pt` | Output checkpoint path for CLS. |
@@ -86,15 +102,19 @@ The trainer auto-detects:
 
 No flag is needed; the device is picked once per head. `PYTORCH_ENABLE_MPS_FALLBACK=1` and `TOKENIZERS_PARALLELISM=false` are set automatically so the trainer is friendly to laptop runs.
 
-## Why pool train splits
+## Why CMUH-only by default (and why pooling is now an ablation)
 
-Documented at length in the project memory:
+Earlier sessions defaulted to pooled CMUH+TCGA training, on the reasoning that ~100 cases per dataset would undertrain a 110M-parameter encoder. That reasoning still applies — BERT trained on CMUH alone IS undertrained. But the privacy constraint dominates:
 
-- Per-dataset training would starve each classification head — at the current scale (~100 train cases across 3 TCGA organs, similar in CMUH), a 110M-parameter encoder needs the pooled train set to converge meaningfully.
-- One shared encoder per baseline (no per-organ models). The CLS multi-head architecture *requires* a shared encoder so the top-level `cancer_category` head can exist; per-organ encoders would also waste capacity re-learning shared pathology vocabulary across organs.
-- Predict-time eval stays per-dataset (and per-organ) so per-corpus accuracy stays visible.
+- The LLM comparator (OpenAI API) cannot see CMUH. So the only corpus all three methods can be benchmarked on is TCGA.
+- Pooled training would have BERT see TCGA at training time. The cross-method comparison on TCGA would no longer be a held-out test — BERT would have an unfair informational advantage.
+- An undertrained BERT trained on CMUH only is the **methodologically honest baseline**. It shows what BERT-as-a-baseline actually delivers when the test set is genuinely held out.
 
-Reconsider per-dataset training only when each dataset alone exceeds ~500 annotated cases.
+The structural choices that remain unchanged:
+- One shared multi-organ encoder per head (CLS, QA). The CLS multi-head architecture *requires* a shared encoder so the top-level `cancer_category` head can exist; per-organ encoders would also waste capacity re-learning shared pathology vocabulary.
+- Predict-time eval stays per-organ (cross-organ rollups are added at the eval-table level).
+
+Pooled training is still available as `--datasets cmuh tcga` for upper-bound ablations. Reconsider making it the default only if (a) CMUH alone exceeds ~500 annotated cases and (b) there's a privacy-sandboxed LLM that can see CMUH.
 
 ## Training output
 

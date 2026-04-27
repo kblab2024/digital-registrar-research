@@ -1,66 +1,115 @@
 # Benchmarks
 
-A reproducible comparison of three baseline methods against gold annotations on pathology reports:
+A reproducible cross-corpus comparison of three baseline methods against gold annotations on pathology reports:
 
-| Method | What it is | Training? | Outputs at |
+| Method | What it is | Trained on (default) | Evaluated on (default) |
 |---|---|---|---|
-| **Rule-based** | Per-organ regex + lexicon. Deterministic floor LLMs have to beat. | None | `{root}/results/predictions/{dataset}/rule_based/{organ_n}/{case_id}.json` |
-| **ClinicalBERT** | Bio_ClinicalBERT fine-tuned as multi-head CLS (categorical/boolean) + extractive QA (numeric spans). Outputs are merged per case. | Pooled CMUH+TCGA train | `{root}/results/predictions/{dataset}/clinicalbert/{cls,qa,merged}/{organ_n}/{case_id}.json` |
-| **LLM** | DSPy + Ollama-style cancer extraction pipeline (gptoss, gemma3, qwen3.5, medgemma, ...). Multi-run by design. | None (zero / few-shot) | `{root}/results/predictions/{dataset}/llm/{model}/{run_id}/{organ_n}/{case_id}.json` |
+| **Rule-based** | Per-organ regex + lexicon. Deterministic floor LLMs have to beat. | None | TCGA |
+| **ClinicalBERT** | Bio_ClinicalBERT fine-tuned as multi-head CLS (categorical/boolean) + extractive QA (numeric spans). Outputs are merged per case. | **CMUH** | TCGA (held out) |
+| **LLM** | DSPy + Ollama / OpenAI cancer extraction pipeline (gptoss, gemma3, qwen3.5, medgemma, gpt-4o, ...). Multi-run by design. | None (zero / few-shot) | TCGA |
 
-All three methods write into the **canonical predictions tree**, so a single eval pipeline produces directly-comparable metrics CSVs.
+## Why TCGA-only evaluation is the canonical default
 
-## Defaults
+The LLM comparator (especially the OpenAI API) **cannot see CMUH** for privacy reasons. So **TCGA is the only corpus all three methods can be evaluated on as a fair like-for-like baseline**.
 
-- **`--folder workspace`** — the live data tree. Override to `dummy` for synthetic fixtures or absolute path for elsewhere.
-- **`--datasets cmuh tcga`** — multi-dataset by default. Pass a single name to focus.
-- **`--split test`** — the eval wrappers restrict every method's `non_nested` call to the test fold of `splits.json`. Mandatory when BERT is involved; keeps coverage comparable for rule-vs-LLM. Override with `--split all`.
-- **`--test-fraction 0.34`** — the default split ratio used by `registrar-split` when generating `splits.json`.
+For BERT and rule-based to be a fair comparison against the LLM:
 
-## Quickstart (5-minute end-to-end on dummy data)
+- **Rule-based** has no training, so it just predicts on TCGA.
+- **ClinicalBERT** is trained on **CMUH only**, with TCGA fully held out. Pooled training (CMUH + TCGA) would let BERT see the test corpus at training time, and the cross-method comparison would no longer be cross-domain.
+- **LLM** has no training; predicted on TCGA via its API.
+
+This is reflected in the script defaults:
+
+| Script | Default datasets | Notes |
+|---|---|---|
+| `registrar-split` | `cmuh tcga` | Both get a `splits.json` for internal use; the cross-corpus default eval doesn't need them but ablations do. |
+| `train_bert.py` | `cmuh` | TCGA stays held out. Pass `--datasets cmuh tcga` for pooled-training ablation. |
+| `run_rule.py` | `tcga` | Rule has no training; predict on the LLM-comparable corpus. |
+| `run_bert.py` | `tcga` | BERT predicts on TCGA; `--split all` (TCGA fully held out). |
+| `eval_*_vs_*.py` | `tcga` | Eval on TCGA, `--split all` (no leakage filter needed since BERT didn't train on TCGA). |
+
+## Quickstart (cross-corpus, the default)
 
 ```bash
-# 1. Generate the dummy data tree (cmuh + tcga, splits.json included).
-python scripts/data/gen_dummy_skeleton.py --out dummy --clean --cases-per-organ 5 --llm-runs 1
+# 1. Generate the train/test split for both corpora.
+registrar-split
 
-# 2. Run rule_based predictions on both datasets in one call.
-python scripts/baselines/run_rule.py --folder dummy --overwrite
+# 2. Train BERT on CMUH (default). TCGA is untouched.
+python scripts/baselines/train_bert.py \
+    --heads cls qa --epochs-cls 5 --epochs-qa 3
 
-# 3. Score rule vs LLM, both datasets, test split only.
-python scripts/baselines/eval_rule_vs_llm.py \
-    --folder dummy --llm-model gpt_oss_20b \
-    --out dummy/results/eval/rule_vs_llm
+# 3. Run BERT and rule on TCGA (default). Rule and BERT now have
+#    predictions for the full TCGA corpus.
+python scripts/baselines/run_rule.py
+python scripts/baselines/run_bert.py
 
-# Or do the same thing with three methods on workspace defaults:
+# 4. Run the LLM (e.g. via run_dspy_ollama_single.py or your OpenAI pipeline)
+#    on TCGA. Same canonical layout under
+#    {workspace}/results/predictions/tcga/llm/{model}/{run}/.
+
+# 5. Side-by-side compare. Default --datasets tcga --split all.
 python scripts/baselines/eval_rule_bert_llm.py \
     --llm-model gpt_oss_20b \
     --out workspace/results/eval/rule_bert_llm
 ```
 
-The convenience wrappers loop over datasets internally and concatenate per-dataset parquets with a `dataset` column, so the comparison tables (`headline.csv`, `per_field.csv`, `pairwise.csv`) come out stratified by (method, dataset, organ, field) automatically.
+## Quickstart (synthetic dummy data — same defaults)
+
+```bash
+python scripts/data/gen_dummy_skeleton.py --out dummy --clean
+python scripts/baselines/run_rule.py --folder dummy
+python scripts/baselines/eval_rule_vs_llm.py \
+    --folder dummy --llm-model gpt_oss_20b \
+    --out dummy/results/eval/rule_vs_llm
+```
+
+## Ablations: pooled training and intra-corpus eval
+
+If you want to deviate from the cross-corpus default for an ablation:
+
+```bash
+# Pooled training — destroys TCGA's held-out status, but useful as an upper-bound ablation.
+python scripts/baselines/train_bert.py --datasets cmuh tcga
+
+# Intra-corpus benchmark (CMUH-only). The leakage guard requires --split test
+# so BERT is not scored on its own training cases.
+python scripts/baselines/run_bert.py --datasets cmuh --split test
+python scripts/baselines/eval_bert_vs_llm.py \
+    --datasets cmuh --split test \
+    --llm-model gpt_oss_20b \
+    --out workspace/results/eval/bert_vs_llm_intra_cmuh
+
+# Both corpora at once with proper test-fold filtering everywhere.
+python scripts/baselines/eval_rule_bert_llm.py \
+    --datasets cmuh tcga --split test \
+    --llm-model gpt_oss_20b \
+    --out workspace/results/eval/rule_bert_llm_both
+```
 
 ## Documentation map
 
 1. [01_data_layout.md](01_data_layout.md) — canonical input + output paths
-2. [02_train_bert.md](02_train_bert.md) — training the ClinicalBERT heads
-3. [03_run_baselines.md](03_run_baselines.md) — running prediction for each method
-4. [04_evaluate.md](04_evaluate.md) — running per-method `non_nested` and aggregating
-5. [05_compare.md](05_compare.md) — side-by-side comparison with `run_compare` and the convenience wrappers
+2. [02_train_bert.md](02_train_bert.md) — training the ClinicalBERT heads (CMUH-only by default)
+3. [03_run_baselines.md](03_run_baselines.md) — predicting with rule, BERT, LLM
+4. [04_evaluate.md](04_evaluate.md) — per-method `non_nested` evaluation
+5. [05_compare.md](05_compare.md) — side-by-side comparison via `run_compare` and convenience wrappers
 6. [06_methods.md](06_methods.md) — descriptions, scope, and limitations of each method
 
 ## Conventions used throughout
 
-- **`{folder}`** in commands means `dummy` (synthetic data), `workspace` (live data on this box), or any absolute path. Resolved via `scripts/_config_loader.py:resolve_folder`.
+- **`{folder}`** in commands means `dummy` (synthetic data), `workspace` (live data on this box), or any absolute path. Resolved via `scripts/_config_loader.py:resolve_folder`. Default is `workspace`.
 - **`{dataset}`** is `cmuh` or `tcga`.
-- **`{organ_n}`** is the 1-based numeric organ index (1=breast, 2=colorectal, 3=esophagus, 4=liver, 5=stomach, 6=lung, 7=prostate, 8=pancreas, 9=stomach, 10=cervix, ...). Defined in `scripts/eval/_common/stratify.py`.
+- **`{organ_n}`** is the 1-based numeric organ index (1=breast, 2=colorectal, 3=esophagus, 4=liver, 5=stomach, 6=lung, 7=prostate, 8=pancreas, 9=thyroid, 10=cervix). Defined in `scripts/eval/_common/stratify.py`.
 - **`{case_id}`** is the corpus-prefixed report id, e.g. `cmuh1_17` (cmuh dataset, organ index 1, case 17).
 - **`{annotator}`** is `gold`, `nhc_with_preann`, `nhc_without_preann`, `kpc_with_preann`, or `kpc_without_preann`. Eval against `gold` is the default.
 
 ## Migration notes
 
-The legacy benchmark workflow (`registrar-benchmark` / `benchmarks.eval.run_all` / `benchmarks.eval.pairwise_compare`) has been retired. Predictions used to land at `workspace/results/benchmarks/<method>/<dataset>/<case_id>.json` (flat, no organ subdir); they now land at `{folder}/results/predictions/{dataset}/<method>/<model>/<run_id>/<organ_n>/<case_id>.json` (canonical, hierarchical).
+The default training contract has shifted. Earlier sessions ran pooled CMUH+TCGA training because per-dataset training would undertrain a 110M-parameter encoder. That reasoning still applies — BERT trained on ~100 CMUH cases will be undertrained — but the **fair-baseline-against-OpenAI** constraint outweighs it. The comparison the paper wants to support is "LLMs (TCGA-only) vs BERT (CMUH-only)", which requires honest cross-domain held-out evaluation.
 
-The retired entry points still resolve but print a migration message pointing at the new tools — no silent breakage.
+The legacy benchmark workflow (`registrar-benchmark` / `benchmarks.eval.run_all` / `benchmarks.eval.pairwise_compare`) has been retired. Predictions used to land at `workspace/results/benchmarks/<method>/<dataset>/<case_id>.json` (flat); they now land at `{folder}/results/predictions/{dataset}/<method>/<model>/<run_id>/<organ_n>/<case_id>.json` (canonical, hierarchical).
+
+The retired entry points still resolve but print a migration message — no silent breakage.
 
 ## Literature-comparison precedents
 
