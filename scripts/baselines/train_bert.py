@@ -48,12 +48,15 @@ from _config_loader import resolve_folder  # noqa: E402
 from baselines._split_helpers import (  # noqa: E402
     load_split, per_organ_counts,
 )
+from digital_registrar_research.benchmarks import organs as _organs  # noqa: E402
 
-DATASETS = ("cmuh", "tcga")
+DATASETS = tuple(_organs.all_datasets())
 DEFAULT_TRAIN_DATASETS = ("cmuh",)  # Privacy-driven: TCGA stays held-out for the
                                      # cross-corpus baseline against OpenAI-API LLMs.
 DEFAULT_HEADS = ("cls", "qa")
-DEFAULT_ORGANS = ("breast", "colorectal", "esophagus", "liver", "stomach")
+# Cross-corpus organ scope = TCGA ∩ CMUH. Both folds train/predict on these
+# 5 organs so the BERT vs LLM cross-corpus comparison is apples-to-apples.
+DEFAULT_ORGANS = _organs.common_organs("cmuh", "tcga")
 LOGGER_NAME = "scripts.baselines.train_bert"
 
 

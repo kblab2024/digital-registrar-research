@@ -52,6 +52,7 @@ from transformers import (
 )
 
 from ...paths import BENCHMARKS_RESULTS
+from .. import organs as _organs
 from ..eval.scope import get_field_value
 from ._data import load_cases, per_dataset_counts
 
@@ -60,8 +61,11 @@ MAX_LEN = 512
 DOC_STRIDE = 128
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-DEFAULT_ORGANS = ["breast", "colorectal", "esophagus", "liver", "stomach"]
-DEFAULT_DATASETS = ["cmuh", "tcga"]
+# Cross-corpus baseline scope: the 5 organs present in BOTH TCGA and CMUH
+# (= TCGA's full set, since TCGA's organ list is a subset of CMUH's).
+# Configured in configs/organ_code.yaml; do not duplicate the literal here.
+DEFAULT_ORGANS = list(_organs.common_organs("cmuh", "tcga"))
+DEFAULT_DATASETS = list(_organs.all_datasets())
 
 # Per-organ question bank. Only fields whose gold value is a literal
 # number that should appear in the report belong here. Enum-valued
@@ -86,6 +90,10 @@ ORGAN_QUESTIONS: dict[str, dict[str, str]] = {
         "ajcc_version": "Which AJCC edition is used for staging?",
     },
     "stomach": {
+        "ajcc_version": "Which AJCC edition is used for staging?",
+    },
+    "thyroid": {
+        "tumor_size":   "What is the tumor size in millimeters?",
         "ajcc_version": "Which AJCC edition is used for staging?",
     },
 }

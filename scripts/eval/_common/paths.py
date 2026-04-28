@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Literal
 
-from .stratify import ALL_ORGAN_INDICES, parse_case_id
+from .stratify import all_organ_indices, parse_case_id
 
 _RUN_ID_RE = re.compile(r"^run(\d+)(?:-([a-z0-9][a-z0-9-]*))?$")
 
@@ -127,14 +127,18 @@ class Paths:
     def case_ids(
         self,
         annotator: str = "gold",
-        organs: tuple[int, ...] = ALL_ORGAN_INDICES,
+        organs: tuple[int, ...] | None = None,
     ) -> Iterator[tuple[int, str]]:
         """Yield ``(organ_idx, case_id)`` for every annotation file under
         the given annotator. Iterated in deterministic sorted order.
+
+        ``organs`` defaults to the dataset's full organ-index set
+        (per ``configs/organ_code.yaml``).
         """
         base = self.annotations_dir / annotator
         if not base.is_dir():
             return
+        organs = organs if organs is not None else all_organ_indices(self.dataset)
         for organ_idx in sorted(organs):
             organ_dir = base / str(organ_idx)
             if not organ_dir.is_dir():

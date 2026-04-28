@@ -6,19 +6,19 @@ splits_path: data/cmuh/splits.json
 manifest_path: data/cmuh/dataset_manifest.yaml
 organs:
   - n: 1
-    name: breast
-  - n: 2
-    name: cervix
-  - n: 3
-    name: colorectal
-  - n: 4
-    name: esophagus
-  - n: 5
-    name: liver
-  - n: 6
-    name: lung
-  - n: 7
     name: pancreas
+  - n: 2
+    name: breast
+  - n: 3
+    name: cervix
+  - n: 4
+    name: colorectal
+  - n: 5
+    name: esophagus
+  - n: 6
+    name: liver
+  - n: 7
+    name: lung
   - n: 8
     name: prostate
   - n: 9

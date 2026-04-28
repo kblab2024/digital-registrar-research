@@ -271,7 +271,7 @@ def _build_atomic_for_method(
             except ParseError as e:
                 logger.warning("skipping %s: %s", case_id, e)
                 continue
-            organ = normalize(gold.get("cancer_category")) or organ_name(organ_idx)
+            organ = normalize(gold.get("cancer_category")) or organ_name(paths.dataset, organ_idx)
             pred_path = paths.prediction(
                 method=method, model=model, run_id=run_id or None,
                 organ_idx=organ_idx, case_id=case_id,

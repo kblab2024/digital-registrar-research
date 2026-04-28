@@ -8,8 +8,9 @@ subdirectory (the canonical layout encodes organ in the path:
 ``data/{dataset}/reports/{organ_n}/{case_id}.txt``).
 
 The numeric organ index is mapped to its canonical name via
-:data:`scope.IMPLEMENTED_ORGANS`. This is an upper-bound estimate of
-router contribution: the cell sees the right organ for free.
+``configs/organ_code.yaml`` — the mapping is dataset-specific (TCGA
+``3`` is thyroid; CMUH ``3`` is cervix). This is an upper-bound estimate
+of router contribution: the cell sees the right organ for free.
 
 Canonical layout:
     --folder dummy --dataset tcga --model gptoss [--run runNN]
@@ -21,7 +22,7 @@ import logging
 
 import dspy
 
-from ...benchmarks.eval.scope import IMPLEMENTED_ORGANS
+from ...benchmarks import organs as _organs
 from ...util.predictiondump import dump_prediction_plain
 from ..signatures.monolithic import get_monolithic_signature
 from . import _base
@@ -29,16 +30,13 @@ from . import _base
 CELL_ID = "no_router"
 
 
-def _organ_from_index(organ_n: str) -> str | None:
-    """Map a numeric organ subdir name (``"1"``, ``"2"``, ...) to the
-    organ key used by the per-organ signatures."""
+def _organ_from_index(dataset: str, organ_n: str | int) -> str | None:
+    """Map a numeric organ subdir name to the organ key used by the
+    per-organ signatures, using the dataset's organ_code.yaml mapping."""
     try:
-        idx = int(organ_n)
-    except ValueError:
+        return _organs.organ_name(dataset, int(organ_n))
+    except (KeyError, ValueError):
         return None
-    if 1 <= idx <= len(IMPLEMENTED_ORGANS):
-        return IMPLEMENTED_ORGANS[idx - 1]
-    return None
 
 
 class NoRouterPipeline(dspy.Module):
@@ -109,11 +107,12 @@ def run(args: argparse.Namespace) -> int:
     pipe = NoRouterPipeline(skip_jsonize=skip_jsonize)
 
     def _predict(report_text: str, organ_n: str, case_id: str) -> dict:
-        organ = _organ_from_index(organ_n)
+        organ = _organ_from_index(args.dataset, organ_n)
         if organ is None:
             return {"cancer_excision_report": True, "cancer_category": None,
                     "cancer_data": {}, "_router_skipped": True,
-                    "_error": f"cannot infer organ from organ_n={organ_n!r}"}
+                    "_error": f"cannot infer organ from "
+                              f"dataset={args.dataset!r} organ_n={organ_n!r}"}
         return pipe(report=report_text, organ=organ,
                     logger=logger, fname=case_id)
 

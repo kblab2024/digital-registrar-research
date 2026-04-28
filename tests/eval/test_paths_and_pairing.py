@@ -7,7 +7,9 @@ import pytest
 
 from scripts.eval._common.paths import Paths, from_args, parse_run_id_to_path_segment
 from scripts.eval._common.pairing import discover_paired_cases
-from scripts.eval._common.stratify import organ_index, organ_name, parse_case_id
+from scripts.eval._common.stratify import (
+    all_organ_indices, organ_index, organ_name, parse_case_id,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -15,16 +17,20 @@ DUMMY = REPO_ROOT / "dummy"
 HAS_DUMMY = DUMMY.is_dir()
 
 
-def test_organ_round_trip():
-    for idx in range(1, 11):
-        assert organ_index(organ_name(idx)) == idx
+def test_organ_round_trip_per_dataset():
+    for dataset in ("cmuh", "tcga"):
+        for idx in all_organ_indices(dataset):
+            assert organ_index(dataset, organ_name(dataset, idx)) == idx
 
 
 def test_parse_case_id():
     assert parse_case_id("cmuh1_42") == ("cmuh", 1, 42)
-    assert parse_case_id("tcga6_100") == ("tcga", 6, 100)
+    assert parse_case_id("tcga3_100") == ("tcga", 3, 100)
     with pytest.raises(ValueError):
         parse_case_id("not_a_case")
+    # tcga6 is rejected because TCGA only has organs 1..5.
+    with pytest.raises(ValueError):
+        parse_case_id("tcga6_100")
 
 
 def test_run_id_validation():
@@ -50,7 +56,7 @@ def test_case_ids_iter():
     seen = list(p.case_ids("gold"))
     assert seen, "no gold cases discovered"
     organ_idxs = {oi for oi, _ in seen}
-    assert organ_idxs <= set(range(1, 11))
+    assert organ_idxs <= set(all_organ_indices("cmuh"))
 
 
 @pytest.mark.skipif(not HAS_DUMMY, reason="requires /dummy fixture")

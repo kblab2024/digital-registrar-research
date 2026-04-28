@@ -99,7 +99,7 @@ python scripts/baselines/eval_rule_bert_llm.py \
 
 - **`{folder}`** in commands means `dummy` (synthetic data), `workspace` (live data on this box), or any absolute path. Resolved via `scripts/_config_loader.py:resolve_folder`. Default is `workspace`.
 - **`{dataset}`** is `cmuh` or `tcga`.
-- **`{organ_n}`** is the 1-based numeric organ index (1=breast, 2=colorectal, 3=esophagus, 4=liver, 5=stomach, 6=lung, 7=prostate, 8=pancreas, 9=thyroid, 10=cervix). Defined in `scripts/eval/_common/stratify.py`.
+- **`{organ_n}`** is the 1-based numeric organ index, **dataset-specific** per [`configs/organ_code.yaml`](../../configs/organ_code.yaml). TCGA covers 5 organs (1=breast, 2=colorectal, 3=thyroid, 4=stomach, 5=liver); CMUH covers 10 (1=pancreas, 2=breast, 3=cervix, 4=colorectal, 5=esophagus, 6=liver, 7=lung, 8=prostate, 9=stomach, 10=thyroid). The cross-corpus baseline restricts both folds to the 5 shared organs. See [01_data_layout.md](01_data_layout.md#input-layout-folderdatadataset).
 - **`{case_id}`** is the corpus-prefixed report id, e.g. `cmuh1_17` (cmuh dataset, organ index 1, case 17).
 - **`{annotator}`** is `gold`, `nhc_with_preann`, `nhc_without_preann`, `kpc_with_preann`, or `kpc_without_preann`. Eval against `gold` is the default.
 

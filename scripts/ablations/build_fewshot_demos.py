@@ -36,10 +36,12 @@ from digital_registrar_research.ablations.runners._base import (  # noqa: E402
     DATASETS,
     discover_organs,
 )
+from digital_registrar_research.ablations.runners.no_router import (  # noqa: E402
+    _organ_from_index,
+)
 from digital_registrar_research.benchmarks.eval.scope import (  # noqa: E402
     BREAST_BIOMARKERS,
     FAIR_SCOPE,
-    IMPLEMENTED_ORGANS,
     get_field_value,
 )
 
@@ -57,16 +59,6 @@ def _coverage(gold: dict) -> int:
         if v not in (None, "", [], {}):
             count += 1
     return count
-
-
-def _organ_from_index(organ_n: str) -> str | None:
-    try:
-        idx = int(organ_n)
-    except ValueError:
-        return None
-    if 1 <= idx <= len(IMPLEMENTED_ORGANS):
-        return IMPLEMENTED_ORGANS[idx - 1]
-    return None
 
 
 def main() -> int:
@@ -90,7 +82,7 @@ def main() -> int:
 
     by_organ: dict[str, list[tuple[int, str]]] = defaultdict(list)
     for organ_n, _organ_dir in discover_organs(reports_root, None):
-        organ_name = _organ_from_index(organ_n)
+        organ_name = _organ_from_index(args.dataset, organ_n)
         if not organ_name or organ_name == "others":
             continue
         gold_organ_dir = gold_root / organ_n

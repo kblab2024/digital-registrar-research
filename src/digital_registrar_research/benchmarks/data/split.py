@@ -137,6 +137,10 @@ def stratified_split(
         if not moved:
             break
 
+    # Returns the in-memory split as full case dicts so the caller can
+    # print per-stratum distributions. Serialization (`write_split`)
+    # collapses the dicts to bare ID strings — see that function's
+    # docstring for the format contract.
     return {
         "train": train,
         "test": test,
@@ -155,10 +159,28 @@ def _largest_cat(items: list[dict], stratify_by: str) -> str:
 
 
 def write_split(folder: Path, dataset: str, split: dict) -> Path:
+    """Serialize a split to ``{folder}/data/{dataset}/splits.json``.
+
+    Format contract: ``train`` and ``test`` are lists of bare case-id
+    strings (not full case dicts). This matches what
+    ``gen_dummy_skeleton.py`` writes and what
+    ``benchmarks/baselines/_data.py`` expects. Other fields
+    (``seed``, ``test_fraction``, ``total``, ``stratify_by``) are
+    preserved as serialized metadata.
+
+    Embedding full case dicts (with paths and cancer_category) was a
+    historical workaround that silently desynced when files moved and
+    broke the BERT loader's path construction; bare strings are the
+    canonical shape now.
+    """
+    payload = dict(split)
+    for fold in ("train", "test"):
+        items = payload.get(fold) or []
+        payload[fold] = [c["id"] if isinstance(c, dict) else c for c in items]
     out_path = folder / "data" / dataset / "splits.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as f:
-        json.dump(split, f, ensure_ascii=False, indent=2)
+        json.dump(payload, f, ensure_ascii=False, indent=2)
     return out_path
 
 

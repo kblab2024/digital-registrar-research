@@ -11,7 +11,7 @@ import argparse
 from pathlib import Path
 
 from .paths import KNOWN_METHODS, parse_run_id_to_path_segment
-from .stratify import ALL_ORGAN_INDICES, parse_organ_arg
+from .stratify import all_organ_indices, parse_organ_arg
 
 KNOWN_ANNOTATORS: tuple[str, ...] = (
     "gold",
@@ -40,8 +40,9 @@ def add_common_args(parser: argparse.ArgumentParser, *, subcommand: str) -> None
     )
     parser.add_argument(
         "--organs", nargs="+", default=None,
-        help="Restrict to organ indices (1..10) or names (breast, lung, ...). "
-             "Default: all 10.",
+        help="Restrict to organ indices or names valid for --dataset (e.g. for "
+             "tcga: 1..5 or breast/colorectal/thyroid/stomach/liver). Default: "
+             "all organs defined for the dataset in configs/organ_code.yaml.",
     )
     parser.add_argument(
         "--cases", nargs="+", default=None,
@@ -130,10 +131,11 @@ def parse_run_ids(args: argparse.Namespace) -> list[str]:
 
 
 def parse_organs(args: argparse.Namespace) -> list[int]:
-    """Return validated organ indices or all 10 if ``--organs`` was omitted."""
+    """Return validated organ indices for ``args.dataset``, or the dataset's
+    full organ-index set if ``--organs`` was omitted."""
     if not args.organs:
-        return list(ALL_ORGAN_INDICES)
-    return parse_organ_arg(args.organs)
+        return list(all_organ_indices(args.dataset))
+    return parse_organ_arg(args.organs, args.dataset)
 
 
 def parse_cases(args: argparse.Namespace) -> set[str] | None:

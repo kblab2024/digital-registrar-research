@@ -10,6 +10,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from digital_registrar_research.benchmarks import organs as _organs  # noqa: E402
 from digital_registrar_research.benchmarks.data.split import (  # noqa: E402
     load_gold_cases, main as split_main, stratified_split,
 )
@@ -33,8 +34,17 @@ def _seed_canonical_gold(folder: Path, dataset: str, organs: dict[int, str],
             )
 
 
+def _yaml_organs(dataset: str, names: list[str]) -> dict[int, str]:
+    """Build a {organ_n: organ_name} dict using the dataset's canonical
+    yaml mapping — keeps the seeded fixture aligned with reality."""
+    full = _organs.organs_for(dataset)
+    rev = {n.lower(): i for i, n in full.items()}
+    return {rev[name.lower()]: name for name in names}
+
+
 def test_load_gold_cases_walks_canonical(tmp_path: Path) -> None:
-    organs = {1: "breast", 3: "esophagus"}
+    # CMUH organ_n: 2=breast, 5=esophagus (per configs/organ_code.yaml).
+    organs = _yaml_organs("cmuh", ["breast", "esophagus"])
     _seed_canonical_gold(tmp_path, "cmuh", organs, cases_per_organ=2)
     cases = load_gold_cases(tmp_path, "cmuh")
     assert len(cases) == 4
@@ -47,9 +57,10 @@ def test_load_gold_cases_missing_dir_returns_empty(tmp_path: Path) -> None:
 
 
 def test_stratified_split_default_fraction(tmp_path: Path) -> None:
-    organs = {1: "breast", 2: "colorectal", 3: "esophagus"}
-    _seed_canonical_gold(tmp_path, "cmuh", organs, cases_per_organ=10)
-    cases = load_gold_cases(tmp_path, "cmuh")
+    # TCGA organ_n: 1=breast, 2=colorectal, 5=liver (per organ_code.yaml).
+    organs = _yaml_organs("tcga", ["breast", "colorectal", "liver"])
+    _seed_canonical_gold(tmp_path, "tcga", organs, cases_per_organ=10)
+    cases = load_gold_cases(tmp_path, "tcga")
     sp = stratified_split(cases, test_fraction=0.34, seed=42)
     # 30 cases × 0.34 = 10.2 → rounds to 10 test, 20 train.
     assert len(sp["train"]) + len(sp["test"]) == 30
@@ -57,8 +68,8 @@ def test_stratified_split_default_fraction(tmp_path: Path) -> None:
     # Every category appears in both folds.
     train_cats = {c["cancer_category"] for c in sp["train"]}
     test_cats = {c["cancer_category"] for c in sp["test"]}
-    assert train_cats == {"breast", "colorectal", "esophagus"}
-    assert test_cats == {"breast", "colorectal", "esophagus"}
+    assert train_cats == {"breast", "colorectal", "liver"}
+    assert test_cats == {"breast", "colorectal", "liver"}
 
 
 def test_stratified_split_invalid_fraction(tmp_path: Path) -> None:
@@ -84,17 +95,19 @@ def test_stratified_split_singleton_category_goes_to_train(tmp_path: Path) -> No
 
 
 def test_split_main_writes_canonical_path(tmp_path: Path) -> None:
-    """End-to-end: registrar-split --folder <tmp> --datasets cmuh writes splits.json."""
-    organs = {1: "breast", 2: "colorectal", 3: "esophagus", 4: "liver", 5: "stomach"}
-    _seed_canonical_gold(tmp_path, "cmuh", organs, cases_per_organ=5)
+    """End-to-end: registrar-split --folder <tmp> --datasets tcga writes splits.json
+    in bare-string format (not full case dicts)."""
+    # TCGA's full 5-organ set: 1=breast, 2=colorectal, 3=thyroid, 4=stomach, 5=liver.
+    organs = _organs.organs_for("tcga")
+    _seed_canonical_gold(tmp_path, "tcga", organs, cases_per_organ=5)
     rc = split_main([
         "--folder", str(tmp_path),
-        "--datasets", "cmuh",
+        "--datasets", "tcga",
         "--test-fraction", "0.34",
         "--seed", "0",
     ])
     assert rc == 0
-    out = tmp_path / "data" / "cmuh" / "splits.json"
+    out = tmp_path / "data" / "tcga" / "splits.json"
     assert out.is_file()
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["test_fraction"] == 0.34
@@ -103,11 +116,15 @@ def test_split_main_writes_canonical_path(tmp_path: Path) -> None:
     assert len(data["train"]) + len(data["test"]) == 25
     # 25 × 0.34 = 8.5 → 8 or 9 test (depending on rounding).
     assert len(data["test"]) in (8, 9)
+    # Bare-string serialization contract — see split.py:write_split.
+    assert all(isinstance(x, str) for x in data["train"])
+    assert all(isinstance(x, str) for x in data["test"])
 
 
 def test_split_main_skips_missing_dataset(tmp_path: Path, capsys) -> None:
     """If --datasets includes a dataset with no gold, it's skipped (warned), not fatal."""
-    organs = {1: "breast", 2: "colorectal"}
+    # CMUH organ_n: 2=breast, 4=colorectal (per yaml).
+    organs = _yaml_organs("cmuh", ["breast", "colorectal"])
     _seed_canonical_gold(tmp_path, "cmuh", organs, cases_per_organ=3)
     # tcga has no gold — should be skipped.
     rc = split_main([
@@ -131,7 +148,8 @@ def test_split_main_no_datasets_have_gold_returns_error(tmp_path: Path) -> None:
 
 def test_split_seed_is_deterministic(tmp_path: Path) -> None:
     """Two runs with the same seed produce identical splits."""
-    organs = {1: "breast", 2: "colorectal", 3: "esophagus"}
+    # CMUH organ_n: 2=breast, 4=colorectal, 5=esophagus (per yaml).
+    organs = _yaml_organs("cmuh", ["breast", "colorectal", "esophagus"])
     _seed_canonical_gold(tmp_path, "cmuh", organs, cases_per_organ=10)
     cases = load_gold_cases(tmp_path, "cmuh")
     sp1 = stratified_split(cases, test_fraction=0.34, seed=12345)

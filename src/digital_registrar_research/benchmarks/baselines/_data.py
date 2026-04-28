@@ -26,12 +26,29 @@ from ...paths import GOLD_ANNOTATIONS, RAW_REPORTS, SPLITS_JSON
 
 
 def _organ_n(case_id: str, dataset: str) -> str:
-    m = re.match(rf"{re.escape(dataset)}(\d+)_", case_id["id"])
+    m = re.match(rf"{re.escape(dataset)}(\d+)_", case_id)
     if not m:
         raise ValueError(
             f"could not parse organ_n from id {case_id!r} for dataset {dataset!r}"
         )
     return m.group(1)
+
+
+def _normalize_entry(entry) -> str:
+    """Coerce a splits.json entry to a bare case-id string.
+
+    splits.json comes in two historical formats:
+      - bare strings (gen_dummy_skeleton.py output): ``"cmuh1_42"``
+      - case dicts (legacy registrar-split output): ``{"id": "cmuh1_42", ...}``
+
+    Downstream code wants strings everywhere (path construction, regex parse,
+    dict ``id`` field). Normalize at the entry point.
+    """
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, dict) and "id" in entry:
+        return entry["id"]
+    raise ValueError(f"unrecognized splits.json entry: {entry!r}")
 
 
 def _read_cancer_category(annotation_path: Path) -> str | None:
@@ -90,8 +107,15 @@ def _load_one_dataset(dataset: str, split: str, root: Path) -> list[dict]:
     if dummy_splits.exists():
         with dummy_splits.open(encoding="utf-8") as f:
             data = json.load(f)
-        return [_resolve_dummy(root, dataset, cid)
-                for cid in _split_entries(data, split)]
+        entries = _split_entries(data, split)
+        if entries and isinstance(entries[0], dict):
+            print(
+                f"[warn] {dummy_splits} contains legacy dict entries; "
+                f"normalizing to ids. Re-run `registrar-split` after the "
+                f"format migration to silence this warning."
+            )
+        return [_resolve_dummy(root, dataset, _normalize_entry(e))
+                for e in entries]
 
     if dataset == "tcga" and SPLITS_JSON.exists():
         with SPLITS_JSON.open(encoding="utf-8") as f:

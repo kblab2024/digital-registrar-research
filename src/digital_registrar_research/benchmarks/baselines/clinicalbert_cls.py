@@ -52,6 +52,7 @@ from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
 from ...paths import BENCHMARKS_RESULTS
+from .. import organs as _organs
 from ..eval.scope import (
     CANCER_CATEGORIES,
     CATEGORICAL_FIELDS,
@@ -63,8 +64,11 @@ MODEL_ID = "emilyalsentzer/Bio_ClinicalBERT"
 MAX_LEN = 512
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-DEFAULT_ORGANS = ["breast", "colorectal", "esophagus", "liver", "stomach"]
-DEFAULT_DATASETS = ["cmuh", "tcga"]
+# Cross-corpus baseline scope: the 5 organs present in BOTH TCGA and CMUH
+# (= TCGA's full set, since TCGA's organ list is a subset of CMUH's).
+# Configured in configs/organ_code.yaml; do not duplicate the literal here.
+DEFAULT_ORGANS = list(_organs.common_organs("cmuh", "tcga"))
+DEFAULT_DATASETS = list(_organs.all_datasets())
 
 
 # --- Dataset ------------------------------------------------------------------

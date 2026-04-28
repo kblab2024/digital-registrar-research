@@ -95,11 +95,12 @@ def run(args: argparse.Namespace) -> int:
     pipe = PerSectionPipeline()
 
     def _predict(report_text: str, organ_n: str, case_id: str) -> dict:
-        organ = _organ_from_index(organ_n)
+        organ = _organ_from_index(args.dataset, organ_n)
         if organ is None:
             return {"cancer_excision_report": True, "cancer_category": None,
                     "cancer_data": {},
-                    "_error": f"cannot infer organ from organ_n={organ_n!r}"}
+                    "_error": f"cannot infer organ from "
+                              f"dataset={args.dataset!r} organ_n={organ_n!r}"}
         return pipe(report=report_text, organ=organ,
                     logger=logger, fname=case_id)
 

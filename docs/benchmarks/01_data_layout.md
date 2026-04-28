@@ -17,22 +17,36 @@ Every method (rule, BERT, LLM) reads inputs from the same place and writes outpu
 └── splits.json                                Train / test split (by case_id)
 ```
 
-`{organ_n}` is the 1-based integer organ index. Mapping (defined in `scripts/eval/_common/stratify.py`):
+`{organ_n}` is the 1-based integer organ index. The mapping is **dataset-specific** — single source of truth is [`configs/organ_code.yaml`](../../configs/organ_code.yaml), loaded by `src/digital_registrar_research/benchmarks/organs.py` (and re-exposed via `scripts/eval/_common/stratify.py` for eval scripts).
 
-| Index | Organ |
+**TCGA** (5 organs):
+
+| `organ_n` | Organ |
 |---|---|
 | 1 | breast |
 | 2 | colorectal |
-| 3 | esophagus |
-| 4 | liver |
-| 5 | stomach |
-| 6 | lung |
-| 7 | prostate |
-| 8 | pancreas |
-| 9 | thyroid |
-| 10 | cervix |
+| 3 | thyroid |
+| 4 | stomach |
+| 5 | liver |
 
-`{case_id}` follows the pattern `{dataset}{organ_n}_{idx}`, e.g. `cmuh1_17` (cmuh dataset, organ 1 = breast, case 17).
+**CMUH** (10 organs):
+
+| `organ_n` | Organ |
+|---|---|
+| 1 | pancreas |
+| 2 | breast |
+| 3 | cervix |
+| 4 | colorectal |
+| 5 | esophagus |
+| 6 | liver |
+| 7 | lung |
+| 8 | prostate |
+| 9 | stomach |
+| 10 | thyroid |
+
+The cross-corpus baseline (train on CMUH, test on TCGA) operates on the **5 organs both datasets share**: `breast, colorectal, thyroid, stomach, liver`.
+
+`{case_id}` follows the pattern `{dataset}{organ_n}_{idx}` — and `organ_n` is interpreted via the dataset-specific mapping. So `cmuh1_17` is *pancreas* case 17 in CMUH; `tcga1_17` is *breast* case 17 in TCGA.
 
 ### Generating dummy data
 

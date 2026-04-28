@@ -8,20 +8,10 @@ organs:
   - n: 1
     name: breast
   - n: 2
-    name: cervix
-  - n: 3
     name: colorectal
+  - n: 3
+    name: thyroid
   - n: 4
-    name: esophagus
+    name: stomach
   - n: 5
     name: liver
-  - n: 6
-    name: lung
-  - n: 7
-    name: pancreas
-  - n: 8
-    name: prostate
-  - n: 9
-    name: stomach
-  - n: 10
-    name: thyroid

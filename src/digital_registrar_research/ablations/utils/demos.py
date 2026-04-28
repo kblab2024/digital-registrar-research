@@ -28,7 +28,7 @@ from pathlib import Path
 import dspy
 import yaml
 
-from ...benchmarks.eval.scope import IMPLEMENTED_ORGANS
+from ...benchmarks import organs as _organs
 from ...paths import REPO_ROOT
 
 DEMO_CONFIG_PATH = REPO_ROOT / "configs" / "ablations" / "fewshot_demos.yaml"
@@ -43,10 +43,15 @@ def _load_demo_config(path: Path = DEMO_CONFIG_PATH) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def _organ_index(organ: str) -> str | None:
+def _organ_index(dataset: str, organ: str) -> str | None:
+    """Return the dataset-specific numeric organ folder name for ``organ``.
+
+    Returns ``None`` if the dataset doesn't include this organ (which is
+    expected for organs that don't exist in TCGA, e.g. ``cervix``).
+    """
     try:
-        return str(IMPLEMENTED_ORGANS.index(organ) + 1)
-    except ValueError:
+        return str(_organs.organ_n_for(dataset, organ))
+    except KeyError:
         return None
 
 
@@ -56,7 +61,7 @@ def _resolve_paths_from_config(config: dict, organ: str, case_id: str
     dataset = config.get("dataset")
     if not folder or not dataset:
         return None
-    organ_n = _organ_index(organ)
+    organ_n = _organ_index(dataset, organ)
     if organ_n is None:
         return None
     report_path = folder / "data" / dataset / "reports" / organ_n / f"{case_id}.txt"

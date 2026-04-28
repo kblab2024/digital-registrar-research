@@ -233,7 +233,7 @@ def _build_atomic(
             except ParseError as e:
                 logger.warning("skipping %s: %s", case_id, e)
                 continue
-            organ = normalize(gold.get("cancer_category")) or organ_name(organ_idx)
+            organ = normalize(gold.get("cancer_category")) or organ_name(args.dataset, organ_idx)
             subgroup = subgroup_label(gold)
 
             # Skip cases where the field is not in the organ schema.

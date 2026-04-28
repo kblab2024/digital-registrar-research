@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .paths import Paths
-from .stratify import ALL_ORGAN_INDICES
+from .stratify import all_organ_indices
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ def discover_paired_cases(
     paths: Paths,
     annotator: str,
     *,
-    organs: Iterable[int] = ALL_ORGAN_INDICES,
+    organs: Iterable[int] | None = None,
 ) -> list[PairedCase]:
     """Return case IDs for which both ``<annotator>_with_preann`` and
     ``<annotator>_without_preann`` exist.
@@ -52,18 +52,20 @@ def discover_paired_cases(
     ``annotator`` is the bare name (``"nhc"``, ``"kpc"``) — the suffix
     is appended internally. The without-preann set is a subset of the
     with-preann set; the returned list is the intersection in
-    deterministic sorted order.
+    deterministic sorted order. ``organs`` defaults to the dataset's
+    full organ-index set per ``configs/organ_code.yaml``.
     """
     with_dir_name = f"{annotator}_with_preann"
     without_dir_name = f"{annotator}_without_preann"
+    organs_t = tuple(organs) if organs is not None else all_organ_indices(paths.dataset)
 
     with_index: dict[tuple[int, str], Path] = {
         (oi, cid): paths.annotation(with_dir_name, oi, cid)
-        for oi, cid in paths.case_ids(with_dir_name, tuple(organs))
+        for oi, cid in paths.case_ids(with_dir_name, organs_t)
     }
     without_index: dict[tuple[int, str], Path] = {
         (oi, cid): paths.annotation(without_dir_name, oi, cid)
-        for oi, cid in paths.case_ids(without_dir_name, tuple(organs))
+        for oi, cid in paths.case_ids(without_dir_name, organs_t)
     }
 
     shared = sorted(set(with_index.keys()) & set(without_index.keys()))
@@ -82,7 +84,7 @@ def discover_trio(
     paths: Paths,
     annotators: Iterable[str],
     *,
-    organs: Iterable[int] = ALL_ORGAN_INDICES,
+    organs: Iterable[int] | None = None,
     require_all: bool = False,
 ) -> list[TrioCase]:
     """Return ``TrioCase`` entries grouped by ``(organ_idx, case_id)``.
@@ -90,13 +92,16 @@ def discover_trio(
     ``annotators`` is a list of full annotator subdir names (e.g.
     ``["gold", "nhc_with_preann", "kpc_with_preann"]``). When
     ``require_all`` is True, only cases with a file from EVERY annotator
-    are returned. Otherwise any case present in ≥1 annotator is
+    are returned. Otherwise any case present in >=1 annotator is
     returned, with ``paths`` containing only the existing files.
+    ``organs`` defaults to the dataset's full organ-index set per
+    ``configs/organ_code.yaml``.
     """
     annotators = list(annotators)
+    organs_t = tuple(organs) if organs is not None else all_organ_indices(paths.dataset)
     by_case: dict[tuple[int, str], dict[str, Path]] = {}
     for ann in annotators:
-        for oi, cid in paths.case_ids(ann, tuple(organs)):
+        for oi, cid in paths.case_ids(ann, organs_t):
             key = (oi, cid)
             entry = by_case.setdefault(key, {})
             entry[ann] = paths.annotation(ann, oi, cid)

@@ -61,12 +61,16 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from _config_loader import resolve_folder  # noqa: E402
 
-DATASETS = ("cmuh", "tcga")
+from digital_registrar_research.benchmarks import organs as _organs  # noqa: E402
+
+DATASETS = tuple(_organs.all_datasets())
 DEFAULT_PREDICT_DATASETS = ("tcga",)  # Cross-corpus default: BERT trains on CMUH,
                                        # predicts on TCGA (held-out) for fair LLM
                                        # comparison via OpenAI API.
 DEFAULT_HEADS = ("cls", "qa", "merged")
-DEFAULT_ORGANS = ("breast", "colorectal", "esophagus", "liver", "stomach")
+# Cross-corpus organ scope = TCGA ∩ CMUH (= TCGA's set, which is a subset of
+# CMUH's). Sourced from configs/organ_code.yaml — do not duplicate the literal.
+DEFAULT_ORGANS = _organs.common_organs("cmuh", "tcga")
 LOGGER_NAME = "scripts.baselines.run_bert"
 
 
