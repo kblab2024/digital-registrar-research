@@ -55,6 +55,10 @@ workspace/
 # Live annotator workspace — real patient data, never pushed
 /workspace/
 
+# Reference test data — symlink staging tree built on demand by
+# `--folder reference` (see scripts/_config_loader._ensure_reference_staged).
+/reference/_staged/
+
 # Windows-bundle build artifacts — packaging/ scripts are tracked, outputs are not
 /packaging/_downloads/
 /packaging/build/

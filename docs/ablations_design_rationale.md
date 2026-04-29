@@ -227,3 +227,67 @@ Before kicking off a real grid:
 This pre-registration is what reviewer-1's "statistical rigor" concern
 is really asking for. See
 [`workspace/reviewer-response-suggestions.md` §2.3](../workspace/reviewer-response-suggestions.md).
+
+## 2026-04 redesign — what changed and why
+
+A live audit on the M2 mac surfaced a class of silent bugs that made
+the prior numbers uninterpretable. The relevant changes:
+
+* **`monolithic` signature was empty.** `signatures.monolithic._iter_output_fields`
+  inspected `cls.__dict__`, but DSPy stores fields in
+  `cls.output_fields` — so every merged signature came back with zero
+  output fields. `dspy_monolithic`, `str_outputs`, `chain_of_thought`,
+  and `fewshot_demos` all built degenerate predictors and returned
+  empty `cancer_data`. Fixed by reading `output_fields` directly.
+* **`str_outputs` destroyed nested structure.** Coercing every type
+  to `str | None` flattened `list[BreastBiomarker]` etc. into prose.
+  Now only scalar Literal/int/float/bool leaves are coerced; nested
+  Pydantic-list fields keep their structure so the ablation tests
+  enum-discipline loss without conflating it with structure loss.
+* **Folder-number → organ name was alphabetical.** `IMPLEMENTED_ORGANS[idx-1]`
+  was wrong for both TCGA and CMUH (their folder numbering does not
+  match the alphabetical order). Replaced with two-stage resolution:
+  rule-based keyword classifier on report text
+  (`ablations.utils.organ_classifier`), with the dataset-aware
+  `benchmarks.organs.organ_n_to_name` as a last-resort fallback. Used
+  in `no_router`, `per_section`, `build_fewshot_demos`, and
+  `utils.demos`. The `is_cancer` LLM router is left unchanged in the
+  four DSPy-routed cells.
+* **`stats._split_method` mis-parsed multi-underscore methods.**
+  `rsplit("_", 1)` on `"free_text_regex_gpt_oss_20b"` returned
+  `("free_text_regex_gpt_oss", "20b")`. Switched to reading the
+  explicit `cell` and `model` columns the aggregator already emits;
+  the string-split path remains as a defensive fallback that walks
+  known cell-ids longest-first.
+* **Efficiency stats double-counted overlapping errors.** A case with
+  both `_schema_errors` and `_error` flags went into both buckets, so
+  the rates could exceed 1.0. Now the aggregator tracks
+  `schema_only` / `parse_only` / `both` and exposes `failed_total` for
+  the non-overlapping union.
+* **Median-latency CI ledger path was wrong.** The old path
+  `{cell}_{model}/_ledger.json` did not match the canonical layout, so
+  the CI was always `None`. Fixed by aggregating per-case latencies
+  from `results_root/{cell}/{model}/{run_id}/_log.jsonl`.
+* **DSPy execution tracing.** `--trace-dspy` (or `-v`) on any runner
+  now dumps every DSPy LM call (rendered prompt + raw response) into
+  `_dspy_trace.jsonl` in the run dir. Combined with the
+  `is_cancer -> excision=… category=…` and
+  `invoking <organ> predictor (n_fields=…)` decision-point logs and
+  the `NOT_CANCER=… UNKNOWN_ORGAN=… DOWNSTREAM=…` summary counters,
+  the silent-skip class of bugs is now immediately visible.
+* **Aggregator validates organ-folder alignment.**
+  `build_grid_dataframe` compares each prediction's `cancer_category`
+  against `organ_n_to_name(dataset, organ_n)` and surfaces mismatches
+  as a per-case warning + an `organ_folder_mismatch` column in the
+  grid CSV. The smoke contract spot-checks this too.
+* **Grid driver pre-flight + per-cell try/catch.** `run_grid.py` now
+  validates cell-ids, model aliases, required artifacts (`compiled_dspy`'s
+  `compiled:` path, `fewshot_demos`'s `fewshot_demos.yaml`), and the
+  data-layout existence BEFORE the first cell starts. Per-cell
+  try/catch (with `--continue-on-cell-error`) writes a
+  `grid_failures.json` so re-runs only target the failed subset.
+* **`reference` folder shorthand.** `--folder reference` builds a
+  one-time symlink staging tree under `reference/_staged/` from
+  `reference/tcga_dataset_20251117/` and
+  `reference/tcga_annotation_20251117/` so M2-mac smoke runs use real
+  TCGA data without restructuring the on-disk source.

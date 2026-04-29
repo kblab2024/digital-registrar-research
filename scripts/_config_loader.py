@@ -96,10 +96,103 @@ def resolve_folder(raw: str | Path) -> Path:
     """Resolve a ``--folder`` CLI arg against the repo root when relative.
 
     "dummy" and "workspace" are plain relative paths — they resolve to
-    ``<repo_root>/dummy`` and ``<repo_root>/workspace`` respectively. Any
-    absolute path is used verbatim; any other relative path is resolved
+    ``<repo_root>/dummy`` and ``<repo_root>/workspace`` respectively.
+
+    "reference" is a virtual experiment root: it resolves to
+    ``<repo_root>/reference/_staged``, a symlink tree built on demand from
+    the actual TCGA test data at ``reference/tcga_dataset_20251117/`` and
+    ``reference/tcga_annotation_20251117/``. The staging tree mirrors the
+    canonical ``data/{dataset}/reports/{organ_n}/*.txt`` layout so the
+    runners need no special handling.
+
+    Any absolute path is used verbatim; any other relative path is resolved
     against the repo root (not the caller's cwd) for reproducibility."""
+    if str(raw) == "reference":
+        return _ensure_reference_staged()
     p = Path(raw)
     if not p.is_absolute():
         p = REPO_ROOT / p
     return p.resolve()
+
+
+_REFERENCE_DIR = REPO_ROOT / "reference"
+_REFERENCE_STAGED = _REFERENCE_DIR / "_staged"
+# (dataset, reports_src, gold_src) tuples driving the staging build.
+_REFERENCE_SOURCES = (
+    ("tcga", "tcga_dataset_20251117", "tcga_annotation_20251117"),
+)
+
+
+def _ensure_reference_staged() -> Path:
+    """Build (or refresh) the canonical-layout symlink tree under
+    ``reference/_staged/``. Idempotent: re-uses existing symlinks when the
+    target paths haven't changed."""
+    if not _REFERENCE_DIR.is_dir():
+        raise FileNotFoundError(
+            f"--folder reference requires {_REFERENCE_DIR} to exist")
+    _REFERENCE_STAGED.mkdir(exist_ok=True)
+    (_REFERENCE_STAGED / "results").mkdir(exist_ok=True)
+    for dataset, reports_dirname, gold_dirname in _REFERENCE_SOURCES:
+        reports_src_root = _REFERENCE_DIR / reports_dirname
+        gold_src_root = _REFERENCE_DIR / gold_dirname
+        if not reports_src_root.is_dir():
+            continue  # silently skip datasets whose source isn't present
+        _stage_reports(dataset, reports_src_root)
+        if gold_src_root.is_dir():
+            _stage_gold(dataset, gold_src_root)
+    return _REFERENCE_STAGED.resolve()
+
+
+def _stage_reports(dataset: str, src_root: Path) -> None:
+    """Symlink ``reference/<src_root>/tcgaN/tcgaN_M.txt`` to
+    ``reference/_staged/data/{dataset}/reports/N/tcgaN_M.txt``."""
+    dst_root = _REFERENCE_STAGED / "data" / dataset / "reports"
+    dst_root.mkdir(parents=True, exist_ok=True)
+    for src_organ in sorted(src_root.iterdir()):
+        if not src_organ.is_dir():
+            continue
+        # tcga1 -> 1, tcga10 -> 10
+        organ_n = src_organ.name.lstrip("tcga") or src_organ.name
+        if not organ_n.isdigit():
+            continue
+        dst_organ = dst_root / organ_n
+        dst_organ.mkdir(exist_ok=True)
+        for txt in src_organ.glob("*.txt"):
+            link = dst_organ / txt.name
+            _refresh_symlink(link, txt)
+
+
+def _stage_gold(dataset: str, src_root: Path) -> None:
+    """Symlink ``reference/<src_root>/N/tcgaN_M_annotation.json`` to
+    ``reference/_staged/data/{dataset}/annotations/gold/N/tcgaN_M.json``
+    (note the ``_annotation`` suffix is stripped to match the canonical
+    case_id ↔ gold-file convention)."""
+    dst_root = _REFERENCE_STAGED / "data" / dataset / "annotations" / "gold"
+    dst_root.mkdir(parents=True, exist_ok=True)
+    for src_organ in sorted(src_root.iterdir()):
+        if not src_organ.is_dir() or not src_organ.name.isdigit():
+            continue
+        dst_organ = dst_root / src_organ.name
+        dst_organ.mkdir(exist_ok=True)
+        for jf in src_organ.glob("*.json"):
+            stem = jf.stem
+            if stem.endswith("_annotation"):
+                stem = stem[: -len("_annotation")]
+            link = dst_organ / f"{stem}.json"
+            _refresh_symlink(link, jf)
+
+
+def _refresh_symlink(link: Path, target: Path) -> None:
+    """Create or update a symlink at ``link`` pointing to ``target``.
+    No-op when the existing symlink already points at ``target``."""
+    if link.is_symlink():
+        try:
+            if link.resolve() == target.resolve():
+                return
+        except OSError:
+            pass
+        link.unlink()
+    elif link.exists():
+        # Concrete file in the way; leave alone (don't clobber real data).
+        return
+    link.symlink_to(target)

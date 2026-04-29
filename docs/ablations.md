@@ -14,7 +14,7 @@ so input data, output predictions, and model aliases share one directory
 convention with the rest of the toolkit.
 
 ```
-{folder}/                                      # 'dummy' | 'workspace' | abs path
+{folder}/                                      # 'dummy' | 'workspace' | 'reference' | abs path
 ├── data/{dataset}/                            # 'cmuh' | 'tcga'
 │   ├── reports/{organ_n}/{case_id}.txt        # input
 │   └── annotations/gold/{organ_n}/{case_id}.json   # gold for grading
@@ -26,16 +26,78 @@ convention with the rest of the toolkit.
             ├── _log.jsonl                     # per-case row
             ├── _run.log                       # full-verbosity log
             ├── _run_meta.json                 # git SHA, UTC, decoding kwargs
+            ├── _dspy_trace.jsonl              # OPTIONAL — set --trace-dspy / -v
             └── {organ_n}/{case_id}.json       # one prediction per case
 ```
 
-`--folder dummy` and `--folder workspace` are the standard shortcuts;
-absolute paths and other relatives are accepted and resolved against
-the repo root via [`_config_loader.resolve_folder`](../scripts/_config_loader.py).
+**`{organ_n}` is a dataset-specific numeric folder name**, NOT an
+alphabetical ordering. The mapping lives in
+[`configs/organ_code.yaml`](../configs/organ_code.yaml) and is loaded by
+[`benchmarks.organs`](../src/digital_registrar_research/benchmarks/organs.py):
+
+| folder | TCGA          | CMUH      |
+|--------|---------------|-----------|
+| 1      | breast        | pancreas  |
+| 2      | colorectal    | breast    |
+| 3      | thyroid       | cervix    |
+| 4      | stomach       | colorectal|
+| 5      | liver         | esophagus |
+| 6      | —             | liver     |
+| 7      | —             | lung      |
+| 8      | —             | prostate  |
+| 9      | —             | stomach   |
+| 10     | —             | thyroid   |
+
+Always convert `organ_n` ↔ `organ_name` via
+`benchmarks.organs.organ_n_to_name(dataset, organ_n)` /
+`organ_name_to_n(dataset, name)` — never `IMPLEMENTED_ORGANS[idx-1]`,
+which is alphabetical and therefore wrong for both datasets.
+
+`--folder dummy`, `--folder workspace`, and `--folder reference` are the
+standard shortcuts. The `reference` shortcut builds a one-time symlink
+staging tree under `reference/_staged/` from
+`reference/tcga_dataset_20251117/` and
+`reference/tcga_annotation_20251117/` so the M2-mac smoke runs can use
+real TCGA data without restructuring it. Absolute paths and other
+relatives are accepted and resolved against the repo root via
+[`_config_loader.resolve_folder`](../scripts/_config_loader.py).
 Models are passed by alias from `models.common.UNIFIED_MODELS`
-(`gptoss | gemma3 | gemma4 | qwen3_5 | medgemmalarge | medgemmasmall`).
-The model slug used in the output path is the same as the pipeline
-runner's — `ollama_chat/gpt-oss:20b` → `gpt_oss_20b`.
+(`gptoss | gemma3 | gemma4 | gemma4e2b | qwen3_5 | medgemmalarge |
+medgemmasmall`). The model slug used in the output path is the same as
+the pipeline runner's — `ollama_chat/gpt-oss:20b` → `gpt_oss_20b`.
+
+### Pre-run validation checklist
+
+Run before any multi-day grid:
+
+1. `python -c "from digital_registrar_research.benchmarks.organs import dataset_organs; print(dataset_organs('tcga'))"` — confirm the loader sees the YAML.
+2. `ls {folder}/data/{dataset}/reports/` — folder names must be numeric and match the table above for your dataset.
+3. Run a single cell with `--limit 1 --trace-dspy --verbose` and read the printed summary line — it ends with
+   `NOT_CANCER=… UNKNOWN_ORGAN=… DOWNSTREAM=…`. If `DOWNSTREAM=0` the
+   runner never invoked the organ-specific predictor — check
+   `_dspy_trace.jsonl` for the rendered prompts and raw responses.
+4. Run `scripts/ablations/run_grid.py --config <smoke-yaml>` — pre-flight
+   validation will reject typos in `cell:` / `model:` and missing
+   artifacts before the first cell starts.
+
+### Skip taxonomy
+
+Every DSPy-routed cell (`dspy_monolithic`, `str_outputs`,
+`chain_of_thought`, `fewshot_demos`) emits a `_skip_reason` flag on
+each per-case JSON when the downstream organ predictor is NOT
+invoked:
+
+* `not_cancer` — the upstream `is_cancer` router said the report is
+  not a primary-excision report.
+* `unknown_organ` — `is_cancer.cancer_category` returned `"others"`
+  (or some value not in `models.modellist.organmodels`).
+* (no `_skip_reason`) — the downstream predictor ran;
+  `_downstream_called: true` is set on the payload.
+
+These tally into `n_skipped_not_cancer` / `n_skipped_unknown_organ` /
+`n_downstream_called` in `_summary.json` and are surfaced in the printed
+summary line so you can immediately tell whether the cell is doing the
+work the design says it should.
 
 ```
 src/digital_registrar_research/ablations/

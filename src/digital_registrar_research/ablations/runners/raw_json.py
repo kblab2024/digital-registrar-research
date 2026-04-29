@@ -28,19 +28,16 @@ from openai import OpenAI
 
 from ...paths import SCHEMAS_DATA
 from ...schemas.builder import (
-    describe_field_list,
+    describe_field_list_strict,
+    describe_skeleton,
     flatten_schema_for_prompt,
     load_organ_schema,
     validate_cancer_data,
 )
+from ..utils.categories import CANCER_CATEGORIES
 from . import _base
 
 CELL_ID = "raw_json"
-
-CANCER_CATEGORIES = [
-    "stomach", "colorectal", "breast", "esophagus", "lung", "prostate",
-    "thyroid", "pancreas", "cervix", "liver", "others",
-]
 
 CLASSIFY_SYSTEM = """\
 You are a cancer registrar. Given a pathology report, decide:
@@ -63,13 +60,19 @@ EXTRACT_SYSTEM_TEMPLATE = """\
 You are a cancer registrar. Extract structured fields from the given
 {organ} cancer excision report.
 
-Return ONLY a JSON object matching the field definitions below. Include
-every field in the output, using null when the field is not present in
-the report. Do not invent values. Do not omit fields. Do not add extra
-fields.
+You MUST output a single JSON object whose keys are EXACTLY the field
+names listed below. Do not invent keys. Do not omit keys. Do not nest
+beyond the schema. Use null for any field not present in the report.
 
-Schema (field_name (type): description):
+When a field has an "Allowed:" line, the value MUST be one of the listed
+strings (or null). Do NOT translate, paraphrase, or invent new values.
+
+Schema:
 {field_list}
+
+Skeleton (replace each null with the value from the report when
+present, otherwise leave it as null):
+{skeleton}
 """
 
 
@@ -108,14 +111,28 @@ class RawJSONRunner:
     def extract(self, report: str, organ: str) -> tuple[dict, list[str]]:
         schema = flatten_schema_for_prompt(load_organ_schema(organ))
         system = EXTRACT_SYSTEM_TEMPLATE.format(
-            organ=organ, field_list=describe_field_list(schema))
+            organ=organ,
+            field_list=describe_field_list_strict(schema),
+            skeleton=describe_skeleton(schema))
         data = self._chat(system, report)
         errors = validate_cancer_data(organ, data)
         if errors and len(errors) < 20:
             self.validation_retries += 1
+            allowed_keys = set(schema.get("properties", {}).keys())
+            observed_keys = set(data.keys()) if isinstance(data, dict) else set()
+            missing = sorted(allowed_keys - observed_keys)
+            extra = sorted(observed_keys - allowed_keys)
+            extra_msgs = []
+            if missing:
+                extra_msgs.append(
+                    f"Missing required keys: {', '.join(missing[:20])}")
+            if extra:
+                extra_msgs.append(
+                    f"Unexpected keys (remove these): {', '.join(extra[:20])}")
             repair_user = (
                 "The previous output had these schema errors:\n"
                 + "\n".join(f"  - {e}" for e in errors[:20])
+                + ("\n" + "\n".join(extra_msgs) if extra_msgs else "")
                 + f"\n\nFix them and return the corrected JSON only.\n\n"
                 f"Original report:\n{report}"
             )
@@ -127,7 +144,8 @@ class RawJSONRunner:
         cls = self.classify(report)
         if not cls.get("cancer_excision_report"):
             return {"cancer_excision_report": False,
-                    "cancer_category": None, "cancer_data": {}}
+                    "cancer_category": None, "cancer_data": {},
+                    "_skip_reason": "not_cancer"}
         organ = cls.get("cancer_category")
         out: dict = {
             "cancer_excision_report": True,
@@ -137,9 +155,11 @@ class RawJSONRunner:
             "cancer_data": {},
         }
         if organ in {"others", None} or not (SCHEMAS_DATA / f"{organ}.json").exists():
+            out["_skip_reason"] = "unknown_organ"
             return out
         cancer_data, errors = self.extract(report, organ)
         out["cancer_data"] = cancer_data
+        out["_downstream_called"] = True
         if errors:
             out["_schema_errors"] = errors[:20]
         return out
@@ -202,6 +222,9 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"OK={summary.n_ok} ERR={summary.n_pipeline_error} "
           f"CACHED={summary.n_cached} N={summary.n_cases} "
+          f"NOT_CANCER={summary.n_skipped_not_cancer} "
+          f"UNKNOWN_ORGAN={summary.n_skipped_unknown_organ} "
+          f"DOWNSTREAM={summary.n_downstream_called} "
           f"WALL={summary.wall_time_s:.1f}s")
     print(f"run dir: {paths.run_dir(run_name)}")
 

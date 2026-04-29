@@ -73,6 +73,7 @@ DATASETS = ("cmuh", "tcga")
 MAX_RUN_SLOTS = 10
 UNIFIED_MODELS = (
     "gptoss", "gemma3", "gemma4", "qwen3_5", "medgemmalarge", "medgemmasmall",
+    "gemma4e2b",
 )
 
 
@@ -147,6 +148,11 @@ def add_canonical_args(ap: argparse.ArgumentParser, *,
                     help="Reprocess cases even if a valid output exists.")
     ap.add_argument("--tolerate-errors", action="store_true",
                     help="Always exit 0 if the script completes.")
+    ap.add_argument("--trace-dspy", action="store_true",
+                    help="Dump every DSPy LM call (rendered prompt + raw "
+                         "response) into _dspy_trace.jsonl in the run dir. "
+                         "Useful for diagnosing silent skips in the "
+                         "is_cancer -> organ -> predictor chain.")
     ap.add_argument("-v", "--verbose", action="store_true")
 
 
@@ -368,13 +374,21 @@ class RunSummary:
     n_pipeline_error: int = 0
     n_cached: int = 0
     cancer_positive: int = 0
+    # Skip taxonomy — populated when a runner emits ``_skip_reason`` on its
+    # per-case payload. Lets the user tell at a glance whether the
+    # downstream organ predictor was even invoked.
+    n_skipped_not_cancer: int = 0
+    n_skipped_unknown_organ: int = 0
+    n_downstream_called: int = 0
     per_organ: dict[str, dict[str, int]] = field(default_factory=dict)
     wall_time_s: float = 0.0
     started_at: str = field(default_factory=_utc_now_iso)
     finished_at: str = ""
 
     def record(self, organ: str, status: str, *,
-               is_cancer: bool | None = None) -> None:
+               is_cancer: bool | None = None,
+               skip_reason: str | None = None,
+               downstream_called: bool = False) -> None:
         self.n_cases += 1
         per = self.per_organ.setdefault(organ, {
             "n_cases": 0, "n_ok": 0, "n_pipeline_error": 0,
@@ -387,6 +401,12 @@ class RunSummary:
             if is_cancer:
                 self.cancer_positive += 1
                 per["cancer_positive"] += 1
+            if skip_reason == "not_cancer":
+                self.n_skipped_not_cancer += 1
+            elif skip_reason == "unknown_organ":
+                self.n_skipped_unknown_organ += 1
+            if downstream_called:
+                self.n_downstream_called += 1
         elif status == "cached":
             self.n_cached += 1
             per["n_cached"] += 1
@@ -407,6 +427,9 @@ class RunSummary:
             "n_pipeline_error": self.n_pipeline_error,
             "n_cached": self.n_cached,
             "cancer_positive": self.cancer_positive,
+            "n_skipped_not_cancer": self.n_skipped_not_cancer,
+            "n_skipped_unknown_organ": self.n_skipped_unknown_organ,
+            "n_downstream_called": self.n_downstream_called,
             "per_organ": self.per_organ,
             "wall_time_s": round(self.wall_time_s, 1),
             "parse_error_rate": (self.n_pipeline_error / max(self.n_cases, 1)),
@@ -545,6 +568,80 @@ def load_decoding_overrides(model_alias: str) -> dict:
     return split_decoding_overrides(cfg.get("decoding"))
 
 
+# --- DSPy trace dump --------------------------------------------------------
+
+_TRACE_TRUNCATE = 8000  # max chars per message / response in the JSONL
+
+
+def _truncate(s: Any, n: int = _TRACE_TRUNCATE) -> Any:
+    if isinstance(s, str) and len(s) > n:
+        return s[:n] + f"…[truncated {len(s) - n} chars]"
+    return s
+
+
+def _try_get_dspy_lm():
+    """Return ``dspy.settings.lm`` if DSPy is loaded, else None.
+
+    Imported lazily so non-DSPy runners (raw_json, constrained_decoding,
+    free_text_regex, ...) don't pay the import cost.
+    """
+    try:
+        import dspy
+    except Exception:
+        return None
+    return getattr(dspy.settings, "lm", None)
+
+
+def dump_dspy_trace(case_id: str, run_dir: Path, since_index: int,
+                    organ: str | None = None) -> int:
+    """Append every ``lm.history`` entry since ``since_index`` to
+    ``run_dir/_dspy_trace.jsonl`` and return the new history length.
+
+    Each line is one JSON object: ``{case_id, organ, step, messages,
+    response_text, prompt_tokens, completion_tokens, kwargs}``. Long
+    fields are truncated at ``_TRACE_TRUNCATE`` chars to keep the file
+    bounded; full content stays in ``lm.history`` for replay.
+    """
+    lm = _try_get_dspy_lm()
+    if lm is None:
+        return since_index
+    history = list(getattr(lm, "history", []) or [])
+    if since_index >= len(history):
+        return len(history)
+    out_path = run_dir / "_dspy_trace.jsonl"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("a", encoding="utf-8") as fh:
+        for entry in history[since_index:]:
+            messages = entry.get("messages") or []
+            # Each message is {role, content}; truncate content per-message.
+            safe_messages = [
+                {"role": m.get("role"),
+                 "content": _truncate(m.get("content", ""))}
+                for m in messages
+            ]
+            response = entry.get("response")
+            if isinstance(response, dict):
+                response_text = response.get("content")
+            else:
+                response_text = response
+            fh.write(json.dumps({
+                "case_id": case_id,
+                "organ": organ,
+                "step_index": since_index + 1,
+                "model": entry.get("model"),
+                "messages": safe_messages,
+                "response_text": _truncate(response_text),
+                "prompt_tokens": (entry.get("usage") or {}).get(
+                    "prompt_tokens"),
+                "completion_tokens": (entry.get("usage") or {}).get(
+                    "completion_tokens"),
+                "kwargs": entry.get("kwargs"),
+                "cost": entry.get("cost"),
+            }, ensure_ascii=False, default=str) + "\n")
+            since_index += 1
+    return len(history)
+
+
 # --- Run-level loop helper --------------------------------------------------
 
 def run_loop(paths: AblationPaths, organs: list[tuple[str, Path]],
@@ -564,6 +661,14 @@ def run_loop(paths: AblationPaths, organs: list[tuple[str, Path]],
     )
 
     log_path = run_dir / "_log.jsonl"
+    trace_dspy = bool(getattr(args, "trace_dspy", False)
+                      or getattr(args, "verbose", False))
+    trace_cursor = 0
+    if trace_dspy:
+        # Initialise cursor at current history length so we only capture
+        # calls made by this run (not anything DSPy buffered earlier).
+        lm = _try_get_dspy_lm()
+        trace_cursor = len(getattr(lm, "history", []) or []) if lm else 0
     t_run = time.perf_counter()
     with log_path.open("a", encoding="utf-8") as log_fh:
         for organ_n, case_id, report_path in iterate_cases(organs, args.limit):
@@ -588,13 +693,20 @@ def run_loop(paths: AblationPaths, organs: list[tuple[str, Path]],
                 latency_s = round(time.perf_counter() - t0, 3)
                 write_case_json(paths, run_name, organ_n, case_id, payload)
                 is_cancer = bool(payload.get("cancer_excision_report"))
-                summary.record(organ_n, "ok", is_cancer=is_cancer)
-                logger.info("[%s/%s/%s] ok (%.2fs, cancer=%s)",
-                            run_name, organ_n, case_id, latency_s, is_cancer)
+                skip_reason = payload.get("_skip_reason")
+                downstream_called = bool(payload.get("_downstream_called"))
+                summary.record(organ_n, "ok", is_cancer=is_cancer,
+                               skip_reason=skip_reason,
+                               downstream_called=downstream_called)
+                logger.info("[%s/%s/%s] ok (%.2fs, cancer=%s, skip=%s, downstream=%s)",
+                            run_name, organ_n, case_id, latency_s,
+                            is_cancer, skip_reason, downstream_called)
                 row = {"case_id": case_id, "organ": organ_n, "run": run_name,
                        "status": "ok", "latency_s": latency_s,
                        "is_cancer": is_cancer,
                        "cancer_category": payload.get("cancer_category"),
+                       "skip_reason": skip_reason,
+                       "downstream_called": downstream_called,
                        "started_at": started_at}
             except Exception as exc:
                 latency_s = round(time.perf_counter() - t0, 3)
@@ -611,6 +723,9 @@ def run_loop(paths: AblationPaths, organs: list[tuple[str, Path]],
                        "started_at": started_at}
             log_fh.write(json.dumps(row, ensure_ascii=False) + "\n")
             log_fh.flush()
+            if trace_dspy:
+                trace_cursor = dump_dspy_trace(
+                    case_id, run_dir, trace_cursor, organ=organ_n)
 
     summary.wall_time_s = time.perf_counter() - t_run
     finalize_run(paths, run_name, summary, model_alias=model_alias,
@@ -637,5 +752,6 @@ __all__ = [
     "iterate_cases", "write_case_json",
     "finalize_run", "update_cell_manifest", "run_loop",
     "setup_dspy_lm", "load_decoding_overrides",
+    "dump_dspy_trace",
     "make_logger",
 ]

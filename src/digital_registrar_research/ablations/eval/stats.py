@@ -148,14 +148,43 @@ def _odds_ratio_with_ci(table, alpha: float = 0.05
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _split_method(method: str) -> tuple[str, str]:
-    """Split a ``<cell>_<model_slug>`` key back into (cell, model)."""
-    # Cells with underscores in the cell-id (e.g. ``dspy_modular``,
-    # ``free_text_regex``) — match against the registered set.
+def _split_method(method: str, *,
+                  index: dict[str, tuple[str, str]] | None = None,
+                  ) -> tuple[str, str]:
+    """Split a ``<cell>_<model_slug>`` key back into ``(cell, model)``.
+
+    Naive ``rsplit("_", 1)`` is wrong because BOTH cells (e.g.
+    ``free_text_regex``, ``dspy_modular``) AND model slugs (e.g.
+    ``gpt_oss_20b``) contain underscores — the rsplit silently produces
+    ``("free_text_regex_gpt_oss", "20b")`` for the join.
+
+    Pass an explicit ``index`` (built from the grid CSV's ``cell`` /
+    ``model`` columns) to recover the correct mapping. As a last
+    resort, walk known cell-ids longest-first and accept the first
+    prefix match — at least this can never produce a partial-model-suffix
+    cell name.
+    """
+    if index is not None and method in index:
+        return index[method]
+    # Defensive fallback: try every registered cell-id as a prefix
+    # (longest first so multi-word cells beat their substrings).
+    for cell in _KNOWN_CELL_IDS:
+        if method.startswith(cell + "_"):
+            return cell, method[len(cell) + 1:]
     parts = method.rsplit("_", 1)
     if len(parts) == 1:
         return parts[0], ""
     return parts[0], parts[1]
+
+
+# Sorted longest-first so e.g. ``free_text_regex`` is matched before
+# ``free``. Keep in sync with ``runners/`` directory.
+_KNOWN_CELL_IDS: tuple[str, ...] = tuple(sorted((
+    "chain_of_thought", "compiled_dspy", "constrained_decoding",
+    "dspy_modular", "dspy_monolithic", "fewshot_demos", "flat_schema",
+    "free_text_regex", "minimal_prompt", "no_router", "per_section",
+    "raw_json", "reuse_baseline", "str_outputs", "union_schema",
+), key=len, reverse=True))
 
 
 def _load_grid(results_root: Path) -> pd.DataFrame:
@@ -164,9 +193,13 @@ def _load_grid(results_root: Path) -> pd.DataFrame:
         raise FileNotFoundError(
             f"{grid_path} not found — run the aggregator first.")
     df = pd.read_csv(grid_path)
-    cells_models = df["method"].apply(_split_method)
-    df["cell"] = [c for c, _ in cells_models]
-    df["model"] = [m for _, m in cells_models]
+    # Prefer explicit cell/model columns when the aggregator emitted
+    # them (current behaviour) — the underscore parsing is brittle
+    # because multi-underscore cell-ids and model-slugs collide.
+    if "cell" not in df.columns or "model" not in df.columns:
+        cells_models = df["method"].apply(_split_method)
+        df["cell"] = [c for c, _ in cells_models]
+        df["model"] = [m for _, m in cells_models]
     return df
 
 
@@ -230,7 +263,11 @@ def paired_deltas_vs_baseline(
     for method, group in grid_df.groupby("method"):
         if method == baseline_method:
             continue
-        cell, model = _split_method(method)
+        if "cell" in group.columns and "model" in group.columns:
+            cell = str(group["cell"].iloc[0])
+            model = str(group["model"].iloc[0])
+        else:
+            cell, model = _split_method(method)
         group = group.copy()
         group["correct_f"] = _coerce_correct(group["correct"])
         for field, sub in group.groupby("field"):
@@ -568,23 +605,42 @@ def efficiency_stats(results_root: Path) -> pd.DataFrame:
         s_lo, s_hi = wilson_ci(schema_n, n_cases)
         p_lo, p_hi = wilson_ci(parse_n, n_cases)
 
-        # Latency CI on the median — read per-case ledger times.
-        ledger_path = results_root / f"{cell}_{model}" / "_ledger.json"
+        # Latency CI on the median — aggregate per-case latencies from
+        # every run's ``_log.jsonl`` under the canonical layout
+        # ``results_root/{cell}/{model}/{run_id}/_log.jsonl``. The old
+        # path ``{cell}_{model}/_ledger.json`` did not exist, so the CI
+        # was always None.
         median_ci_lo = median_ci_hi = None
         median_latency = row.get("median_latency_s")
-        if ledger_path.exists():
+        cell_model_dir = results_root / cell / model
+        lats: list[float] = []
+        if cell_model_dir.is_dir():
+            for run_dir in sorted(cell_model_dir.iterdir()):
+                if not run_dir.is_dir() or run_dir.name.startswith("_"):
+                    continue
+                log_path = run_dir / "_log.jsonl"
+                if not log_path.exists():
+                    continue
+                try:
+                    with log_path.open(encoding="utf-8") as f:
+                        for line in f:
+                            try:
+                                rec = json.loads(line)
+                            except Exception:
+                                continue
+                            lat = rec.get("latency_s")
+                            if isinstance(lat, (int, float)):
+                                lats.append(float(lat))
+                except Exception:
+                    continue
+        if len(lats) >= 5:
             try:
-                with ledger_path.open(encoding="utf-8") as f:
-                    data = json.load(f)
-                lats = [r["elapsed_s"] for r in data.get("runs", [])
-                        if isinstance(r.get("elapsed_s"), (int, float))]
-                if len(lats) >= 5:
-                    res = bootstrap_ci(
-                        lats, lambda xs: float(np.median(xs)),
-                        n_boot=1000, method="percentile", random_state=0,
-                    )
-                    median_ci_lo = res.lo
-                    median_ci_hi = res.hi
+                res = bootstrap_ci(
+                    lats, lambda xs: float(np.median(xs)),
+                    n_boot=1000, method="percentile", random_state=0,
+                )
+                median_ci_lo = res.lo
+                median_ci_hi = res.hi
             except Exception:
                 pass
 
@@ -622,7 +678,11 @@ def effect_sizes_per_field(
     for method, group in grid_df.groupby("method"):
         if method == baseline_method:
             continue
-        cell, model = _split_method(method)
+        if "cell" in group.columns and "model" in group.columns:
+            cell = str(group["cell"].iloc[0])
+            model = str(group["model"].iloc[0])
+        else:
+            cell, model = _split_method(method)
         group = group.copy()
         group["correct_f"] = _coerce_correct(group["correct"])
         for field, sub in group.groupby("field"):

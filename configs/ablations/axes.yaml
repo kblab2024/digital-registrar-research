@@ -70,3 +70,16 @@ levels:
     axis_A: monolithic
     axis_B: dspy
     axis_C: compiled
+
+# Cells INTENTIONALLY OUTSIDE the (A, B, C) factorial cube — listed
+# here so `factorial_glmm` skips them on purpose (not by accident).
+# They contribute only to per-axis Holm/BH correction in their primary
+# axis (B for str/free/constrained variants, C for CoT/minimal, F for
+# schema-specificity).
+factorial_skip:
+  str_outputs:      "axis_B level 'str' is outside the {dspy, raw_json, constrained} cube"
+  free_text_regex:  "degenerate B-axis baseline; B-level 'free_text' outside the cube"
+  chain_of_thought: "axis_C level 'cot' is outside the {zero_shot, fewshot_3, compiled} cube"
+  minimal_prompt:   "degenerate C-axis baseline; C-level 'minimal' outside the cube"
+  union_schema:     "F-axis only (schema specificity)"
+  flat_schema:      "F-axis only (schema specificity)"

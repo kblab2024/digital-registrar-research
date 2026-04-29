@@ -1,15 +1,22 @@
 """
 A4 — Monolithic DSPy without the ``is_cancer`` router.
 
-Same as Cell B (monolithic) but skips the routing call. The router
+Same as Cell B (monolithic) but skips the LLM routing call. The router
 decides BOTH whether-to-extract AND which organ; the cleanest way to
-remove it is to use the gold organ derived from the report's organ
-subdirectory (the canonical layout encodes organ in the path:
-``data/{dataset}/reports/{organ_n}/{case_id}.txt``).
+remove it is to derive the organ from the report itself.
 
-The numeric organ index is mapped to its canonical name via
-:data:`scope.IMPLEMENTED_ORGANS`. This is an upper-bound estimate of
-router contribution: the cell sees the right organ for free.
+We use a **rule-based** classifier on report text
+(:func:`ablations.utils.organ_classifier.classify_organ_from_text`) — NOT
+the folder number alone. Folder names are a noisy signal because the
+TCGA and CMUH datasets number organs differently (TCGA folder 1 = breast,
+CMUH folder 1 = pancreas — see ``configs/organ_code.yaml``). The dataset-
+aware folder lookup is used only as a last-resort fallback when no
+keyword matches.
+
+This is an upper-bound estimate of router contribution: the cell sees
+the right organ for free, with the failure modes of organ-folder
+misalignment surfaced explicitly via ``_organ_n_folder`` /
+``_organ_folder_mismatch`` in the per-case JSON.
 
 Canonical layout:
     --folder dummy --dataset tcga --model gptoss [--run runNN]
@@ -21,24 +28,16 @@ import logging
 
 import dspy
 
-from ...benchmarks.eval.scope import IMPLEMENTED_ORGANS
+from ...benchmarks.organs import organ_n_to_name
 from ...util.predictiondump import dump_prediction_plain
-from ..signatures.monolithic import get_monolithic_signature
+from ..signatures.monolithic import (
+    get_monolithic_signature,
+    list_monolithic_fields,
+)
+from ..utils.organ_classifier import classify_organ_from_text
 from . import _base
 
 CELL_ID = "no_router"
-
-
-def _organ_from_index(organ_n: str) -> str | None:
-    """Map a numeric organ subdir name (``"1"``, ``"2"``, ...) to the
-    organ key used by the per-organ signatures."""
-    try:
-        idx = int(organ_n)
-    except ValueError:
-        return None
-    if 1 <= idx <= len(IMPLEMENTED_ORGANS):
-        return IMPLEMENTED_ORGANS[idx - 1]
-    return None
 
 
 class NoRouterPipeline(dspy.Module):
@@ -77,9 +76,21 @@ class NoRouterPipeline(dspy.Module):
                 logger.warning("jsonize failed for %s: %s", fname, e)
         try:
             predictor = self._get_organ_predictor(organ)
+            field_names = list_monolithic_fields(organ)
+            logger.info(
+                "[%s] invoking %s predictor (router skipped, n_fields=%d)",
+                fname, organ, len(field_names))
             organ_response = predictor(
                 report=paragraphs, report_jsonized=report_jsonized)
-            out["cancer_data"] = dump_prediction_plain(organ_response)
+            raw = dump_prediction_plain(organ_response)
+            backfilled = {name: None for name in field_names}
+            backfilled.update(raw)
+            out["cancer_data"] = backfilled
+            n_non_null = sum(1 for v in raw.values() if v is not None)
+            logger.info(
+                "[%s] %s predictor returned %d non-null fields out of %d",
+                fname, organ, n_non_null, len(field_names))
+            out["_downstream_called"] = True
         except Exception as e:
             logger.error("no_router %s failed for %s: %s", organ, fname, e)
             out["_error"] = str(e)
@@ -107,15 +118,30 @@ def run(args: argparse.Namespace) -> int:
 
     skip_jsonize = not args.include_jsonize
     pipe = NoRouterPipeline(skip_jsonize=skip_jsonize)
+    dataset = args.dataset
 
     def _predict(report_text: str, organ_n: str, case_id: str) -> dict:
-        organ = _organ_from_index(organ_n)
+        organ = classify_organ_from_text(
+            report_text, dataset=dataset, fallback_organ_n=organ_n)
+        folder_organ = organ_n_to_name(dataset, organ_n)
         if organ is None:
-            return {"cancer_excision_report": True, "cancer_category": None,
-                    "cancer_data": {}, "_router_skipped": True,
-                    "_error": f"cannot infer organ from organ_n={organ_n!r}"}
-        return pipe(report=report_text, organ=organ,
-                    logger=logger, fname=case_id)
+            # Failure: surface as pipeline error so smoke contracts
+            # actually flag this case (the previous behaviour silently
+            # wrote a sentinel and let the run pass).
+            raise RuntimeError(
+                f"cannot infer organ for case={case_id} organ_n={organ_n!r}: "
+                f"no rule-based match and no dataset fallback")
+        if folder_organ and folder_organ != organ:
+            logger.warning(
+                "[%s] organ-folder mismatch: text says %r, folder %r maps to %r",
+                case_id, organ, organ_n, folder_organ)
+        payload = pipe(report=report_text, organ=organ,
+                       logger=logger, fname=case_id)
+        payload["_organ_n_folder"] = organ_n
+        payload["_folder_organ"] = folder_organ
+        if folder_organ and folder_organ != organ:
+            payload["_organ_folder_mismatch"] = True
+        return payload
 
     summary = _base.run_loop(
         paths, organs, run_name, model_alias=args.model,
@@ -128,6 +154,7 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"OK={summary.n_ok} ERR={summary.n_pipeline_error} "
           f"CACHED={summary.n_cached} N={summary.n_cases} "
+          f"DOWNSTREAM={summary.n_downstream_called} "
           f"WALL={summary.wall_time_s:.1f}s")
     print(f"run dir: {paths.run_dir(run_name)}")
 

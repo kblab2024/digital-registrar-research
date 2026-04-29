@@ -28,7 +28,7 @@ from pathlib import Path
 import dspy
 import yaml
 
-from ...benchmarks.eval.scope import IMPLEMENTED_ORGANS
+from ...benchmarks.organs import organ_name_to_n
 from ...paths import REPO_ROOT
 
 DEMO_CONFIG_PATH = REPO_ROOT / "configs" / "ablations" / "fewshot_demos.yaml"
@@ -43,20 +43,13 @@ def _load_demo_config(path: Path = DEMO_CONFIG_PATH) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def _organ_index(organ: str) -> str | None:
-    try:
-        return str(IMPLEMENTED_ORGANS.index(organ) + 1)
-    except ValueError:
-        return None
-
-
 def _resolve_paths_from_config(config: dict, organ: str, case_id: str
                                ) -> tuple[Path, Path] | None:
     folder = Path(config.get("folder") or "")
     dataset = config.get("dataset")
     if not folder or not dataset:
         return None
-    organ_n = _organ_index(organ)
+    organ_n = organ_name_to_n(dataset, organ)
     if organ_n is None:
         return None
     report_path = folder / "data" / dataset / "reports" / organ_n / f"{case_id}.txt"
