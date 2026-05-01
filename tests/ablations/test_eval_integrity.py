@@ -88,17 +88,15 @@ def test_efficiency_no_double_counting(tmp_path: Path):
     assert failed / n <= 1.0, "failed_rate must never exceed 1.0"
 
 
-def test_aggregator_flags_organ_mismatch(tmp_path: Path):
-    """When a prediction's cancer_category disagrees with the folder
-    organ (per organ_code.yaml), the aggregator must emit an
-    organ_folder_mismatch flag — not silently grade against the wrong
-    gold."""
+def test_aggregator_flags_cancer_category_mismatch(tmp_path: Path):
+    """When a prediction's cancer_category disagrees with gold's, the
+    aggregator must emit a cancer_category_mismatch flag — an accuracy
+    signal, not a runtime error. Folder numbers are case-id keys only
+    and are not used to derive ground truth."""
     from digital_registrar_research.ablations.eval.run_ablations import (
         build_grid_dataframe,
     )
 
-    # Set up a TCGA layout where folder 3 = thyroid per the YAML, but
-    # the prediction claims breast.
     run_dir = tmp_path / "results" / "ablations" / "tcga" / "no_router" / \
               "gpt_oss_20b" / "run01"
     run_dir.mkdir(parents=True)
@@ -107,11 +105,10 @@ def test_aggregator_flags_organ_mismatch(tmp_path: Path):
     organ_dir.mkdir(parents=True)
     (organ_dir / "case_x.json").write_text(json.dumps({
         "cancer_excision_report": True,
-        "cancer_category": "breast",  # WRONG — folder 3 is thyroid
+        "cancer_category": "breast",
         "cancer_data": {},
     }), encoding="utf-8")
 
-    # Minimal gold so the aggregator doesn't return un-gradable rows.
     gold_dir = tmp_path / "data" / "tcga" / "annotations" / "gold" / "3"
     gold_dir.mkdir(parents=True)
     (gold_dir / "case_x.json").write_text(json.dumps({
@@ -123,10 +120,9 @@ def test_aggregator_flags_organ_mismatch(tmp_path: Path):
 
     runs = [("no_router", "gpt_oss_20b", "run01", run_dir)]
     df = build_grid_dataframe(runs, gold_root, dataset="tcga")
-    assert "organ_folder_mismatch" in df.columns
-    # At least one row for case_x should be flagged.
-    flagged = df[df["case_id"] == "case_x"]["organ_folder_mismatch"].any()
-    assert flagged, "Expected organ_folder_mismatch to be True for case_x"
+    assert "cancer_category_mismatch" in df.columns
+    flagged = df[df["case_id"] == "case_x"]["cancer_category_mismatch"].any()
+    assert flagged, "Expected cancer_category_mismatch to be True for case_x"
 
 
 def test_dspy_trace_dump_no_history(tmp_path: Path):

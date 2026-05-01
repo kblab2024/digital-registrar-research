@@ -726,6 +726,40 @@ def effect_sizes_per_field(
     return pd.DataFrame(out_rows)
 
 
+def cancer_category_mismatch_stats(grid_df: pd.DataFrame) -> pd.DataFrame:
+    """Per (cell, model): count unique cases whose prediction's
+    ``cancer_category`` disagrees with gold's, plus the rate over
+    gradable cases.
+
+    Returns columns ``cell, model, n_cases, n_cancer_category_mismatch,
+    rate``. Empty DataFrame if the grid lacks the mismatch column
+    (older grid CSVs predating gold-vs-pred tracking).
+    """
+    if "cancer_category_mismatch" not in grid_df.columns:
+        return pd.DataFrame()
+    if grid_df.empty:
+        return pd.DataFrame()
+
+    out_rows: list[dict] = []
+    for (cell, model), group in grid_df.groupby(["cell", "model"]):
+        n_cases = int(group["case_id"].nunique())
+        if n_cases == 0:
+            continue
+        flagged_cases = (
+            group.loc[group["cancer_category_mismatch"] == True, "case_id"]
+            .nunique()
+        )
+        n_mismatch = int(flagged_cases)
+        out_rows.append({
+            "cell": str(cell),
+            "model": str(model),
+            "n_cases": n_cases,
+            "n_cancer_category_mismatch": n_mismatch,
+            "rate": (n_mismatch / n_cases) if n_cases else float("nan"),
+        })
+    return pd.DataFrame(out_rows)
+
+
 # ---------------------------------------------------------------------------
 # Top-level orchestrator
 # ---------------------------------------------------------------------------
@@ -786,6 +820,12 @@ def run_all(results_root: Path,
         path = results_root / "ablation_effect_sizes.csv"
         effect.to_csv(path, index=False)
         out["effect_sizes"] = path
+
+    cc_mismatch = cancer_category_mismatch_stats(grid_df)
+    if not cc_mismatch.empty:
+        path = results_root / "ablation_cancer_category_mismatch.csv"
+        cc_mismatch.to_csv(path, index=False)
+        out["cancer_category_mismatch"] = path
 
     return out
 

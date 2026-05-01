@@ -124,61 +124,6 @@ def ensure_aggregator_round_trip(experiment_root: Path, dataset: str,
         raise RuntimeError(
             f"{summary_path} is empty — aggregator produced no rows.")
 
-    # Organ-label consistency: spot-check that every per-case JSON's
-    # ``cancer_category`` matches the organ implied by its folder name
-    # via the dataset-aware mapping. Catches the silent misalignment
-    # that the old ``IMPLEMENTED_ORGANS[idx-1]`` mapping produced.
-    from digital_registrar_research.benchmarks.organs import organ_n_to_name
-    import json
-    out_root = (results_root if results_root is not None else
-                experiment_root / "results" / "ablations" / dataset)
-    mismatches: list[str] = []
-    for cell_dir in out_root.iterdir():
-        if not cell_dir.is_dir() or cell_dir.name.startswith("_"):
-            continue
-        for model_dir in cell_dir.iterdir():
-            if not model_dir.is_dir():
-                continue
-            for run_dir in model_dir.iterdir():
-                if not run_dir.is_dir():
-                    continue
-                for organ_dir in run_dir.iterdir():
-                    if not organ_dir.is_dir() or organ_dir.name.startswith("_"):
-                        continue
-                    expected = organ_n_to_name(dataset, organ_dir.name)
-                    if not expected:
-                        continue
-                    for pred_path in organ_dir.glob("*.json"):
-                        try:
-                            with pred_path.open(encoding="utf-8") as f:
-                                pred = json.load(f)
-                        except Exception:
-                            continue
-                        if not isinstance(pred, dict):
-                            continue
-                        # Skip not-cancer / unknown-organ skips — they
-                        # legitimately have no cancer_category.
-                        if pred.get("_skip_reason"):
-                            continue
-                        got = pred.get("cancer_category")
-                        if got and got != expected:
-                            mismatches.append(
-                                f"{cell_dir.name}/{model_dir.name}/"
-                                f"{run_dir.name}/{organ_dir.name}/"
-                                f"{pred_path.name}: expected={expected!r} "
-                                f"got={got!r}")
-                        # One mismatch per cell is enough for the smoke
-                        # contract — break out to keep this fast.
-                        break
-                    if mismatches and any(m.startswith(cell_dir.name)
-                                          for m in mismatches):
-                        break
-    if mismatches:
-        joined = "\n  ".join(mismatches[:10])
-        raise RuntimeError(
-            f"organ-folder mismatch detected in {len(mismatches)} case(s):"
-            f"\n  {joined}")
-
 
 __all__ = [
     "REPO_ROOT", "CELL_MAP", "CELL_SHORT_TO_FULL", "CELL_FULL_TO_SHORT",

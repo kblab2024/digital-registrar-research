@@ -143,21 +143,18 @@ def _grade_run(run_dir: Path, gold_root: Path,
                dataset: str | None = None) -> list[dict]:
     """Score every per-case JSON under a single run dir.
 
-    Yields long-form rows ready for the master DataFrame. When
-    ``dataset`` is given, also validates that each prediction's
-    ``cancer_category`` matches the organ implied by its folder name
-    (via :func:`benchmarks.organs.organ_n_to_name`). Mismatches are
-    recorded by setting ``organ_folder_mismatch=True`` on every row for
-    that case (a per-case warning is also printed).
+    Yields long-form rows ready for the master DataFrame. For each case
+    where both gold and prediction supply ``cancer_category``, the rows
+    carry ``cancer_category_mismatch=True`` when the two strings
+    disagree — an accuracy signal, not a runtime error. Folder numbers
+    are treated as case-id keys only and are not compared against
+    ``cancer_category``.
     """
-    from ...benchmarks.organs import organ_n_to_name
-
     rows: list[dict] = []
     for organ_dir in sorted(run_dir.iterdir()):
         if not organ_dir.is_dir() or organ_dir.name.startswith("_"):
             continue
         organ_n = organ_dir.name
-        expected_organ = organ_n_to_name(dataset, organ_n) if dataset else None
         for pred_path in sorted(organ_dir.glob("*.json")):
             case_id = pred_path.stem
             gold = _gold_for(case_id, organ_n, gold_root)
@@ -166,7 +163,7 @@ def _grade_run(run_dir: Path, gold_root: Path,
                     rows.append({
                         "case_id": case_id, "organ": organ_n, "field": field,
                         "correct": None, "attempted": False,
-                        "organ_folder_mismatch": False,
+                        "cancer_category_mismatch": False,
                     })
                 continue
             try:
@@ -174,21 +171,23 @@ def _grade_run(run_dir: Path, gold_root: Path,
                     pred = json.load(f)
             except Exception:
                 pred = {}
-            mismatch = False
-            if (expected_organ
-                    and isinstance(pred, dict)
-                    and pred.get("cancer_category")
-                    and pred["cancer_category"] != expected_organ):
-                mismatch = True
-                print(f"[aggregate] organ-folder mismatch: case={case_id} "
-                      f"folder={organ_n} expected={expected_organ!r} "
-                      f"got={pred['cancer_category']!r}")
+            cc_mismatch = (
+                isinstance(pred, dict)
+                and isinstance(gold, dict)
+                and pred.get("cancer_category") is not None
+                and gold.get("cancer_category") is not None
+                and pred["cancer_category"] != gold["cancer_category"]
+            )
+            if cc_mismatch:
+                print(f"[aggregate] cancer_category mismatch: case={case_id} "
+                      f"folder={organ_n} gold={gold['cancer_category']!r} "
+                      f"pred={pred['cancer_category']!r}")
             if isinstance(pred, dict) and pred.get("_pipeline_error"):
                 for field in FAIR_SCOPE:
                     rows.append({
                         "case_id": case_id, "organ": organ_n, "field": field,
                         "correct": None, "attempted": False,
-                        "organ_folder_mismatch": mismatch,
+                        "cancer_category_mismatch": cc_mismatch,
                     })
                 continue
             result = score_case(gold, pred)
@@ -200,14 +199,14 @@ def _grade_run(run_dir: Path, gold_root: Path,
                     "case_id": case_id, "organ": organ_n, "field": field,
                     "correct": (bool(correct) if correct is not None else None),
                     "attempted": correct is not None,
-                    "organ_folder_mismatch": mismatch,
+                    "cancer_category_mismatch": cc_mismatch,
                 })
             for nested_field, f1d in result.get("_nested", {}).items():
                 rows.append({
                     "case_id": case_id, "organ": organ_n,
                     "field": nested_field,
                     "correct": f1d["f1"], "attempted": True,
-                    "organ_folder_mismatch": mismatch,
+                    "cancer_category_mismatch": cc_mismatch,
                 })
     return rows
 
@@ -218,7 +217,7 @@ def build_grid_dataframe(runs: list[tuple[str, str, str, Path]],
     """Build the ablation_grid.csv master long-form table.
 
     Each row carries ``cell, model, run, case_id, organ, field, correct,
-    attempted, organ_folder_mismatch, method`` (where
+    attempted, cancer_category_mismatch, method`` (where
     ``method = f"{cell}_{model}"`` for backward compatibility with
     downstream stats code).
     """
