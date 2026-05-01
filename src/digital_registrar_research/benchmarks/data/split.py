@@ -96,11 +96,24 @@ def stratified_split(
     appears in both folds). Strata with only 1 case go entirely to
     train. The total test count is then trimmed/padded from the largest
     stratum to hit the global target ``round(N * test_fraction)``.
+
+    ``test_fraction == 0.0`` is a valid edge case: all cases go to
+    train, test is empty. Useful for cross-corpus training where one
+    dataset is fully held out (e.g. CMUH-train / TCGA-test for BERT).
     """
-    if not 0.0 < test_fraction < 1.0:
+    if not 0.0 <= test_fraction < 1.0:
         raise ValueError(
-            f"test_fraction must be in (0, 1); got {test_fraction!r}"
+            f"test_fraction must be in [0, 1); got {test_fraction!r}"
         )
+    if test_fraction == 0.0:
+        return {
+            "train": list(cases),
+            "test": [],
+            "seed": seed,
+            "test_fraction": test_fraction,
+            "total": len(cases),
+            "stratify_by": stratify_by,
+        }
     rng = random.Random(seed)
     by_cat: dict[str, list[dict]] = defaultdict(list)
     for c in cases:
@@ -223,8 +236,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    if not 0.0 < args.test_fraction < 1.0:
-        ap.error(f"--test-fraction must be in (0, 1); got {args.test_fraction!r}")
+    if not 0.0 <= args.test_fraction < 1.0:
+        ap.error(f"--test-fraction must be in [0, 1); got {args.test_fraction!r}")
 
     n_written = 0
     for dataset in args.datasets:

@@ -75,9 +75,21 @@ def test_stratified_split_default_fraction(tmp_path: Path) -> None:
 def test_stratified_split_invalid_fraction(tmp_path: Path) -> None:
     cases = [{"id": "a", "cancer_category": "breast"}]
     with pytest.raises(ValueError, match="test_fraction"):
-        stratified_split(cases, test_fraction=0.0, seed=0)
-    with pytest.raises(ValueError, match="test_fraction"):
         stratified_split(cases, test_fraction=1.0, seed=0)
+    with pytest.raises(ValueError, match="test_fraction"):
+        stratified_split(cases, test_fraction=-0.1, seed=0)
+
+
+def test_stratified_split_zero_fraction_is_all_train(tmp_path: Path) -> None:
+    """test_fraction=0 puts everything in train (cross-corpus training)."""
+    cases = [
+        {"id": f"c{i}", "cancer_category": cat}
+        for i, cat in enumerate(["breast", "breast", "colorectal", "liver"])
+    ]
+    sp = stratified_split(cases, test_fraction=0.0, seed=0)
+    assert len(sp["train"]) == 4
+    assert sp["test"] == []
+    assert sp["test_fraction"] == 0.0
 
 
 def test_stratified_split_singleton_category_goes_to_train(tmp_path: Path) -> None:
