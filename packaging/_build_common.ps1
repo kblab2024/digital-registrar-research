@@ -29,8 +29,8 @@ if ([string]::IsNullOrEmpty($AnnotatorSet)) {
 if ($Platform -notin @('windows','unix')) {
     throw "unknown PLATFORM='$Platform' (expected windows|unix)"
 }
-if ($AnnotatorSet -notin @('single','multi')) {
-    throw "unknown ANNOTATOR_SET='$AnnotatorSet' (expected single|multi)"
+if ($AnnotatorSet -notin @('single','single_kpc','multi')) {
+    throw "unknown ANNOTATOR_SET='$AnnotatorSet' (expected single|single_kpc|multi)"
 }
 
 # ── Pins ──────────────────────────────────────────────────────────────────────
@@ -254,7 +254,8 @@ Invoke-Native $PyHost (Join-Path $PkgDir 'precompute_section_groups.py') `
 
 # ── Write annotators.json baked to the chosen annotator set ──────────────────
 Say "Baking annotators.json ($AnnotatorSet)"
-$annotatorsJson = if ($AnnotatorSet -eq 'single') {
+$annotatorsJson = switch ($AnnotatorSet) {
+    'single' {
 @'
 {
   "annotators": [
@@ -262,7 +263,17 @@ $annotatorsJson = if ($AnnotatorSet -eq 'single') {
   ]
 }
 '@
-} else {
+    }
+    'single_kpc' {
+@'
+{
+  "annotators": [
+    {"name": "Kai-Po Chang", "suffix": "kpc"}
+  ]
+}
+'@
+    }
+    'multi' {
 @'
 {
   "annotators": [
@@ -271,6 +282,7 @@ $annotatorsJson = if ($AnnotatorSet -eq 'single') {
   ]
 }
 '@
+    }
 }
 # Write UTF-8 *without* BOM. PS 5.1's `Set-Content -Encoding UTF8` emits a BOM,
 # which makes Python's json.loads() raise JSONDecodeError — the runtime loader
