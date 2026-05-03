@@ -10,7 +10,7 @@ Core primitives:
     field_correct(g, p, field)  — per-field scoring with tolerance rules
     match_nested_list(g, p, k)  — bipartite greedy match of list-of-dicts fields
     score_case(gold, pred)      — returns {field: bool/None} across fair scope
-    aggregate_to_csv(method_to_preds) — writes workspace/results/benchmarks/by_method.csv
+    aggregate_cases_to_df(cases, method_to_preds, scope) — long-form correctness DataFrame
 
 Coverage rule
 -------------
@@ -198,64 +198,6 @@ def score_case(gold: dict, pred: dict, scope: ScopeArg = None) -> dict:
             if is_attempted(pred, field):
                 out["_nested"][field] = match_nested_list(gold, pred, field)
     return out
-
-
-def aggregate_to_csv(method_to_preds: dict[str, Path],
-                     gold_root: Path,
-                     splits_path: Path,
-                     out_csv: Path) -> pd.DataFrame:
-    """
-    method_to_preds: {"digital_registrar": Path(".../dr"), "gpt4_dspy": Path(...), ...}
-    gold_root: folder of gold annotations (path resolved via splits.json entries)
-    splits_path: data/splits.json
-    out_csv: workspace/results/benchmarks/by_method.csv
-    """
-    with splits_path.open(encoding="utf-8") as f:
-        split = json.load(f)
-    test_cases = split["test"]
-
-    # Long-form: one row per (method, case_id, field).
-    rows = []
-    for method, preds_dir in method_to_preds.items():
-        for case in test_cases:
-            cid = case["id"]
-            gold_path = Path(case["annotation_path"])
-            pred_path = preds_dir / f"{cid}.json"
-            if not pred_path.exists():
-                # Method didn't emit anything for this case — coverage 0.
-                for field in FAIR_SCOPE:
-                    rows.append({"method": method, "case_id": cid,
-                                 "field": field, "correct": None,
-                                 "attempted": False})
-                continue
-
-            with gold_path.open(encoding="utf-8") as f:
-                gold = json.load(f)
-            with pred_path.open(encoding="utf-8") as f:
-                pred = json.load(f)
-            result = score_case(gold, pred)
-
-            for field in FAIR_SCOPE + [f"biomarker_{b}" for b in BREAST_BIOMARKERS]:
-                if field not in result:
-                    continue
-                correct = result[field]
-                rows.append({
-                    "method": method, "case_id": cid, "field": field,
-                    "correct": (bool(correct) if correct is not None else None),
-                    "attempted": correct is not None,
-                })
-
-            for field, f1d in result["_nested"].items():
-                rows.append({
-                    "method": method, "case_id": cid, "field": field,
-                    "correct": f1d["f1"],  # stored as float, not bool
-                    "attempted": True,
-                })
-
-    df = pd.DataFrame(rows)
-    out_csv.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out_csv, index=False)
-    return df
 
 
 def _resolve_pred_path(pred_root: Path, case: dict) -> Path | None:

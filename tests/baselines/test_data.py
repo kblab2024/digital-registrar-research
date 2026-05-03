@@ -1,16 +1,8 @@
 """Regression tests for the BERT baseline data loader (_data.py).
 
-Pinpoint coverage for the bizarre `_organ_n` / `_resolve_dummy` /
-`_load_one_dataset` interaction:
-
-- Two splits.json formats exist in the wild (bare strings from
-  gen_dummy_skeleton, full case dicts from registrar-split).
-- Loader must normalize entries before path construction.
-- _organ_n must operate on strings, not dicts.
-
-Without these tests the silent "BERT discovers no cases" failure
-(broken paths -> cancer_category=None -> filter drops everything)
-will recur.
+The loader walks ``<root>/data/<dataset>/annotations/gold/<organ_n>/*.json``
+and produces case dicts with the report path derived by convention.
+There is no train/test split; every gold annotation is a case.
 """
 from __future__ import annotations
 
@@ -20,31 +12,30 @@ from pathlib import Path
 import pytest
 
 from digital_registrar_research.benchmarks.baselines._data import (
-    _load_one_dataset,
-    _normalize_entry,
     _organ_n,
-    _resolve_dummy,
+    _walk_dataset,
+    load_cases,
+    per_dataset_counts,
 )
 
 
 def _seed_dummy_case(
     root: Path, dataset: str, organ_n: str, case_id: str,
-    cancer_category: str,
+    cancer_category: str | None = "breast",
+    cancer_excision_report: bool = True,
 ) -> None:
     ann_dir = root / "data" / dataset / "annotations" / "gold" / organ_n
     rep_dir = root / "data" / dataset / "reports" / organ_n
     ann_dir.mkdir(parents=True, exist_ok=True)
     rep_dir.mkdir(parents=True, exist_ok=True)
     (ann_dir / f"{case_id}.json").write_text(
-        json.dumps({"cancer_category": cancer_category}), encoding="utf-8",
+        json.dumps({
+            "cancer_category": cancer_category,
+            "cancer_excision_report": cancer_excision_report,
+        }),
+        encoding="utf-8",
     )
     (rep_dir / f"{case_id}.txt").write_text("dummy report", encoding="utf-8")
-
-
-def _write_splits(root: Path, dataset: str, train, test) -> None:
-    p = root / "data" / dataset / "splits.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"train": train, "test": test}), encoding="utf-8")
 
 
 # --- _organ_n ----------------------------------------------------------------
@@ -66,91 +57,65 @@ def test_organ_n_rejects_malformed() -> None:
         _organ_n("not_a_case_id", "cmuh")
 
 
-def test_organ_n_no_longer_indexes_dict() -> None:
-    """The hand-fix `case_id["id"]` was a workaround masking the splits-format
-    bug; reverting it means strings are required and dicts must be normalized
-    upstream. This pins that behavior so the workaround can't sneak back."""
-    with pytest.raises(TypeError):
-        _organ_n({"id": "cmuh1_42"}, "cmuh")  # type: ignore[arg-type]
+# --- _walk_dataset -----------------------------------------------------------
 
 
-# --- _normalize_entry --------------------------------------------------------
-
-
-def test_normalize_entry_passes_strings_through() -> None:
-    assert _normalize_entry("cmuh1_1") == "cmuh1_1"
-
-
-def test_normalize_entry_extracts_id_from_dict() -> None:
-    assert _normalize_entry({"id": "cmuh1_1", "report_path": "/x"}) == "cmuh1_1"
-
-
-def test_normalize_entry_rejects_unknown_shape() -> None:
-    with pytest.raises(ValueError, match="unrecognized splits.json entry"):
-        _normalize_entry(42)
-    with pytest.raises(ValueError, match="unrecognized splits.json entry"):
-        _normalize_entry({"no_id": "x"})
-
-
-# --- _resolve_dummy ----------------------------------------------------------
-
-
-def test_resolve_dummy_with_string_id_builds_paths(tmp_path: Path) -> None:
-    _seed_dummy_case(tmp_path, "cmuh", "1", "cmuh1_1", "breast")
-    case = _resolve_dummy(tmp_path, "cmuh", "cmuh1_1")
-    assert case["id"] == "cmuh1_1"
-    assert case["dataset"] == "cmuh"
-    assert case["organ_n"] == "1"
-    assert case["cancer_category"] == "breast"
-    assert Path(case["annotation_path"]).exists()
-    assert Path(case["report_path"]).exists()
-
-
-# --- _load_one_dataset (the integration that was silently broken) ------------
-
-
-def test_load_one_dataset_bare_strings(tmp_path: Path) -> None:
-    """Dummy-format splits.json (bare strings) must load and resolve correctly."""
+def test_walk_dataset_collects_all_gold(tmp_path: Path) -> None:
     _seed_dummy_case(tmp_path, "cmuh", "2", "cmuh2_1", "breast")
     _seed_dummy_case(tmp_path, "cmuh", "9", "cmuh9_1", "stomach")
-    _write_splits(tmp_path, "cmuh", ["cmuh2_1"], ["cmuh9_1"])
+    cases = _walk_dataset("cmuh", tmp_path)
+    ids = sorted(c["id"] for c in cases)
+    assert ids == ["cmuh2_1", "cmuh9_1"]
+    by_id = {c["id"]: c for c in cases}
+    assert by_id["cmuh2_1"]["organ_n"] == "2"
+    assert by_id["cmuh2_1"]["cancer_category"] == "breast"
+    assert by_id["cmuh9_1"]["organ_n"] == "9"
+    assert by_id["cmuh9_1"]["cancer_category"] == "stomach"
+    # Report paths derived by convention
+    for c in cases:
+        assert Path(c["report_path"]).exists()
+        assert Path(c["annotation_path"]).exists()
 
-    train = _load_one_dataset("cmuh", "train", tmp_path)
-    test = _load_one_dataset("cmuh", "test", tmp_path)
 
-    assert [c["id"] for c in train] == ["cmuh2_1"]
-    assert [c["id"] for c in test] == ["cmuh9_1"]
-    assert train[0]["cancer_category"] == "breast"
-    assert test[0]["cancer_category"] == "stomach"
+def test_walk_dataset_returns_empty_for_missing_tree(tmp_path: Path) -> None:
+    cases = _walk_dataset("cmuh", tmp_path)
+    assert cases == []
 
 
-def test_load_one_dataset_legacy_dict_entries(tmp_path: Path, capsys) -> None:
-    """Legacy registrar-split splits.json (full case dicts) must also load.
+# --- load_cases (the public entry point) -------------------------------------
 
-    This is the bug that caused 'BERT discovers no cases': dict entries
-    were silently corrupting path construction. Normalizer must rescue.
-    """
+
+def test_load_cases_pools_across_datasets(tmp_path: Path) -> None:
     _seed_dummy_case(tmp_path, "cmuh", "2", "cmuh2_1", "breast")
-    _write_splits(
-        tmp_path, "cmuh",
-        train=[{"id": "cmuh2_1", "annotation_path": "/legacy/path",
-                "report_path": "/legacy/path", "cancer_category": "breast"}],
-        test=[],
+    _seed_dummy_case(tmp_path, "tcga", "1", "tcga1_1", "breast")
+    cases = load_cases(datasets=["cmuh", "tcga"], root=tmp_path)
+    assert sorted(c["id"] for c in cases) == ["cmuh2_1", "tcga1_1"]
+
+
+def test_load_cases_filters_by_organ(tmp_path: Path) -> None:
+    _seed_dummy_case(tmp_path, "cmuh", "2", "cmuh2_1", "breast")
+    _seed_dummy_case(tmp_path, "cmuh", "9", "cmuh9_1", "stomach")
+    _seed_dummy_case(tmp_path, "cmuh", "10", "cmuh10_1", "thyroid")
+    cases = load_cases(
+        datasets=["cmuh"], root=tmp_path,
+        organs={"breast", "stomach"},
     )
-
-    cases = _load_one_dataset("cmuh", "train", tmp_path)
-
-    assert [c["id"] for c in cases] == ["cmuh2_1"]
-    assert cases[0]["cancer_category"] == "breast"
-    assert Path(cases[0]["annotation_path"]).exists()
-    captured = capsys.readouterr()
-    assert "legacy dict entries" in captured.out
-
-
-def test_load_one_dataset_all_concatenates(tmp_path: Path) -> None:
-    _seed_dummy_case(tmp_path, "cmuh", "2", "cmuh2_1", "breast")
-    _seed_dummy_case(tmp_path, "cmuh", "9", "cmuh9_1", "stomach")
-    _write_splits(tmp_path, "cmuh", ["cmuh2_1"], ["cmuh9_1"])
-
-    cases = _load_one_dataset("cmuh", "all", tmp_path)
     assert sorted(c["id"] for c in cases) == ["cmuh2_1", "cmuh9_1"]
+
+
+def test_load_cases_included_only_drops_non_excision(tmp_path: Path) -> None:
+    _seed_dummy_case(tmp_path, "cmuh", "2", "cmuh2_1", "breast",
+                     cancer_excision_report=True)
+    _seed_dummy_case(tmp_path, "cmuh", "2", "cmuh2_2", None,
+                     cancer_excision_report=False)
+    cases = load_cases(datasets=["cmuh"], root=tmp_path, included_only=True)
+    assert [c["id"] for c in cases] == ["cmuh2_1"]
+
+
+def test_per_dataset_counts(tmp_path: Path) -> None:
+    _seed_dummy_case(tmp_path, "cmuh", "2", "cmuh2_1", "breast")
+    _seed_dummy_case(tmp_path, "tcga", "1", "tcga1_1", "breast")
+    _seed_dummy_case(tmp_path, "tcga", "2", "tcga2_1", "colorectal")
+    cases = load_cases(datasets=["cmuh", "tcga"], root=tmp_path)
+    counts = per_dataset_counts(cases)
+    assert counts == {"cmuh": 1, "tcga": 2}

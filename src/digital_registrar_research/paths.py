@@ -24,14 +24,11 @@ RESULTS_ROOT: Path = REPO_ROOT / "workspace" / "results"
 BENCHMARKS_RESULTS: Path = RESULTS_ROOT / "benchmarks"
 ABLATIONS_RESULTS: Path = RESULTS_ROOT / "ablations"
 
-# Packaged train/test split
-SPLITS_JSON: Path = Path(__file__).resolve().parent / "benchmarks" / "data" / "splits.json"
-
 # Packaged JSON schemas (generated from canonical Pydantic models)
 SCHEMAS_DATA: Path = Path(__file__).resolve().parent / "schemas" / "data"
 
 __all__ = [
     "REPO_ROOT", "DATA_ROOT", "RAW_REPORTS", "PREANNOTATIONS", "GOLD_ANNOTATIONS",
     "RESULTS_ROOT", "BENCHMARKS_RESULTS", "ABLATIONS_RESULTS",
-    "SPLITS_JSON", "SCHEMAS_DATA",
+    "SCHEMAS_DATA",
 ]

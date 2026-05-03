@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """ClinicalBERT — canonical-layout trainer for CLS and QA heads.
 
-Trains the CLS and/or QA head on the **CMUH train split** by default.
+Trains the CLS and/or QA head on **every CMUH gold case** by default.
 TCGA is held out so it can serve as the cross-corpus evaluation set
 against LLMs (which, via the OpenAI API, can only see TCGA for privacy
-reasons). For ablations that need pooled training, pass
-``--datasets cmuh tcga``.
+reasons). There is no train/test split inside a corpus — disjointness
+is guaranteed by the CMUH/TCGA dataset boundary, and the predict step
+enforces it via the ``datasets`` field on the saved checkpoint.
 
 Output: checkpoints under ``ckpts/`` (default), or wherever ``--ckpt-*``
 points. The predict step (``run_bert.py``) loads from these paths.
 
 Usage
 -----
-    # Default canonical training: CMUH only, pooled over the train split.
+    # Default canonical training: every CMUH gold case.
     python scripts/baselines/train_bert.py \\
         --heads cls qa --epochs-cls 5 --epochs-qa 3
 
@@ -45,10 +46,11 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from _config_loader import resolve_folder  # noqa: E402
-from baselines._split_helpers import (  # noqa: E402
-    load_split, per_organ_counts,
-)
+
 from digital_registrar_research.benchmarks import organs as _organs  # noqa: E402
+from digital_registrar_research.benchmarks.baselines._data import (  # noqa: E402
+    load_cases, per_dataset_counts,
+)
 
 DATASETS = tuple(_organs.all_datasets())
 DEFAULT_TRAIN_DATASETS = ("cmuh",)  # Privacy-driven: TCGA stays held-out for the
@@ -137,55 +139,41 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
-def _print_split_summary(args: argparse.Namespace, logger: logging.Logger) -> None:
-    """Pre-flight: log per-dataset / per-organ train and test counts.
+def _print_corpus_summary(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Pre-flight: log per-dataset / per-organ training-corpus counts.
 
-    Resolves ``splits.json`` for each dataset (via the canonical fallback
-    chain in ``_split_helpers.load_split``) and prints a table so the
-    user sees exactly which cases the encoder will be trained on AND
-    which ones eval will score it against. Fails fast if any dataset's
-    train list is empty.
+    Walks the gold-annotation tree under ``{folder}/data/{dataset}/`` and
+    prints how many cases the encoder will see, broken down by organ_n.
+    Fails fast if any requested dataset has no gold annotations.
     """
     logger.info("=" * 60)
-    logger.info("Dataset separation step (train/test split)")
+    logger.info("Training corpus summary (cross-corpus: train CMUH, predict TCGA)")
     logger.info("=" * 60)
-    logger.info("split source: {folder}/data/{dataset}/splits.json "
-                "(or packaged TCGA fallback)")
-    total_train = total_test = 0
+    organs = set(args.organs)
+    total = 0
     for ds in args.datasets:
-        try:
-            sp = load_split(args.experiment_root, ds)
-        except FileNotFoundError as e:
+        cases = load_cases(
+            datasets=[ds],
+            root=args.experiment_root,
+            organs=organs,
+        )
+        n = len(cases)
+        total += n
+        if n == 0:
             raise SystemExit(
-                f"refusing to train: {e}. Train and test cases must be "
-                f"disjoint and pinned by splits.json before training."
+                f"refusing to train: no gold annotations under "
+                f"{args.experiment_root / 'data' / ds / 'annotations' / 'gold'}. "
+                f"Populate the dataset (or use --folder dummy after "
+                f"`python scripts/data/gen_dummy_skeleton.py --out dummy --clean`)."
             )
-        train_n = len(sp["train"])
-        test_n = len(sp["test"])
-        total_train += train_n
-        total_test += test_n
-        logger.info("[%s] train=%d  test=%d  (sum=%d)",
-                    ds, train_n, test_n, train_n + test_n)
-        train_per_organ = per_organ_counts(sp["train"])
-        test_per_organ = per_organ_counts(sp["test"])
-        all_organs = sorted(set(train_per_organ) | set(test_per_organ))
-        for organ in all_organs:
-            logger.info(
-                "  organ %s: train=%d  test=%d",
-                organ, train_per_organ.get(organ, 0),
-                test_per_organ.get(organ, 0),
-            )
-        # Fail-fast leakage check — the splits.json MUST already be
-        # disjoint.
-        overlap = set(sp["train"]) & set(sp["test"])
-        if overlap:
-            raise SystemExit(
-                f"splits.json for dataset={ds!r} has {len(overlap)} cases "
-                f"in BOTH train and test (sample: "
-                f"{', '.join(sorted(overlap)[:5])}). Refusing to train."
-            )
+        logger.info("[%s] cases=%d", ds, n)
+        per_organ: dict[str, int] = {}
+        for c in cases:
+            per_organ[c["organ_n"]] = per_organ.get(c["organ_n"], 0) + 1
+        for organ_n in sorted(per_organ):
+            logger.info("  organ %s: cases=%d", organ_n, per_organ[organ_n])
     logger.info("=" * 60)
-    logger.info("pooled: train=%d  test=%d", total_train, total_test)
+    logger.info("pooled training cases: %d", total)
     logger.info("=" * 60)
 
 
@@ -201,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("datasets: %s", args.datasets)
     logger.info("heads: %s", args.heads)
 
-    _print_split_summary(args, logger)
+    _print_corpus_summary(args, logger)
 
     if "cls" in args.heads:
         train_cls(args, logger)

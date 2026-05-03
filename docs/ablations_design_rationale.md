@@ -216,7 +216,7 @@ regression before it consumes 8 hours of a real sweep.
 ## Pre-registration
 
 Before kicking off a real grid:
-1. Lock the test split — verify the hash of the packaged splits.json.
+1. Pin the gold-annotation set — record the SHA of `<folder>/data/<dataset>/annotations/gold/` before the grid runs.
 2. Pre-register primary + secondary endpoints in
    [`configs/eval_endpoints.yaml`](../configs/eval_endpoints.yaml).
 3. Lock the decoding seed in the relevant model config; capture it in

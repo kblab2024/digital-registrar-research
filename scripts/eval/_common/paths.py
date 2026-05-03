@@ -16,8 +16,7 @@ Layout (canonical example: ``/dummy``, real data: ``/workspace``):
     │   │   ├── nhc_without_preann/{organ_idx}/{case_id}.json
     │   │   ├── kpc_with_preann/{organ_idx}/{case_id}.json
     │   │   └── kpc_without_preann/{organ_idx}/{case_id}.json
-    │   ├── preannotation/{model}/{organ_idx}/{case_id}.json
-    │   └── splits.json
+    │   └── preannotation/{model}/{organ_idx}/{case_id}.json
     └── results/predictions/{dataset}/
         ├── llm/{model}/{run_id}/{organ_idx}/{case_id}.json
         ├── clinicalbert/{model}/{organ_idx}/{case_id}.json
@@ -118,9 +117,6 @@ class Paths:
         if method == "rule_based":
             return self.predictions_dir / "rule_based" / str(organ_idx) / f"{case_id}.json"
         raise ValueError(f"unknown method: {method!r}")
-
-    def splits(self) -> Path:
-        return self.data_dir / "splits.json"
 
     # --- Discovery ------------------------------------------------------------
 

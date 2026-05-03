@@ -28,7 +28,7 @@ Public entry points
 Design note
 -----------
 The atomic table shape (one row per run × case × field) matches the
-existing `aggregate_to_csv` long-form so downstream tooling can consume
+existing `aggregate_cases_to_df` long-form so downstream tooling can consume
 both interchangeably — just treat `run_id` as a sibling of `method`.
 """
 from __future__ import annotations
@@ -89,7 +89,6 @@ def discover_runs(root: Path) -> list[tuple[str, Path]]:
 def build_correctness_table(
     runs: Sequence[tuple[str, Path]],
     gold_root: Path,
-    splits_path: Path | None = None,
     *,
     case_ids: Sequence[str] | None = None,
     gold_suffix: str = "_gold",
@@ -101,13 +100,11 @@ def build_correctness_table(
         - correct: True/False for scalars, float F1 for nested, NaN when
           not attempted.
 
-    `gold_root` is either (a) a directory with `<case_id>_gold.json`
-    files in nested subfolders, or (b) a directory with a splits.json
-    next to it (legacy TCGA layout). When `splits_path` is given, cases
-    are pulled from that; otherwise we walk gold_root looking for
-    `*_gold.json`.
+    Cases are discovered by walking ``gold_root`` for ``*_gold.json``
+    files (or bare-stem JSON files for the legacy single-annotator
+    layout).
     """
-    gold_map = _index_gold(gold_root, splits_path, gold_suffix)
+    gold_map = _index_gold(gold_root, gold_suffix)
     selected_ids = set(case_ids) if case_ids else set(gold_map.keys())
 
     rows: list[dict] = []
@@ -155,18 +152,8 @@ def build_correctness_table(
     return pd.DataFrame(rows)
 
 
-def _index_gold(
-    gold_root: Path, splits_path: Path | None, gold_suffix: str,
-) -> dict[str, Path]:
-    """Build {case_id: gold_path}. Handles two layouts:
-    (1) TCGA legacy — use splits.json if given.
-    (2) CMUH — walk `<root>/**/<case_id>_gold.json`.
-    """
-    if splits_path is not None:
-        with Path(splits_path).open(encoding="utf-8") as f:
-            split = json.load(f)
-        return {c["id"]: Path(c["annotation_path"]) for c in split["test"]}
-
+def _index_gold(gold_root: Path, gold_suffix: str) -> dict[str, Path]:
+    """Build {case_id: gold_path} by walking ``<gold_root>/**/<id>{suffix}.json``."""
     mapping: dict[str, Path] = {}
     for p in Path(gold_root).rglob("*.json"):
         stem = p.stem

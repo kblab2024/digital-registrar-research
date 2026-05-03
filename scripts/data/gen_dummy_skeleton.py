@@ -6,7 +6,7 @@ reports), so the benchmark/eval pipeline can be exercised end-to-end
 without touching real data.
 
 Per-dataset organ scope is read from ``configs/organ_code.yaml`` — TCGA
-covers 5 organs (breast, colorectal, thyroid, stomach, liver), CMUH
+covers 5 organs (breast, colorectal, esophagus, stomach, liver), CMUH
 covers 10 (pancreas, breast, cervix, colorectal, esophagus, liver,
 lung, prostate, stomach, thyroid). Numeric organ folders mirror that
 yaml (so ``data/cmuh/.../1/`` is pancreas; ``data/tcga/.../1/`` is
@@ -19,7 +19,6 @@ Layout produced:
         preannotation/gpt_oss_20b/{organ_n}/{case_id}.json
         annotations/{nhc,kpc}_{with,without}_preann/{organ_n}/{case_id}.json
         annotations/gold/{organ_n}/{case_id}.json
-        splits.json
         dataset_manifest.yaml
     {out}/results/predictions/{dataset}/
         llm/{model}/run{NN}/{organ_n}/{case_id}.json
@@ -41,7 +40,7 @@ Production run (full default):
 
 Cross-corpus common-5 only:
     python scripts/data/gen_dummy_skeleton.py --out dummy --clean \\
-        --organs breast,colorectal,thyroid,stomach,liver
+        --organs breast,colorectal,esophagus,stomach,liver
 
 Multi-run sweep (10 runs per LLM, like the real experiments):
     python scripts/data/gen_dummy_skeleton.py --out dummy --clean --llm-runs 10
@@ -963,14 +962,17 @@ def build_dataset(root: Path, dataset: str, organs_map: dict[str, str],
     ds_root = root / "data" / dataset
     n_cancer_per_organ = round(cases_per_organ * cancer_rate)
     all_ids: list[str] = []
-    cancer_ids: list[str] = []
-    noncancer_ids: list[str] = []
+    n_cancer = 0
+    n_noncancer = 0
 
     for organ_n, organ in organs_map.items():
         for idx in range(1, cases_per_organ + 1):
             case_id = f"{dataset}{organ_n}_{idx}"
             all_ids.append(case_id)
-            (cancer_ids if idx <= n_cancer_per_organ else noncancer_ids).append(case_id)
+            if idx <= n_cancer_per_organ:
+                n_cancer += 1
+            else:
+                n_noncancer += 1
             gold = gold_for(dataset, organ_n, idx, organs_map, cases_per_organ, cancer_rate)
 
             # Raw report (style depends on dataset)
@@ -1001,32 +1003,13 @@ def build_dataset(root: Path, dataset: str, organs_map: dict[str, str],
                         ann,
                     )
 
-    # splits.json — stratified by organ AND cancer/non-cancer
-    split_rng = random.Random(20251117)
-    by_bucket: dict[tuple[str, bool], list[str]] = {}
-    for cid in all_ids:
-        organ_n = cid.replace(dataset, "").split("_")[0]
-        is_cancer = cid in cancer_ids
-        by_bucket.setdefault((organ_n, is_cancer), []).append(cid)
-    train, test = [], []
-    for ids in by_bucket.values():
-        split_rng.shuffle(ids)
-        n_test = max(1, len(ids) // 3)
-        test.extend(ids[:n_test])
-        train.extend(ids[n_test:])
-    write_json(ds_root / "splits.json", {
-        "seed": 20251117,
-        "train": sorted(train),
-        "test": sorted(test),
-    })
-
     # dataset_manifest.yaml
     write_yaml(ds_root / "dataset_manifest.yaml", {
         "dataset": dataset,
         "created_at": now,
         "n_cases": len(all_ids),
-        "n_cancer_cases": len(cancer_ids),
-        "n_noncancer_cases": len(noncancer_ids),
+        "n_cancer_cases": n_cancer,
+        "n_noncancer_cases": n_noncancer,
         "cancer_rate": cancer_rate,
         "organs": [
             {"n": n, "name": organs_map[n], "n_cases": cases_per_organ}
@@ -1168,7 +1151,6 @@ def build_configs(root: Path, organs_per_dataset: dict[str, dict[str, str]],
             "reports_dir": f"data/{ds}/reports",
             "annotations_dir": f"data/{ds}/annotations",
             "preannotation_dir": f"data/{ds}/preannotation",
-            "splits_path": f"data/{ds}/splits.json",
             "manifest_path": f"data/{ds}/dataset_manifest.yaml",
             "organs": [{"n": n, "name": organs_map[n]} for n in organs_map],
         })
@@ -1220,8 +1202,13 @@ def build_model_dirs(root: Path) -> None:
 
 
 def write_skeleton_gitkeeps(root: Path) -> None:
-    """Drop .gitkeep at the root of dummy/data/<ds>/ and dummy/results/ so the
-    layout survives even when generated artifacts are wiped or gitignored.
+    """Drop .gitkeep at every directory under dummy/data/ and dummy/results/.
+
+    The dummy fixture's directory layout is the **committed backbone**:
+    even though generated content is gitignored, the empty layout itself
+    must survive `--clean` so a fresh checkout (or a regen on a different
+    box) reproduces the same tree. We touch a `.gitkeep` at every node
+    (recursively) so directory structure is always preserved by git.
 
     The dummy ``results/`` tree mirrors the production ``workspace/results/``
     architecture: ``predictions/``, ``eval/``, ``ablations/``, ``benchmarks/``.
@@ -1238,9 +1225,11 @@ def write_skeleton_gitkeeps(root: Path) -> None:
         if not sub_root.exists():
             sub_root.mkdir(parents=True)
         (sub_root / ".gitkeep").touch(exist_ok=True)
-        for child in sub_root.iterdir():
-            if child.is_dir():
-                (child / ".gitkeep").touch(exist_ok=True)
+        # Recurse: every directory under data/ and results/ gets a .gitkeep
+        # so the committed backbone is preserved even after a wipe.
+        for d in sub_root.rglob("*"):
+            if d.is_dir():
+                (d / ".gitkeep").touch(exist_ok=True)
 
 
 def write_readme(root: Path) -> None:
@@ -1257,12 +1246,12 @@ Per-dataset organ scope is read from `configs/organ_code.yaml`:
 
 - **CMUH**: 10 organs (1=pancreas, 2=breast, 3=cervix, 4=colorectal,
   5=esophagus, 6=liver, 7=lung, 8=prostate, 9=stomach, 10=thyroid).
-- **TCGA**: 5 organs (1=breast, 2=colorectal, 3=thyroid, 4=stomach, 5=liver).
+- **TCGA**: 5 organs (1=breast, 2=colorectal, 3=esophagus, 4=stomach, 5=liver).
 
 Defaults: cmuh = 100 cases per organ, tcga = 50 cases per organ,
 80% cancer / 20% non-cancer, 3 LLM runs.
 For a 10-run sweep matching the real experiments: `--llm-runs 10`.
-To restrict to a subset: `--organs breast,colorectal,thyroid,stomach,liver`
+To restrict to a subset: `--organs breast,colorectal,esophagus,stomach,liver`
 (the cross-corpus common-5 set).
 
 CMUH reports are clean key-value text. TCGA reports are chaotic

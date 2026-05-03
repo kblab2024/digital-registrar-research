@@ -13,8 +13,7 @@ Every method (rule, BERT, LLM) reads inputs from the same place and writes outpu
 │   ├── nhc_without_preann/{organ_n}/{case_id}.json Annotator NHC, no pre-annotation
 │   ├── kpc_with_preann/{organ_n}/{case_id}.json    Annotator KPC, with pre-annotation
 │   └── kpc_without_preann/{organ_n}/{case_id}.json Annotator KPC, no pre-annotation
-├── preannotation/{model}/{organ_n}/{case_id}.json  LLM-generated pre-annotation seeds
-└── splits.json                                Train / test split (by case_id)
+└── preannotation/{model}/{organ_n}/{case_id}.json  LLM-generated pre-annotation seeds
 ```
 
 `{organ_n}` is the 1-based integer organ index. The mapping is **dataset-specific** — single source of truth is [`configs/organ_code.yaml`](../../configs/organ_code.yaml), loaded by `src/digital_registrar_research/benchmarks/organs.py` (and re-exposed via `scripts/eval/_common/stratify.py` for eval scripts).
@@ -25,7 +24,7 @@ Every method (rule, BERT, LLM) reads inputs from the same place and writes outpu
 |---|---|
 | 1 | breast |
 | 2 | colorectal |
-| 3 | thyroid |
+| 3 | esophagus |
 | 4 | stomach |
 | 5 | liver |
 
@@ -44,7 +43,7 @@ Every method (rule, BERT, LLM) reads inputs from the same place and writes outpu
 | 9 | stomach |
 | 10 | thyroid |
 
-The cross-corpus baseline (train on CMUH, test on TCGA) operates on the **5 organs both datasets share**: `breast, colorectal, thyroid, stomach, liver`.
+The cross-corpus baseline (train on CMUH, predict on TCGA) operates on the **5 organs both datasets share**: `breast, colorectal, esophagus, stomach, liver`.
 
 `{case_id}` follows the pattern `{dataset}{organ_n}_{idx}` — and `organ_n` is interpreted via the dataset-specific mapping. So `cmuh1_17` is *pancreas* case 17 in CMUH; `tcga1_17` is *breast* case 17 in TCGA.
 
@@ -61,30 +60,11 @@ The `dummy/` tree is fully synthetic but schema-valid, so the entire benchmark +
 
 The contract: drop your reports + gold annotations into `workspace/data/{dataset}/...` matching the same tree. The runners and eval scripts default to `--folder workspace` and treat it exactly the same as `dummy` — only the contents differ.
 
-### Generating the train/test split
+### No train/test split inside a corpus
 
-`registrar-split` (which now points at the canonical layout) creates or refreshes `splits.json` for any dataset:
+The cross-corpus baseline does not partition any single corpus into train and test folds. CMUH is the training corpus; TCGA is the prediction corpus. Disjointness is guaranteed by the dataset boundary, and `run_bert.py` enforces it at predict time by reading the checkpoint's `datasets` metadata and refusing to predict on any dataset that was in training.
 
-```bash
-# Default: refresh both cmuh and tcga at workspace, 0.34 test fraction.
-registrar-split
-
-# Equivalent explicit form.
-registrar-split --folder workspace --datasets cmuh tcga --test-fraction 0.34 --seed 20251117
-
-# Generate splits for the dummy fixture (gen_dummy_skeleton already
-# does this, but you can override the test fraction here).
-registrar-split --folder dummy --datasets cmuh tcga --test-fraction 0.30
-```
-
-What it does:
-
-1. Reads gold annotations from `{folder}/data/{dataset}/annotations/gold/<organ>/*.json`.
-2. Splits stratified by `cancer_category` so every organ appears in both folds.
-3. Writes `{folder}/data/{dataset}/splits.json` with `{train, test, seed, test_fraction, total}`.
-4. Skips datasets with no gold (warns), errors out only when no dataset has gold.
-
-The split is deterministic for a fixed `--seed` (default `20251117`) — re-running with the same flags always produces the same split.
+Cases are discovered by walking `{folder}/data/{dataset}/annotations/gold/<organ_n>/*.json`. Adding new cases is a matter of dropping new annotation+report files in those folders; no manifest or split file needs to be regenerated.
 
 ## Output layout (`{folder}/results/predictions/{dataset}/`)
 

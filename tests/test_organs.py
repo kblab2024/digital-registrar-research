@@ -8,7 +8,7 @@ from digital_registrar_research.benchmarks import organs
 
 def test_tcga_mapping_matches_yaml() -> None:
     m = organs.organs_for("tcga")
-    assert m == {1: "breast", 2: "colorectal", 3: "thyroid",
+    assert m == {1: "breast", 2: "colorectal", 3: "esophagus",
                  4: "stomach", 5: "liver"}
 
 
@@ -24,13 +24,14 @@ def test_cmuh_mapping_matches_yaml() -> None:
 def test_organ_name_per_dataset() -> None:
     assert organs.organ_name("tcga", 1) == "breast"
     assert organs.organ_name("cmuh", 1) == "pancreas"
-    assert organs.organ_name("tcga", 3) == "thyroid"
+    assert organs.organ_name("tcga", 3) == "esophagus"
     assert organs.organ_name("cmuh", 3) == "cervix"
 
 
 def test_organ_n_for_reverse_lookup() -> None:
-    assert organs.organ_n_for("tcga", "thyroid") == 3
-    assert organs.organ_n_for("cmuh", "thyroid") == 10
+    assert organs.organ_n_for("tcga", "esophagus") == 3
+    assert organs.organ_n_for("cmuh", "esophagus") == 5
+    assert organs.organ_n_for("cmuh", "thyroid") == 10  # CMUH-only organ
     assert organs.organ_n_for("tcga", "BREAST") == 1  # case-insensitive
 
 
@@ -47,12 +48,14 @@ def test_organ_n_for_unknown_raises() -> None:
     with pytest.raises(KeyError):
         organs.organ_n_for("tcga", "pancreas")  # not in TCGA
     with pytest.raises(KeyError):
+        organs.organ_n_for("tcga", "thyroid")  # CMUH-only
+    with pytest.raises(KeyError):
         organs.organ_n_for("cmuh", "kidney")  # not in either
 
 
 def test_common_organs_intersection() -> None:
     common = set(organs.common_organs("cmuh", "tcga"))
-    assert common == {"breast", "colorectal", "thyroid", "stomach", "liver"}
+    assert common == {"breast", "colorectal", "esophagus", "stomach", "liver"}
 
 
 def test_union_organs_full_coverage() -> None:

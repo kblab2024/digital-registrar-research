@@ -41,7 +41,7 @@ def add_common_args(parser: argparse.ArgumentParser, *, subcommand: str) -> None
     parser.add_argument(
         "--organs", nargs="+", default=None,
         help="Restrict to organ indices or names valid for --dataset (e.g. for "
-             "tcga: 1..5 or breast/colorectal/thyroid/stomach/liver). Default: "
+             "tcga: 1..5 or breast/colorectal/esophagus/stomach/liver). Default: "
              "all organs defined for the dataset in configs/organ_code.yaml.",
     )
     parser.add_argument(

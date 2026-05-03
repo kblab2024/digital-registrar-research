@@ -22,32 +22,28 @@ This is reflected in the script defaults:
 
 | Script | Default datasets | Notes |
 |---|---|---|
-| `registrar-split` | `cmuh tcga` | Both get a `splits.json` for internal use; the cross-corpus default eval doesn't need them but ablations do. |
-| `train_bert.py` | `cmuh` | TCGA stays held out. Pass `--datasets cmuh tcga` for pooled-training ablation. |
+| `train_bert.py` | `cmuh` | Trains on every CMUH case. TCGA stays held out. Pass `--datasets cmuh tcga` for the pooled-training ablation. |
 | `run_rule.py` | `tcga` | Rule has no training; predict on the LLM-comparable corpus. |
-| `run_bert.py` | `tcga` | BERT predicts on TCGA; `--split all` (TCGA fully held out). |
-| `eval_*_vs_*.py` | `tcga` | Eval on TCGA, `--split all` (no leakage filter needed since BERT didn't train on TCGA). |
+| `run_bert.py` | `tcga` | BERT predicts on every TCGA case. The leakage guard refuses to predict on a dataset that was in training. |
+| `eval_*_vs_*.py` | `tcga` | Eval on every TCGA gold case. No split filtering. |
 
 ## Quickstart (cross-corpus, the default)
 
 ```bash
-# 1. Generate the train/test split for both corpora.
-registrar-split
-
-# 2. Train BERT on CMUH (default). TCGA is untouched.
+# 1. Train BERT on CMUH (default). TCGA is untouched.
 python scripts/baselines/train_bert.py \
     --heads cls qa --epochs-cls 5 --epochs-qa 3
 
-# 3. Run BERT and rule on TCGA (default). Rule and BERT now have
+# 2. Run BERT and rule on TCGA (default). Rule and BERT now have
 #    predictions for the full TCGA corpus.
 python scripts/baselines/run_rule.py
 python scripts/baselines/run_bert.py
 
-# 4. Run the LLM (e.g. via run_dspy_ollama_single.py or your OpenAI pipeline)
+# 3. Run the LLM (e.g. via run_dspy_ollama_single.py or your OpenAI pipeline)
 #    on TCGA. Same canonical layout under
 #    {workspace}/results/predictions/tcga/llm/{model}/{run}/.
 
-# 5. Side-by-side compare. Default --datasets tcga --split all.
+# 4. Side-by-side compare. Default --datasets tcga.
 python scripts/baselines/eval_rule_bert_llm.py \
     --llm-model gpt_oss_20b \
     --out workspace/results/eval/rule_bert_llm
@@ -63,28 +59,19 @@ python scripts/baselines/eval_rule_vs_llm.py \
     --out dummy/results/eval/rule_vs_llm
 ```
 
-## Ablations: pooled training and intra-corpus eval
+## Ablation: pooled training
 
-If you want to deviate from the cross-corpus default for an ablation:
+The cross-corpus default is the canonical contract; the only supported deviation is the **pooled-training ablation** (BERT sees both CMUH and TCGA at training time). This destroys TCGA's held-out status and is therefore reserved for upper-bound diagnostic comparisons:
 
 ```bash
-# Pooled training — destroys TCGA's held-out status, but useful as an upper-bound ablation.
+# Pooled training — BERT sees TCGA. Predict step is now blocked from running
+# on either dataset (the leakage guard refuses both, since both are in
+# the training set), so this ablation is for "how much capacity does the
+# encoder have when fully fed?" rather than for cross-method comparison.
 python scripts/baselines/train_bert.py --datasets cmuh tcga
-
-# Intra-corpus benchmark (CMUH-only). The leakage guard requires --split test
-# so BERT is not scored on its own training cases.
-python scripts/baselines/run_bert.py --datasets cmuh --split test
-python scripts/baselines/eval_bert_vs_llm.py \
-    --datasets cmuh --split test \
-    --llm-model gpt_oss_20b \
-    --out workspace/results/eval/bert_vs_llm_intra_cmuh
-
-# Both corpora at once with proper test-fold filtering everywhere.
-python scripts/baselines/eval_rule_bert_llm.py \
-    --datasets cmuh tcga --split test \
-    --llm-model gpt_oss_20b \
-    --out workspace/results/eval/rule_bert_llm_both
 ```
+
+Intra-corpus evaluation (e.g. CMUH-train / CMUH-test) is no longer supported in-tree — there are no train/test splits inside a corpus.
 
 ## Documentation map
 
@@ -99,7 +86,7 @@ python scripts/baselines/eval_rule_bert_llm.py \
 
 - **`{folder}`** in commands means `dummy` (synthetic data), `workspace` (live data on this box), or any absolute path. Resolved via `scripts/_config_loader.py:resolve_folder`. Default is `workspace`.
 - **`{dataset}`** is `cmuh` or `tcga`.
-- **`{organ_n}`** is the 1-based numeric organ index, **dataset-specific** per [`configs/organ_code.yaml`](../../configs/organ_code.yaml). TCGA covers 5 organs (1=breast, 2=colorectal, 3=thyroid, 4=stomach, 5=liver); CMUH covers 10 (1=pancreas, 2=breast, 3=cervix, 4=colorectal, 5=esophagus, 6=liver, 7=lung, 8=prostate, 9=stomach, 10=thyroid). The cross-corpus baseline restricts both folds to the 5 shared organs. See [01_data_layout.md](01_data_layout.md#input-layout-folderdatadataset).
+- **`{organ_n}`** is the 1-based numeric organ index, **dataset-specific** per [`configs/organ_code.yaml`](../../configs/organ_code.yaml). TCGA covers 5 organs (1=breast, 2=colorectal, 3=esophagus, 4=stomach, 5=liver); CMUH covers 10 (1=pancreas, 2=breast, 3=cervix, 4=colorectal, 5=esophagus, 6=liver, 7=lung, 8=prostate, 9=stomach, 10=thyroid). The cross-corpus baseline restricts to the 5 shared organs. See [01_data_layout.md](01_data_layout.md#input-layout-folderdatadataset).
 - **`{case_id}`** is the corpus-prefixed report id, e.g. `cmuh1_17` (cmuh dataset, organ index 1, case 17).
 - **`{annotator}`** is `gold`, `nhc_with_preann`, `nhc_without_preann`, `kpc_with_preann`, or `kpc_without_preann`. Eval against `gold` is the default.
 

@@ -3,8 +3,8 @@
 
 Backed by ``digital_registrar_research.ablations.runners.no_router``.
 
-The router is bypassed; the gold ``cancer_category`` from
-``splits.json`` is used as the assumed organ. See the runner's
+The router is bypassed; the gold ``cancer_category`` field from each
+annotation file is used as the assumed organ. See the runner's
 docstring for why this is an upper-bound estimate of router value.
 """
 from __future__ import annotations

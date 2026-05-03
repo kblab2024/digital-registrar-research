@@ -16,9 +16,10 @@ Design notes
   findable in the text are dropped (counted in per-organ stats).
 * At inference we ask the per-organ question subset against the test
   report and keep the highest-confidence span per field.
-* Training pools cmuh.train + tcga.train so the encoder sees enough
-  pathology language to fine-tune meaningfully (modest annotated pool
-  per organ otherwise).
+* Training uses every CMUH case (cross-corpus contract: TCGA is held
+  out for the LLM-comparable evaluation). The annotated pool per organ
+  is modest, so we accept undertraining as the methodologically honest
+  baseline rather than pool TCGA in and lose held-out status.
 * This module complements `clinicalbert_cls.py` (which handles
   categorical / boolean / enum-grade fields). Together they populate
   the BERT-eligible fields for the head-to-head comparison.
@@ -195,7 +196,6 @@ def train(args) -> None:
     datasets = parse_csv(args.datasets)
     cases = load_cases(
         datasets=datasets,
-        split="train",
         root=Path(args.data_root),
         organs=organs,
         included_only=True,  # QA needs a real cancer_category to pick a question bank
@@ -232,17 +232,16 @@ def train(args) -> None:
     Path(args.ckpt).mkdir(parents=True, exist_ok=True)
     model.save_pretrained(args.ckpt)
     tok.save_pretrained(args.ckpt)
-    # Sidecar with the exact case ids the encoder saw at training time.
-    # HuggingFace save_pretrained doesn't carry custom keys, so we write
-    # a separate file. The eval pipeline reads this back to guard
-    # against in-sample scoring.
+    # Sidecar with training metadata. HuggingFace save_pretrained doesn't
+    # carry custom keys, so we write a separate file. The predict step
+    # reads this back to enforce dataset-disjointness against the predict
+    # corpus.
     train_meta = {
         "method": "clinicalbert_qa",
         "datasets": datasets,
         "organs": sorted(organs),
         "n_train_cases": len(cases),
         "per_dataset_counts": counts,
-        "train_case_ids": sorted(c["id"] for c in cases),
     }
     (Path(args.ckpt) / "_train_meta.json").write_text(
         json.dumps(train_meta, indent=2), encoding="utf-8",
@@ -258,41 +257,36 @@ def predict(args) -> None:
     organs = set(parse_csv(args.organs))
     datasets = parse_csv(args.datasets) if args.dataset == "both" else [args.dataset]
 
+    # Leakage guard: refuse to predict on a dataset that was in the
+    # checkpoint's training set. Mirrors the CLS predict path.
+    train_meta_path = Path(args.ckpt) / "_train_meta.json"
+    if train_meta_path.is_file():
+        with train_meta_path.open(encoding="utf-8") as f:
+            train_datasets = set(json.load(f).get("datasets") or [])
+        if train_datasets:
+            overlap = train_datasets & set(datasets)
+            if overlap:
+                raise SystemExit(
+                    f"refusing to predict: dataset(s) {sorted(overlap)} "
+                    f"were in the QA checkpoint's training set "
+                    f"({sorted(train_datasets)})."
+                )
+    else:
+        print(f"[warn] {train_meta_path} not found — leakage guard "
+              f"disabled. Retrain with the current train_bert.py to enable.")
+
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
 
-    predict_split = getattr(args, "split", None) or "all"
     cases = load_cases(
         datasets=datasets,
-        split=predict_split,
         root=Path(args.data_root),
         organs=organs,
     )
     counts = per_dataset_counts(cases)
     pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
     print(f"Predicting on {len(cases)} cases ({pretty})  "
-          f"organs={sorted(organs)}  split={predict_split}")
-
-    # Leakage guard: refuse to silently score the QA encoder on cases
-    # it was trained on. The sidecar _train_meta.json carries
-    # train_case_ids since the split-aware refactor; older checkpoints
-    # predate it and skip the check (with a warning).
-    train_meta_path = Path(args.ckpt) / "_train_meta.json"
-    if train_meta_path.is_file():
-        with train_meta_path.open(encoding="utf-8") as f:
-            train_ids = set(json.load(f).get("train_case_ids") or [])
-        overlap = [c["id"] for c in cases if c["id"] in train_ids]
-        if overlap:
-            sample = ", ".join(overlap[:5])
-            raise SystemExit(
-                f"refusing to predict: {len(overlap)} of {len(cases)} test "
-                f"cases overlap with the QA checkpoint's training set "
-                f"(sample: {sample}). Check splits.json — train and test "
-                f"must be disjoint."
-            )
-    else:
-        print(f"[warn] {train_meta_path} not found — leakage guard "
-              f"disabled. Retrain with the current train_bert.py to enable.")
+          f"organs={sorted(organs)}")
 
     for case in tqdm(cases, desc="predict"):
         report = Path(case["report_path"]).read_text(encoding="utf-8")

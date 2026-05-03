@@ -85,18 +85,11 @@ The atomic `correctness_table.parquet` is what the side-by-side comparison consu
 
 ## Filtering tricks
 
-- **Just the test set** (the default for the convenience wrappers; load-bearing when BERT is involved): the wrappers under `scripts/baselines/eval_*_vs_*.py` resolve `splits.json` for you and pass `--cases @cases_test.txt`. To do it by hand for a direct `non_nested` call:
+The cross-corpus baseline scores **every gold case** under the configured datasets — there's no train/test split inside a corpus. To restrict scope, pass `--organs` or an explicit case-id allowlist:
 
-  ```python
-  from pathlib import Path
-  from scripts.baselines._split_helpers import resolve_case_allowlist, write_allowlist_file
-  ids = resolve_case_allowlist(Path("dummy"), "cmuh", "test")
-  write_allowlist_file(ids, Path("/tmp/test_ids.txt"))
-  ```
-
-  Then `python -m scripts.eval.cli non_nested ... --cases @/tmp/test_ids.txt`.
 - **One organ**: `--organs breast` or `--organs 1`.
 - **A specific case set**: `--cases tcga1_17 tcga1_22 cmuh3_5`.
+- **From a file**: `--cases @/tmp/case_ids.txt` (one id per line).
 
 ## What to read first
 

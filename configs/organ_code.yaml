@@ -10,7 +10,7 @@
 #
 # The cross-corpus train-CMUH/test-TCGA baseline operates on the 5 organs
 # present in BOTH datasets (= TCGA's full set, since TCGA's organs are a
-# subset of CMUH's): breast, colorectal, thyroid, stomach, liver.
+# subset of CMUH's): breast, colorectal, esophagus, stomach, liver.
 organ_code:
   tcga: 
     1: "breast"

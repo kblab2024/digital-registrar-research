@@ -10,28 +10,20 @@ three outputs land under the canonical prediction tree::
     {folder}/results/predictions/{dataset}/clinicalbert/merged/{organ_n}/<case_id>.json
 
 Defaults are aligned to the cross-corpus baseline contract: BERT is
-trained on CMUH (only) and predicted on the **full** TCGA corpus
-(``--split all``), since TCGA is held out from training. The leakage
-guard in ``clinicalbert_*.predict`` will refuse to run if any predict
-case overlaps the checkpoint's ``train_case_ids`` — so if you actually
-do want to predict on CMUH (intra-corpus ablation), pass
-``--split test`` so the guard passes against CMUH's test fold.
+trained on CMUH (only) and predicted on the full TCGA corpus, since
+TCGA is held out from training. The leakage guard in
+``clinicalbert_*.predict`` refuses to run if any of the predict
+datasets is in the checkpoint's training-set metadata — so the only
+supported flow is "predict on a corpus disjoint from the training
+corpus."
 
 Usage
 -----
-    # Default: predict on TCGA, full corpus (held out from CMUH training).
+    # Default: predict on TCGA (held out from CMUH training).
     python scripts/baselines/run_bert.py \\
         [--ckpt-cls ckpts/clinicalbert_cls.pt] \\
         [--ckpt-qa  ckpts/clinicalbert_qa] \\
         [--heads cls qa merged]
-
-    # Intra-corpus ablation (BERT trained on CMUH, predicted on CMUH test).
-    python scripts/baselines/run_bert.py \\
-        --datasets cmuh --split test
-
-    # Both datasets (CMUH test + full TCGA).
-    python scripts/baselines/run_bert.py \\
-        --datasets cmuh tcga --split test
 
 Output side files (under each head dir, e.g. ``clinicalbert/cls/``):
     _summary.json   per-head totals
@@ -167,7 +159,6 @@ def run_cls(
         dataset=args.dataset,
         datasets=args.dataset,
         data_root=str(args.experiment_root),
-        split=getattr(args, "split", "all"),
     )
     t0 = time.perf_counter()
     clinicalbert_cls.predict(predict_args)
@@ -202,7 +193,6 @@ def run_qa(
         dataset=args.dataset,
         datasets=args.dataset,
         data_root=str(args.experiment_root),
-        split=getattr(args, "split", "all"),
     )
     t0 = time.perf_counter()
     clinicalbert_qa.predict(predict_args)
@@ -276,14 +266,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--datasets", nargs="+", default=list(DEFAULT_PREDICT_DATASETS),
                     choices=DATASETS,
                     help="Dataset name(s) to predict on (default: tcga — held "
-                         "out from CMUH-only training). Pass 'cmuh' for intra-"
-                         "corpus ablation; the leakage guard will require "
-                         "--split test in that case.")
-    ap.add_argument("--split", default="all", choices=("train", "test", "all"),
-                    help="Which split to predict on (default: all, since the "
-                         "default predict corpus is held out from training). "
-                         "Use --split test for intra-corpus prediction so the "
-                         "leakage guard passes.")
+                         "out from CMUH-only training). The leakage guard "
+                         "refuses to predict on a dataset that was in the "
+                         "checkpoint's training set.")
     ap.add_argument("--heads", nargs="+", default=list(DEFAULT_HEADS),
                     choices=("cls", "qa", "merged"),
                     help="Which heads to run. 'merged' requires both cls and "

@@ -3,7 +3,7 @@
 Loads `configs/organ_code.yaml` once at import. The two datasets number
 their organs differently and that file is the only place that truth lives:
 
-    TCGA (5 organs):  1=breast, 2=colorectal, 3=thyroid, 4=stomach, 5=liver
+    TCGA (5 organs):  1=breast, 2=colorectal, 3=esophagus, 4=stomach, 5=liver
     CMUH (10 organs): 1=pancreas, 2=breast, 3=cervix, 4=colorectal,
                       5=esophagus, 6=liver, 7=lung, 8=prostate, 9=stomach,
                       10=thyroid
@@ -108,7 +108,7 @@ def parse_case_id(case_id: str) -> tuple[str, int, int]:
 
     Examples:
         parse_case_id('cmuh1_42')   -> ('cmuh', 1, 42)   # CMUH 1 = pancreas
-        parse_case_id('tcga3_99')   -> ('tcga', 3, 99)   # TCGA 3 = thyroid
+        parse_case_id('tcga3_99')   -> ('tcga', 3, 99)   # TCGA 3 = esophagus
         parse_case_id('tcga6_1')    -> ValueError         # TCGA has no organ 6
 
     Raises ValueError if the id is malformed, the dataset is unknown, or

@@ -6,12 +6,20 @@ LM backend from local Ollama gpt-oss:20b to openai/gpt-4-turbo. This
 isolates the contribution of model capacity from pipeline design: the
 signatures, prompts, and post-processing are all held constant.
 
+Cases are discovered the same way as the BERT baselines: walk
+``<folder>/data/<dataset>/annotations/gold/`` via
+``benchmarks.baselines._data.load_cases``. The cross-corpus contract
+is "predict on TCGA, full corpus" — TCGA is held out from any model
+that's trained on CMUH, so there is no in-corpus split to honor.
+
 Requires:
     pip install dspy-ai openai
     set OPENAI_API_KEY=sk-...
 
 Usage:
-    python baselines/gpt4_dspy.py --split test --out workspace/results/benchmarks/gpt4_dspy
+    python -m digital_registrar_research.benchmarks.baselines.gpt4 \\
+        --folder workspace --datasets tcga \\
+        --out workspace/results/benchmarks/gpt4_dspy
 """
 from __future__ import annotations
 
@@ -24,11 +32,14 @@ from pathlib import Path
 
 import dspy
 
-from ...paths import BENCHMARKS_RESULTS, SPLITS_JSON
+from .. import organs as _organs
+from ...paths import BENCHMARKS_RESULTS
 from ...pipeline import CancerPipeline
+from ._data import load_cases
 
 DEFAULT_MODEL = "openai/gpt-4-turbo"  # swap to "openai/gpt-4o" if preferred
-SPLITS_PATH = SPLITS_JSON
+DEFAULT_DATASETS = ("tcga",)
+DEFAULT_ORGANS = list(_organs.common_organs("cmuh", "tcga"))
 
 
 def setup_gpt4(model_id: str = DEFAULT_MODEL) -> CancerPipeline:
@@ -46,12 +57,12 @@ def setup_gpt4(model_id: str = DEFAULT_MODEL) -> CancerPipeline:
     return CancerPipeline()
 
 
-def run_on_split(split_name: str, out_dir: Path, limit: int | None = None,
-                 model_id: str = DEFAULT_MODEL) -> None:
+def run_on_dataset(folder: Path, datasets: list[str], out_dir: Path,
+                   limit: int | None = None,
+                   model_id: str = DEFAULT_MODEL,
+                   organs: set[str] | None = None) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    with SPLITS_PATH.open(encoding="utf-8") as f:
-        split = json.load(f)
-    cases = split[split_name]
+    cases = load_cases(datasets=datasets, root=folder, organs=organs)
     if limit is not None:
         cases = cases[:limit]
 
@@ -81,17 +92,22 @@ def run_on_split(split_name: str, out_dir: Path, limit: int | None = None,
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--split", default="test", choices=["train", "test"])
+    ap.add_argument("--folder", default="workspace", type=Path,
+                    help="Experiment root containing data/<dataset>/ subtrees.")
+    ap.add_argument("--datasets", nargs="+", default=list(DEFAULT_DATASETS),
+                    help="Dataset name(s) to predict on (default: tcga).")
+    ap.add_argument("--organs", nargs="*", default=DEFAULT_ORGANS,
+                    help="Cancer-category names to keep.")
     ap.add_argument("--out", default=str(BENCHMARKS_RESULTS / "gpt4_dspy"),
-                    help="Output directory (default: %(default)s). "
-                         "If a relative path is passed, it is resolved "
-                         "relative to this file's directory.")
+                    help="Output directory (default: %(default)s).")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--model", default=DEFAULT_MODEL)
     args = ap.parse_args()
 
-    out_dir = (Path(__file__).parent / args.out).resolve()
-    run_on_split(args.split, out_dir, args.limit, args.model)
+    out_dir = Path(args.out).resolve()
+    organs = set(args.organs) if args.organs else None
+    run_on_dataset(args.folder.resolve(), args.datasets, out_dir,
+                   args.limit, args.model, organs)
 
 
 if __name__ == "__main__":

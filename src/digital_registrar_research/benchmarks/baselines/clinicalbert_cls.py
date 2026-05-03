@@ -12,10 +12,13 @@ structured outputs. We therefore reduce every categorical field to a
 classification task over the `[CLS]` pooled embedding. Nullable fields
 use an extra "null" class so the model can say "absent / not mentioned".
 
-Training across datasets and organs is pooled because the annotated pool
-is modest; per-dataset or per-organ fine-tuning would severely undertrain
-a 110M-parameter encoder. Evaluation stays per-dataset so per-corpus
-accuracy stays visible.
+Training across organs is pooled because the annotated pool is modest;
+per-organ fine-tuning would severely undertrain a 110M-parameter encoder.
+The cross-corpus contract is **train on full CMUH, predict on full TCGA**:
+disjointness is guaranteed by the dataset boundary, enforced at predict
+time by a check that the predict datasets do not overlap the checkpoint's
+training datasets. Evaluation stays per-dataset so per-corpus accuracy
+stays visible.
 
 Scope covered
 -------------
@@ -31,13 +34,13 @@ architectural-scope argument):
 - Free-text fields (description, station_name, etc.).
 
 Usage:
-    # Pooled train across CMUH + TCGA, default 5-organ scope, dummy data:
+    # Default cross-corpus train (CMUH only), 5-organ scope, dummy data:
     python -m digital_registrar_research.benchmarks.baselines.clinicalbert_cls \
         --phase train --data-root dummy
 
-    # Predict on both datasets, fanning out per-dataset output subdirs:
+    # Predict on TCGA (held out from CMUH training):
     python -m digital_registrar_research.benchmarks.baselines.clinicalbert_cls \
-        --phase predict --data-root dummy --dataset both
+        --phase predict --data-root dummy --dataset tcga
 """
 from __future__ import annotations
 
@@ -168,7 +171,6 @@ def train(args) -> None:
 
     cases = load_cases(
         datasets=datasets,
-        split="train",
         root=Path(args.data_root),
         organs=organs,
         included_only=args.included_only,
@@ -205,7 +207,6 @@ def train(args) -> None:
 
     ckpt_path = Path(args.ckpt)
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
-    train_case_ids = sorted(c["id"] for c in cases)
     torch.save({"state": model.state_dict(),
                 "field_to_idx": field_to_idx,
                 "card": card,
@@ -213,12 +214,7 @@ def train(args) -> None:
                 "organs": sorted(organs),
                 "datasets": datasets,
                 "n_train_cases": len(cases),
-                "per_dataset_counts": counts,
-                # Embed the exact case ids the encoder saw at training
-                # time. The eval pipeline reads this back so it can guard
-                # against in-sample scoring (see scripts/baselines/
-                # _split_helpers.py + _eval_pipeline.py).
-                "train_case_ids": train_case_ids}, ckpt_path)
+                "per_dataset_counts": counts}, ckpt_path)
     print(f"Saved checkpoint to {ckpt_path}")
 
 
@@ -239,39 +235,35 @@ def predict(args) -> None:
     else:
         datasets = [args.dataset]
 
+    # Leakage guard: refuse to predict on a dataset that was in the
+    # checkpoint's training set. The cross-corpus baseline relies on
+    # train and predict corpora being disjoint (CMUH-train, TCGA-test).
+    train_datasets = set(ckpt.get("datasets") or [])
+    if not train_datasets:
+        print("[warn] checkpoint lacks 'datasets' metadata — leakage "
+              "guard disabled. Retrain with the current train_bert.py.")
+    else:
+        overlap = train_datasets & set(datasets)
+        if overlap:
+            raise SystemExit(
+                f"refusing to predict: dataset(s) {sorted(overlap)} were "
+                f"in the checkpoint's training set "
+                f"({sorted(train_datasets)}). Cross-corpus baseline "
+                f"predicts on datasets disjoint from training."
+            )
+
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
 
-    predict_split = getattr(args, "split", None) or "all"
     cases = load_cases(
         datasets=datasets,
-        split=predict_split,
         root=Path(args.data_root),
         organs=organs,
     )
     counts = per_dataset_counts(cases)
     pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
     print(f"Predicting on {len(cases)} cases ({pretty})  "
-          f"organs={sorted(organs)}  split={predict_split}")
-
-    # Leakage guard: refuse to silently score the encoder on cases it
-    # was trained on. The checkpoint carries train_case_ids since the
-    # split-aware refactor; older checkpoints predate it and skip the
-    # check (with a warning).
-    train_ids = set(ckpt.get("train_case_ids") or [])
-    if not train_ids:
-        print("[warn] checkpoint lacks 'train_case_ids' — leakage guard "
-              "disabled. Retrain with the current train_bert.py to enable.")
-    else:
-        overlap = [c["id"] for c in cases if c["id"] in train_ids]
-        if overlap:
-            sample = ", ".join(overlap[:5])
-            raise SystemExit(
-                f"refusing to predict: {len(overlap)} of {len(cases)} test "
-                f"cases overlap with the checkpoint's training set "
-                f"(sample: {sample}). Check splits.json — train and test "
-                f"must be disjoint."
-            )
+          f"organs={sorted(organs)}")
 
     for case in tqdm(cases, desc="predict"):
         report = Path(case["report_path"]).read_text(encoding="utf-8")

@@ -327,8 +327,9 @@ the suggestions doc §1.3 for the recipe.
 
 Before kicking off a real grid:
 
-1. Lock the test split (verify the hash of the packaged
-   [`benchmarks/data/splits.json`](../src/digital_registrar_research/benchmarks/data/splits.json)).
+1. Pin the gold-annotation set: record the SHA-256 of the relevant
+   `<folder>/data/<dataset>/annotations/gold/` tree before kicking off
+   a grid, so a later run on the same fixture is comparable.
 2. Pre-register endpoints in
    [`configs/eval_endpoints.yaml`](../configs/eval_endpoints.yaml) —
    primary endpoint = per-field macro accuracy on FAIR_SCOPE; secondary

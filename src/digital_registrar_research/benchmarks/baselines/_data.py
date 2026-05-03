@@ -1,17 +1,15 @@
-"""Shared dataset loader for the ClinicalBERT baselines.
+"""Shared dataset loader for the ClinicalBERT and gpt4 baselines.
 
-Resolves train/test cases from either layout the project uses:
+Cases are discovered by walking the gold-annotation tree under
+``<root>/data/<dataset>/annotations/gold/<organ_n>/*.json``. The matching
+report path is derived by convention as
+``<root>/data/<dataset>/reports/<organ_n>/<case_id>.txt``.
 
-- Dummy fixture (id-only splits): ``<root>/data/<dataset>/splits.json``
-  containing ``{"train": [bare_id, ...], "test": [...]}``. Report and
-  gold annotation paths are derived by convention from the dataset and
-  the digit prefix in the id (``cmuh3_17`` → organ folder ``3``).
-
-- Production data (full case dicts): the packaged
-  ``benchmarks/data/splits.json`` carries Mac-absolute paths for the
-  TCGA gold set; we remap them onto the local
-  ``data/tcga_{dataset,annotation}_*`` folders via ``RAW_REPORTS`` /
-  ``GOLD_ANNOTATIONS`` from ``paths.py``.
+There are no train/test splits within a corpus: the cross-corpus baseline
+uses every case of CMUH for training and every case of TCGA for prediction.
+Disjointness is guaranteed by the dataset boundary (CMUH and TCGA are
+disjoint corpora) and enforced at predict time by a dataset-disjointness
+check on the checkpoint metadata.
 
 Returns a uniform list of case dicts:
     {id, dataset, organ_n, cancer_category, report_path, annotation_path}
@@ -22,7 +20,7 @@ import json
 import re
 from pathlib import Path
 
-from ...paths import GOLD_ANNOTATIONS, RAW_REPORTS, SPLITS_JSON
+_CASE_ID_RE = re.compile(r"^([a-z]+)(\d+)_(\d+)$")
 
 
 def _organ_n(case_id: str, dataset: str) -> str:
@@ -34,120 +32,54 @@ def _organ_n(case_id: str, dataset: str) -> str:
     return m.group(1)
 
 
-def _normalize_entry(entry) -> str:
-    """Coerce a splits.json entry to a bare case-id string.
+def _walk_dataset(dataset: str, root: Path) -> list[dict]:
+    """Walk ``<root>/data/<dataset>/annotations/gold/`` and return case dicts."""
+    gold_root = root / "data" / dataset / "annotations" / "gold"
+    reports_root = root / "data" / dataset / "reports"
+    if not gold_root.is_dir():
+        print(f"[warn] no gold annotations under {gold_root}")
+        return []
 
-    splits.json comes in two historical formats:
-      - bare strings (gen_dummy_skeleton.py output): ``"cmuh1_42"``
-      - case dicts (legacy registrar-split output): ``{"id": "cmuh1_42", ...}``
-
-    Downstream code wants strings everywhere (path construction, regex parse,
-    dict ``id`` field). Normalize at the entry point.
-    """
-    if isinstance(entry, str):
-        return entry
-    if isinstance(entry, dict) and "id" in entry:
-        return entry["id"]
-    raise ValueError(f"unrecognized splits.json entry: {entry!r}")
-
-
-def _read_cancer_category(annotation_path: Path) -> str | None:
-    with annotation_path.open(encoding="utf-8") as f:
-        return json.load(f).get("cancer_category")
-
-
-def _resolve_dummy(root: Path, dataset: str, case_id: str) -> dict:
-    organ_n = _organ_n(case_id, dataset)
-    ann = root / "data" / dataset / "annotations" / "gold" / organ_n / f"{case_id}.json"
-    rep = root / "data" / dataset / "reports" / organ_n / f"{case_id}.txt"
-    return {
-        "id": case_id,
-        "dataset": dataset,
-        "organ_n": organ_n,
-        "cancer_category": _read_cancer_category(ann) if ann.exists() else None,
-        "report_path": str(rep),
-        "annotation_path": str(ann),
-    }
-
-
-def _resolve_production(case: dict, dataset: str) -> dict:
-    """Remap Mac-absolute paths from packaged splits onto local layout."""
-    case_id = case["id"]
-    report_src = Path(case["report_path"])
-    ann_src = Path(case["annotation_path"])
-    return {
-        "id": case_id,
-        "dataset": dataset,
-        "organ_n": _organ_n(case_id, dataset),
-        "cancer_category": case.get("cancer_category"),
-        "report_path": str(RAW_REPORTS / report_src.parent.name / report_src.name),
-        "annotation_path": str(GOLD_ANNOTATIONS / ann_src.parent.name / ann_src.name),
-    }
-
-
-def _split_entries(data: dict, split: str) -> list:
-    """Return the entries for ``split`` from a parsed splits.json.
-
-    Accepts ``train``, ``test``, or ``all`` (concat of train + test).
-    """
-    if split == "all":
-        return list(data.get("train") or []) + list(data.get("test") or [])
-    if split not in data:
-        raise KeyError(f"split={split!r} not found in splits.json")
-    return list(data[split])
-
-
-def _load_one_dataset(dataset: str, split: str, root: Path) -> list[dict]:
-    """Try dummy/canonical layout first, fall back to packaged TCGA splits.
-
-    ``split`` accepts ``train``, ``test``, or ``all`` — the last concatenates
-    both folds (used when the predict corpus is held-out from training).
-    """
-    dummy_splits = root / "data" / dataset / "splits.json"
-    if dummy_splits.exists():
-        with dummy_splits.open(encoding="utf-8") as f:
-            data = json.load(f)
-        entries = _split_entries(data, split)
-        if entries and isinstance(entries[0], dict):
-            print(
-                f"[warn] {dummy_splits} contains legacy dict entries; "
-                f"normalizing to ids. Re-run `registrar-split` after the "
-                f"format migration to silence this warning."
-            )
-        return [_resolve_dummy(root, dataset, _normalize_entry(e))
-                for e in entries]
-
-    if dataset == "tcga" and SPLITS_JSON.exists():
-        with SPLITS_JSON.open(encoding="utf-8") as f:
-            data = json.load(f)
-        return [_resolve_production(c, dataset)
-                for c in _split_entries(data, split)]
-
-    print(f"[warn] no splits.json for dataset={dataset!r} under {root}")
-    return []
+    cases: list[dict] = []
+    for ann_path in sorted(gold_root.rglob("*.json")):
+        organ_n = ann_path.parent.name
+        case_id = ann_path.stem
+        report_path = reports_root / organ_n / f"{case_id}.txt"
+        try:
+            with ann_path.open(encoding="utf-8") as f:
+                ann = json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"[warn] skipping malformed annotation {ann_path}: {e}")
+            continue
+        cases.append({
+            "id": case_id,
+            "dataset": dataset,
+            "organ_n": organ_n,
+            "cancer_category": ann.get("cancer_category"),
+            "report_path": str(report_path),
+            "annotation_path": str(ann_path),
+        })
+    return cases
 
 
 def load_cases(
     datasets: list[str],
-    split: str,
     root: Path,
     organs: set[str] | None = None,
     included_only: bool = False,
 ) -> list[dict]:
-    """Pool cases across `datasets` and filter by organ / excision-report.
+    """Pool gold-annotation cases across `datasets` and filter.
 
     Args:
         datasets: dataset names to include (e.g. ["cmuh", "tcga"]).
-        split: "train" or "test".
-        root: data root containing ``data/<dataset>/`` subtrees. Use the
-            repo root for production data (TCGA falls back to packaged
-            splits when no per-dataset splits.json exists).
+        root: experiment root containing ``data/<dataset>/`` subtrees
+            (use ``dummy`` for dev, ``workspace`` for production).
         organs: keep only cases whose cancer_category is in this set.
         included_only: drop cases whose cancer_excision_report is False.
     """
     out: list[dict] = []
     for ds in datasets:
-        out.extend(_load_one_dataset(ds, split, root))
+        out.extend(_walk_dataset(ds, root))
 
     if organs is not None:
         out = [c for c in out if c.get("cancer_category") in organs]

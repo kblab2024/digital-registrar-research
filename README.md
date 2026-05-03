@@ -59,7 +59,6 @@ registrar-pipeline   --input data/tcga_20251117/dataset/tcga1     # batch extrac
 registrar-annotate                                                # launches Streamlit UI
 registrar-benchmark                                               # aggregates baseline comparisons
 registrar-ablate                                                  # runs ablation grid
-registrar-split                                                   # regenerates train/test split
 registrar-schemas                                                 # regenerates JSON from Pydantic (use --check in CI)
 ```
 

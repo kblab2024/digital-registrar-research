@@ -15,7 +15,6 @@ with_preann/data/
 │   │   ├── nhc/{organ_n}/{case_id}.json
 │   │   ├── kpc/{organ_n}/{case_id}.json
 │   │   └── gold/{organ_n}/{case_id}.json            # consensus
-│   ├── splits.json
 │   └── dataset_manifest.yaml
 └── tcga/                                             # mirrors cmuh/
 
@@ -23,7 +22,6 @@ without_preann/data/
 ├── cmuh/                                             # independent subset (no preannotation/)
 │   ├── reports/{organ_n}/{case_id}.txt
 │   ├── annotations/{nhc,kpc,gold}/{organ_n}/{case_id}.json
-│   ├── splits.json
 │   └── dataset_manifest.yaml
 └── tcga/
 

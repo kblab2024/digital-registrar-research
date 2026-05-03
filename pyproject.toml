@@ -43,7 +43,6 @@ registrar-annotate-workspace = "digital_registrar_research.annotation.app_canoni
 registrar-annotate-dummy     = "digital_registrar_research.annotation.app_canonical:main_cli_dummy"
 registrar-benchmark = "digital_registrar_research.benchmarks.eval.run_all:main"
 registrar-ablate    = "digital_registrar_research.ablations.eval.run_ablations:main"
-registrar-split     = "digital_registrar_research.benchmarks.data.split:main"
 registrar-schemas   = "digital_registrar_research.schemas.generate:main"
 
 [project.urls]
