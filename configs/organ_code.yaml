@@ -15,7 +15,7 @@ organ_code:
   tcga: 
     1: "breast"
     2: "colorectal"
-    3: "thyroid"
+    3: "esophagus"
     4: "stomach"
     5: "liver"
   cmuh: 
