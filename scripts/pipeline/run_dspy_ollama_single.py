@@ -457,12 +457,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                          ". Each alias auto-loads "
                          "configs/dspy_ollama_{alias}.yaml (if present) for "
                          "decoding overrides.")
-    ap.add_argument("--folder", dest="experiment_root", required=True,
+    ap.add_argument("--folder", dest="experiment_root", required=False, default=None,
                     type=resolve_folder,
                     help="Experiment root containing data/ and results/. "
-                         "Shorthand 'dummy' or 'workspace' resolves against "
-                         "the repo root; absolute paths or other relative "
-                         "paths are accepted too.")
+                         "Shorthand 'dummy', 'workspace', or 'obfustrated' "
+                         "resolves against the repo root; absolute paths or other "
+                         "relative paths are accepted too. Required unless "
+                         "--obfustrated is set.")
+    ap.add_argument("--obfustrated", action="store_true",
+                    help="Shortcut for --folder obfustrated (= workspace_obfustrated/). "
+                         "Use to debug pipeline against synthetic PHI-free data; "
+                         "explicit --folder always wins.")
     ap.add_argument("--dataset", required=True, choices=DATASETS,
                     help="Dataset name under data/ (cmuh or tcga).")
     ap.add_argument("--run", default=None,
@@ -494,6 +499,16 @@ def run_with_args(
         print(f"error: unknown --model {args.model!r}. "
               f"Valid keys: {', '.join(model_list.keys())}", file=sys.stderr)
         return 2
+
+    # Resolve --obfustrated shortcut into args.experiment_root if --folder absent.
+    if args.experiment_root is None:
+        if getattr(args, "obfustrated", False):
+            args.experiment_root = resolve_folder("obfustrated")
+        else:
+            print("error: --folder is required (use 'dummy', 'workspace', "
+                  "'workspace_obfustrated', or an absolute path), or pass "
+                  "--obfustrated for the synthetic workspace.", file=sys.stderr)
+            return 2
 
     reports_root = args.experiment_root / "data" / args.dataset / "reports"
     if not reports_root.is_dir():

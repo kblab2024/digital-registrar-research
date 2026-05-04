@@ -55,6 +55,13 @@ workspace/
 # Live annotator workspace — real patient data, never pushed
 /workspace/
 
+# Obfustrated workspace — synthetic-from-real, schema-conformant copy for
+# debugging eval/ablation/inference paths without exposing PHI. Generated
+# on demand by `python scripts/obfuscate_workspace.py`. Many MB of synthetic
+# data; never commit. Note: NOT added to any Claude-ignore mechanism — Claude
+# needs read access for the debugging workflow this is built for.
+/workspace_obfustrated/
+
 # Reference test data — symlink staging tree built on demand by
 # `--folder reference` (see scripts/_config_loader._ensure_reference_staged).
 /reference/_staged/

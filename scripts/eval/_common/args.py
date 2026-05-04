@@ -23,16 +23,30 @@ KNOWN_ANNOTATORS: tuple[str, ...] = (
 
 
 def add_common_args(parser: argparse.ArgumentParser, *, subcommand: str) -> None:
-    """Add ``--root``, ``--dataset``, ``--organs``, ``--cases``, ``--out``,
+    """Add ``--root``, ``--obfustrated``, ``--dataset``, ``--organs``, ``--cases``, ``--out``,
     ``--seed``, ``--alpha``, ``--n-boot``, ``--n-jobs``, ``-v``.
 
     Every subcommand needs all of these. ``subcommand`` is the name of
     the calling subcommand (e.g. ``"non_nested"``); it is used to build
     the default ``--out`` directory ``workspace/results/eval/<subcommand>``.
+
+    ``--obfustrated`` is an additive shortcut: when set without an explicit
+    ``--root``, defaults ``--root`` to ``workspace_obfustrated`` and ``--out``
+    to ``workspace_obfustrated/results/eval/<subcommand>``. Existing
+    ``--root dummy`` / ``--root workspace`` invocations are unaffected.
     """
     parser.add_argument(
-        "--root", required=True,
-        help="Root tree to read from. 'dummy', 'workspace', or an absolute path.",
+        "--root", required=False, default=None,
+        help="Root tree to read from. 'dummy', 'workspace', "
+             "'workspace_obfustrated', or an absolute path. "
+             "Required unless --obfustrated is set.",
+    )
+    parser.add_argument(
+        "--obfustrated", action="store_true",
+        help="Shortcut: use the obfuscator-produced synthetic workspace at "
+             "workspace_obfustrated/. Equivalent to --root workspace_obfustrated "
+             "with --out workspace_obfustrated/results/eval/<subcommand>. "
+             "Explicit --root/--out always wins.",
     )
     parser.add_argument(
         "--dataset", required=True, choices=("cmuh", "tcga"),
@@ -48,11 +62,13 @@ def add_common_args(parser: argparse.ArgumentParser, *, subcommand: str) -> None
         help="Optional case-id allowlist. Pass either inline IDs or @path/to/list.txt.",
     )
     parser.add_argument(
-        "--out", type=Path,
-        default=Path("workspace") / "results" / "eval" / subcommand,
-        help="Output directory (default: %(default)s). "
+        "--out", type=Path, default=None,
+        help="Output directory. Default depends on --obfustrated: "
+             "workspace/results/eval/<subcommand> normally, or "
+             "workspace_obfustrated/results/eval/<subcommand> with --obfustrated. "
              "A manifest.json will be stamped here.",
     )
+    parser.set_defaults(_subcommand=subcommand)
     parser.add_argument(
         "--seed", type=int, default=0,
         help="RNG seed for bootstrap and resampling (default: %(default)s).",
@@ -166,6 +182,30 @@ def require_model(args: argparse.Namespace) -> None:
         )
 
 
+def apply_obfustrated_defaults(args: argparse.Namespace) -> None:
+    """Resolve --root/--out from --obfustrated when explicit values weren't given.
+
+    Call once right after argparse `parse_args()`. Three options coexist:
+      - explicit --root/--out (any value)            → unchanged
+      - --obfustrated set (and --root not given)     → root = workspace_obfustrated
+                                                       out  = workspace_obfustrated/results/eval/<sub>
+      - neither                                       → root must already be set;
+                                                        out defaults to workspace/results/eval/<sub>
+    """
+    subcommand = getattr(args, "_subcommand", "subcommand")
+    if args.root is None:
+        if args.obfustrated:
+            args.root = "workspace_obfustrated"
+        else:
+            raise SystemExit(
+                "--root is required (use 'dummy', 'workspace', "
+                "'workspace_obfustrated', or an absolute path), "
+                "or pass --obfustrated for the synthetic workspace.")
+    if args.out is None:
+        root_dir = Path("workspace_obfustrated") if args.obfustrated else Path("workspace")
+        args.out = root_dir / "results" / "eval" / subcommand
+
+
 __all__ = [
     "KNOWN_ANNOTATORS",
     "add_common_args",
@@ -175,4 +215,5 @@ __all__ = [
     "parse_organs",
     "parse_cases",
     "require_model",
+    "apply_obfustrated_defaults",
 ]

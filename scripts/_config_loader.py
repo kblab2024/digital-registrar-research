@@ -98,6 +98,11 @@ def resolve_folder(raw: str | Path) -> Path:
     "dummy" and "workspace" are plain relative paths — they resolve to
     ``<repo_root>/dummy`` and ``<repo_root>/workspace`` respectively.
 
+    "obfustrated" is a shortcut for ``<repo_root>/workspace_obfustrated`` —
+    the schema-conformant synthetic copy produced by the obfuscator
+    (``scripts/obfuscate_workspace.py`` / ``obfuscate-workspace`` CLI). Use
+    this when debugging eval/ablation/inference paths without touching PHI.
+
     "reference" is a virtual experiment root: it resolves to
     ``<repo_root>/reference/_staged``, a symlink tree built on demand from
     the actual TCGA test data at ``reference/tcga_dataset_20251117/`` and
@@ -109,6 +114,8 @@ def resolve_folder(raw: str | Path) -> Path:
     against the repo root (not the caller's cwd) for reproducibility."""
     if str(raw) == "reference":
         return _ensure_reference_staged()
+    if str(raw) == "obfustrated":
+        return (REPO_ROOT / "workspace_obfustrated").resolve()
     p = Path(raw)
     if not p.is_absolute():
         p = REPO_ROOT / p

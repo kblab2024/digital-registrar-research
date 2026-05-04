@@ -123,12 +123,21 @@ def add_canonical_args(ap: argparse.ArgumentParser, *,
     """Inject the standard ``--folder/--dataset/--model/--run/...`` flags
     onto an existing ArgumentParser. Keeps the surface identical across
     all 14 ablation runners and the pipeline runner.
+
+    ``--obfustrated`` is an additive shortcut: when set without an explicit
+    ``--folder``, defaults to ``workspace_obfustrated/`` (the obfuscator-
+    produced synthetic copy). Existing ``--folder dummy`` / ``--folder workspace``
+    invocations are unaffected.
     """
-    ap.add_argument("--folder", dest="experiment_root", required=True,
+    ap.add_argument("--folder", dest="experiment_root", required=False, default=None,
                     type=resolve_folder,
                     help="Experiment root containing data/ and results/. "
-                         "Shorthand 'dummy' or 'workspace' resolves against "
-                         "the repo root.")
+                         "Shorthand 'dummy', 'workspace', or 'obfustrated' "
+                         "resolves against the repo root. Required unless "
+                         "--obfustrated is set.")
+    ap.add_argument("--obfustrated", action="store_true",
+                    help="Shortcut for --folder obfustrated (= workspace_obfustrated/). "
+                         "Use when debugging without PHI; explicit --folder always wins.")
     ap.add_argument("--dataset", required=True, choices=DATASETS,
                     help="Dataset name under data/ (cmuh or tcga).")
     if require_model:
@@ -235,6 +244,25 @@ def pick_next_run(cell_dir: Path) -> str:
         f"{suffix_msg}; pass --run runNN explicitly.")
 
 
+def apply_obfustrated_default(args: argparse.Namespace) -> None:
+    """If ``--obfustrated`` was set without an explicit ``--folder``, resolve
+    ``args.experiment_root`` to ``workspace_obfustrated/``.
+
+    Idempotent. Call right after ``parse_args()``. Already invoked from
+    inside ``resolve_run_paths``; runners that don't go through
+    ``resolve_run_paths`` should call this explicitly.
+    """
+    if getattr(args, "experiment_root", None) is not None:
+        return
+    if getattr(args, "obfustrated", False):
+        args.experiment_root = resolve_folder("obfustrated")
+    else:
+        raise SystemExit(
+            "--folder is required (use 'dummy', 'workspace', "
+            "'workspace_obfustrated', or an absolute path), "
+            "or pass --obfustrated for the synthetic workspace.")
+
+
 def resolve_run_paths(args: argparse.Namespace, cell_id: str,
                       ) -> tuple[AblationPaths, list[tuple[str, Path]], str]:
     """Resolve ``(paths, organs, run_name)`` from CLI args.
@@ -243,6 +271,7 @@ def resolve_run_paths(args: argparse.Namespace, cell_id: str,
     the next free run slot (or honours ``--run``), and returns the
     discovered organ list.
     """
+    apply_obfustrated_default(args)
     if not getattr(args, "model", None):
         raise SystemExit("--model is required")
     slug = model_slug(args.model)
@@ -747,7 +776,7 @@ __all__ = [
     "DATASETS", "MAX_RUN_SLOTS", "UNIFIED_MODELS",
     "AblationPaths", "RunSummary",
     "model_slug", "ollama_tag", "default_api_base",
-    "add_canonical_args", "resolve_run_paths",
+    "add_canonical_args", "apply_obfustrated_default", "resolve_run_paths",
     "discover_organs", "discover_cases", "pick_next_run",
     "iterate_cases", "write_case_json",
     "finalize_run", "update_cell_manifest", "run_loop",

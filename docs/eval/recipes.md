@@ -21,6 +21,33 @@ python -m scripts.eval.cli non_nested \
     --out workspace/results/eval/non_nested/cmuh/gpt_oss_20b__r01_r02
 ```
 
+## Score one model on /workspace_obfustrated (PHI-free debugging)
+
+The obfuscator produces a schema-conformant synthetic copy of `workspace/`
+so eval logic can be exercised end-to-end without exposing patient data.
+
+```
+# 1. Generate the synthetic workspace (one-time per workspace state).
+python scripts/obfuscate_workspace.py --seed 42
+
+# 2. Run any eval subcommand against it via the --obfustrated shortcut.
+python -m scripts.eval.cli non_nested \
+    --obfustrated --dataset tcga \
+    --model gpt_oss_20b --annotator gold
+# Reads from workspace_obfustrated/, writes under workspace_obfustrated/results/eval/non_nested/.
+
+# Equivalent explicit form:
+python -m scripts.eval.cli non_nested \
+    --root workspace_obfustrated --dataset tcga \
+    --model gpt_oss_20b --annotator gold \
+    --out workspace_obfustrated/results/eval/non_nested/tcga/gpt_oss_20b
+```
+
+Eval signal is meaningful (annotations are deliberately consistent with
+report text up to per-field noise — see [obfuscation.md](../obfuscation.md)
+for the layered noise pipeline). Existing `--root dummy` / `--root workspace`
+recipes are unchanged.
+
 ## Single-run mode
 
 Multi-run is the default; for a single-run analysis just pass one ID:

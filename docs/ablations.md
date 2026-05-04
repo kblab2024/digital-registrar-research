@@ -14,7 +14,7 @@ so input data, output predictions, and model aliases share one directory
 convention with the rest of the toolkit.
 
 ```
-{folder}/                                      # 'dummy' | 'workspace' | 'reference' | abs path
+{folder}/                                      # 'dummy' | 'workspace' | 'workspace_obfustrated' | 'reference' | abs path
 ├── data/{dataset}/                            # 'cmuh' | 'tcga'
 │   ├── reports/{organ_n}/{case_id}.txt        # input
 │   └── annotations/gold/{organ_n}/{case_id}.json   # gold for grading
@@ -29,6 +29,11 @@ convention with the rest of the toolkit.
             ├── _dspy_trace.jsonl              # OPTIONAL — set --trace-dspy / -v
             └── {organ_n}/{case_id}.json       # one prediction per case
 ```
+
+All cell-runner wrappers also accept `--obfustrated` (additive shortcut)
+and `--folder obfustrated` to point at the schema-conformant synthetic
+workspace at `workspace_obfustrated/`. Useful for end-to-end debugging
+without exposing PHI; see [obfuscation.md](obfuscation.md).
 
 **`{organ_n}` is a dataset-specific numeric folder name**, NOT an
 alphabetical ordering. The mapping lives in
