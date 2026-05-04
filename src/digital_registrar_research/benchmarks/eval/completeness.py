@@ -23,9 +23,8 @@ carries Wilson 95% CI (``statsmodels.stats.proportion.proportion_confint
 from __future__ import annotations
 
 import logging
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
-import numpy as np
 import pandas as pd
 
 from .ci import wilson_ci

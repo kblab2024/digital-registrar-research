@@ -19,7 +19,6 @@ import dspy
 
 from .monolithic import (
     INPUT_FIELD_NAMES,
-    MONOLITHIC_DOCSTRING,
     get_monolithic_signature,
 )
 

@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from functools import cache
 
-from .builder import flatten_schema_for_prompt, load_organ_schema
 from ..benchmarks.eval.scope import IMPLEMENTED_ORGANS
+from .builder import flatten_schema_for_prompt, load_organ_schema
 
 
 @cache

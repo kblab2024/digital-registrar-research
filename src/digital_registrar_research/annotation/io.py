@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-
 # Sentinel used in session state to represent "intentional N/A".
 # Serialised values are always plain null — this string only lives in
 # Streamlit session state and is converted to None by _clean_value.

@@ -40,9 +40,6 @@ from digital_registrar_research.annotation.io import (
     save_annotation,
     strip_meta,
 )
-
-NOT_SET_LABEL = "— not set —"
-NA_LABEL = "— N/A —"
 from digital_registrar_research.annotation.parser import (
     CANCER_CATEGORIES,
     CANCER_TO_FILE,
@@ -51,6 +48,9 @@ from digital_registrar_research.annotation.parser import (
     parse_cancer_schema,
 )
 from digital_registrar_research.annotation.ui import pick_folder
+
+NOT_SET_LABEL = "— not set —"
+NA_LABEL = "— N/A —"
 
 st.set_page_config(page_title="Compare / Consensus", layout="wide")
 

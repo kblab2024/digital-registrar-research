@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from digital_registrar_research.benchmarks.eval.multi_primary import (
-    detect_multi_primary, n_tumors_estimate, subgroup_label,
+    detect_multi_primary,
+    n_tumors_estimate,
+    subgroup_label,
 )
 from digital_registrar_research.benchmarks.eval.semantic_neighbors import (
-    is_neighbor, neighbors_for_field,
+    is_neighbor,
+    neighbors_for_field,
 )
-
 
 # --- multi_primary -----------------------------------------------------------
 

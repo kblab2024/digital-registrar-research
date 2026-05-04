@@ -26,12 +26,12 @@ module is pure-data.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 import numpy as np
 
-from .ci import BootstrapResult, paired_bootstrap_diff, wilson_ci
+from .ci import wilson_ci
 from .metrics import normalize
 
 logger = logging.getLogger(__name__)

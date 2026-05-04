@@ -32,9 +32,9 @@ from pathlib import Path
 
 import dspy
 
-from .. import organs as _organs
 from ...paths import BENCHMARKS_RESULTS
 from ...pipeline import CancerPipeline
+from .. import organs as _organs
 from ._data import load_cases
 
 DEFAULT_MODEL = "openai/gpt-4-turbo"  # swap to "openai/gpt-4o" if preferred

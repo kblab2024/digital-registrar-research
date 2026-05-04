@@ -367,7 +367,7 @@ def multiple_comparisons_correction(
     df["reject_holm"] = False
     df["reject_bh"] = False
 
-    for (axis, tier), group in df.groupby(["axis", "tier"]):
+    for (_axis, tier), group in df.groupby(["axis", "tier"]):
         ps = group["mcnemar_p"].astype(float).tolist()
         if not any(p == p for p in ps):  # all NaN
             continue
@@ -514,7 +514,7 @@ def factorial_glmm(
     df = grid_df.copy()
     for ax_name in ("axis_A", "axis_B", "axis_C"):
         df[ax_name] = df["cell"].map(
-            lambda c: (levels.get(c) or {}).get(ax_name)
+            lambda c, ax_name=ax_name: (levels.get(c) or {}).get(ax_name)
         )
     df = df.dropna(subset=["axis_A", "axis_B", "axis_C"])
     if df.empty:
@@ -746,7 +746,7 @@ def cancer_category_mismatch_stats(grid_df: pd.DataFrame) -> pd.DataFrame:
         if n_cases == 0:
             continue
         flagged_cases = (
-            group.loc[group["cancer_category_mismatch"] == True, "case_id"]
+            group.loc[group["cancer_category_mismatch"], "case_id"]
             .nunique()
         )
         n_mismatch = int(flagged_cases)

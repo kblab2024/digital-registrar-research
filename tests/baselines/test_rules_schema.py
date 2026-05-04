@@ -21,7 +21,6 @@ from digital_registrar_research.benchmarks.eval.scope_organs import (
     ORGAN_SPAN,
 )
 
-
 # Synthetic fixtures sized to surface multiple field types per organ.
 ORGAN_FIXTURES: dict[str, list[str]] = {
     "breast": [

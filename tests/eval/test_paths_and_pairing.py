@@ -5,12 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from scripts.eval._common.paths import Paths, from_args, parse_run_id_to_path_segment
 from scripts.eval._common.pairing import discover_paired_cases
+from scripts.eval._common.paths import from_args, parse_run_id_to_path_segment
 from scripts.eval._common.stratify import (
-    all_organ_indices, organ_index, organ_name, parse_case_id,
+    all_organ_indices,
+    organ_index,
+    organ_name,
+    parse_case_id,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DUMMY = REPO_ROOT / "dummy"

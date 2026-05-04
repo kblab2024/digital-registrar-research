@@ -35,7 +35,6 @@ from ..eval.bert_scope import bert_scope_for_organ
 from ..eval.scope import IMPLEMENTED_ORGANS
 from ..eval.scope_organs import ORGAN_BOOL, ORGAN_CATEGORICAL, ORGAN_SPAN
 
-
 # ============================================================================
 # Organ classification + excision-vs-biopsy detection
 # ============================================================================

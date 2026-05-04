@@ -45,9 +45,10 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 # --- Make scripts/ importable so we can reuse the pipeline runner's helpers
 # without copy-paste. ``REPO_ROOT/scripts`` is the canonical home for
@@ -299,7 +300,7 @@ def resolve_run_paths(args: argparse.Namespace, cell_id: str,
         try:
             run_name = pick_next_run(paths.cell_dir)
         except RuntimeError as exc:
-            raise SystemExit(str(exc))
+            raise SystemExit(str(exc)) from exc
 
     paths.run_dir(run_name).mkdir(parents=True, exist_ok=True)
     return paths, organs, run_name

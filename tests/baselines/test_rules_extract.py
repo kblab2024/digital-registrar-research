@@ -17,7 +17,6 @@ from digital_registrar_research.benchmarks.baselines.rules import (
     extract_for_organ,
 )
 
-
 # --- Organ classification ----------------------------------------------------
 
 @pytest.mark.parametrize("text,expected", [

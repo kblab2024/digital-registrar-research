@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from scripts.eval._common.outcome import CaseLoad, classify_outcome
 
-
 GOLD_BREAST = {
     "cancer_excision_report": True,
     "cancer_category": "breast",

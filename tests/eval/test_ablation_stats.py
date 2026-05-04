@@ -42,7 +42,7 @@ def _make_grid() -> pd.DataFrame:
 
     # Target B (small drop): one case wrong on field1
     correctness_b = [1.0, 1.0, 1.0, 1.0, 0.0]
-    for case, c in zip(cases, correctness_b):
+    for case, c in zip(cases, correctness_b, strict=True):
         rows.append({"method": "dspy_monolithic_gpt-oss",
                      "case_id": case, "field": "pt_category",
                      "correct": c, "attempted": True})
@@ -52,7 +52,7 @@ def _make_grid() -> pd.DataFrame:
 
     # Target C (big drop): three cases wrong on field1
     correctness_c = [1.0, 0.0, 0.0, 0.0, 1.0]
-    for case, c in zip(cases, correctness_c):
+    for case, c in zip(cases, correctness_c, strict=True):
         rows.append({"method": "raw_json_gpt-oss",
                      "case_id": case, "field": "pt_category",
                      "correct": c, "attempted": True})

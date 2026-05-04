@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_RULE = REPO_ROOT / "scripts" / "baselines" / "run_rule.py"
 

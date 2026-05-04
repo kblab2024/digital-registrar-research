@@ -22,8 +22,8 @@ makes the ClinicalBERT / rules comparison honest.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Iterable
 
 import pandas as pd
 

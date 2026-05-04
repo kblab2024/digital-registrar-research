@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import sys
 
-
 _NEW_TOOLS = """\
 The 'benchmarks.eval.run_all' / 'registrar-benchmark' entry point has been
 retired. Use the canonical eval pipeline instead:
