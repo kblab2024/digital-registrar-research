@@ -28,6 +28,7 @@ import logging
 
 import dspy
 
+from ...benchmarks import organs as _organs
 from ...benchmarks.organs import organ_n_to_name
 from ...util.predictiondump import dump_prediction_plain
 from ..signatures.monolithic import (
@@ -38,6 +39,19 @@ from ..utils.organ_classifier import classify_organ_from_text
 from . import _base
 
 CELL_ID = "no_router"
+
+
+def _organ_from_index(dataset: str, organ_n: str | int) -> str | None:
+    """Map a numeric organ subdir name to the organ key used by the
+    per-organ signatures, using the dataset's organ_code.yaml mapping.
+
+    Returns None on miss (unknown organ_n for dataset). Used as the
+    folder-fallback path and re-exported for the few-shot demo loader.
+    """
+    try:
+        return _organs.organ_name(dataset, int(organ_n))
+    except (KeyError, ValueError):
+        return None
 
 
 class NoRouterPipeline(dspy.Module):

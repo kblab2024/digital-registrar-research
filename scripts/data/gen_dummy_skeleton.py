@@ -1,39 +1,49 @@
-"""Generate a synthetic dummy fixture covering all 10 organs.
+"""Generate a synthetic dummy fixture covering each dataset's real organ set.
 
 Produces a schema-valid tree under `--out` (default: ./dummy) for both
 CMUH (clean structured reports) and TCGA (chaotic, dictation-style
 reports), so the benchmark/eval pipeline can be exercised end-to-end
 without touching real data.
 
+Per-dataset organ scope is read from ``configs/organ_code.yaml`` — TCGA
+covers 5 organs (breast, colorectal, esophagus, stomach, liver), CMUH
+covers 10 (pancreas, breast, cervix, colorectal, esophagus, liver,
+lung, prostate, stomach, thyroid). Numeric organ folders mirror that
+yaml (so ``data/cmuh/.../1/`` is pancreas; ``data/tcga/.../1/`` is
+breast).
+
 Layout produced:
 
     {out}/data/{cmuh,tcga}/
-        reports/{organ}/{case_id}.txt
-        preannotation/gpt_oss_20b/{organ}/{case_id}.json
-        annotations/{nhc,kpc}_{with,without}_preann/{organ}/{case_id}.json
-        annotations/gold/{organ}/{case_id}.json
-        splits.json
+        reports/{organ_n}/{case_id}.txt
+        preannotation/gpt_oss_20b/{organ_n}/{case_id}.json
+        annotations/{nhc,kpc}_{with,without}_preann/{organ_n}/{case_id}.json
+        annotations/gold/{organ_n}/{case_id}.json
         dataset_manifest.yaml
     {out}/results/predictions/{dataset}/
-        llm/{model}/run{NN}/{organ}/{case_id}.json
+        llm/{model}/run{NN}/{organ_n}/{case_id}.json
         llm/{model}/run{NN}/_summary.json  _log.jsonl
         llm/{model}/_manifest.yaml
-        clinicalbert/{v1_baseline,v2_finetuned}/{organ}/{case_id}.json (+ _summary.json)
-        rule_based/{organ}/{case_id}.json  _summary.json
+        clinicalbert/{v1_baseline,v2_finetuned}/{organ_n}/{case_id}.json (+ _summary.json)
+        rule_based/{organ_n}/{case_id}.json  _summary.json
     {out}/configs/
         datasets/{cmuh,tcga}.yaml
         models/{...}.yaml
         annotators/annotators.yaml
     {out}/models/clinicalbert/{v1_baseline,v2_finetuned}/{config.yaml,checkpoint.pt.placeholder}
 
-Defaults match the production dummy: cmuh = 100 cases × 10 organs,
-tcga = 50 cases × 10 organs, 80% cancer / 20% non-cancer, 3 LLM runs.
+Defaults match the production dummy: cmuh = 100 cases per organ,
+tcga = 50 cases per organ, 80% cancer / 20% non-cancer, 3 LLM runs.
 
 Production run (full default):
-    python scripts/gen_dummy_skeleton.py --out dummy --clean
+    python scripts/data/gen_dummy_skeleton.py --out dummy --clean
+
+Cross-corpus common-5 only:
+    python scripts/data/gen_dummy_skeleton.py --out dummy --clean \\
+        --organs breast,colorectal,esophagus,stomach,liver
 
 Multi-run sweep (10 runs per LLM, like the real experiments):
-    python scripts/gen_dummy_skeleton.py --out dummy --clean --llm-runs 10
+    python scripts/data/gen_dummy_skeleton.py --out dummy --clean --llm-runs 10
 
 Per-dataset case counts:
     --cases-per-organ cmuh:100,tcga:50         # default
@@ -46,18 +56,22 @@ import hashlib
 import json
 import random
 import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Make the in-repo `src/` importable for `from digital_registrar_research...`.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from digital_registrar_research.benchmarks import organs as _organs  # noqa: E402
+
 # ---- Constants --------------------------------------------------------------
 
-DATASETS = ["cmuh", "tcga"]
-# Canonical 10-organ list, alphabetical — must match CASE_MODELS in
+DATASETS = list(_organs.all_datasets())
+# Union of all organ names across datasets — matches CASE_MODELS in
 # src/digital_registrar_research/schemas/pydantic/__init__.py.
-ALL_ORGANS = [
-    "breast", "cervix", "colorectal", "esophagus", "liver",
-    "lung", "pancreas", "prostate", "stomach", "thyroid",
-]
+ALL_ORGANS = list(_organs.union_organs())
 LLM_MODELS = ["gpt_oss_20b", "gemma4_30b", "qwen3_30b", "gemma4_e2b"]
 BERT_MODELS = ["v1_baseline", "v2_finetuned"]
 ANNOTATORS = ["nhc", "kpc"]
@@ -69,9 +83,21 @@ DEFAULT_LLM_RUNS = 3
 DEFAULT_CANCER_RATE = 0.8
 
 
-def organs_map_for(n_organs: int) -> dict[str, str]:
-    """Return {numeric_dir: organ_name} for the first n organs of ALL_ORGANS."""
-    return {str(i + 1): ALL_ORGANS[i] for i in range(n_organs)}
+def organs_map_for(dataset: str,
+                   restrict_to: set[str] | None = None) -> dict[str, str]:
+    """Return ``{organ_n_str: organ_name}`` for the dataset, per organ_code.yaml.
+
+    ``restrict_to`` optionally limits the result to a subset of organ
+    *names* (used by ``--organs``). Indices not present in the dataset
+    are silently dropped — restrictions to organs the dataset doesn't
+    cover (e.g. ``cervix`` for TCGA) yield a smaller map.
+    """
+    full = _organs.organs_for(dataset)  # {int: str}
+    items = [(str(n), name) for n, name in sorted(full.items())]
+    if restrict_to is not None:
+        wanted = {o.lower() for o in restrict_to}
+        items = [(n, name) for n, name in items if name.lower() in wanted]
+    return dict(items)
 
 
 def parse_cases_per_organ(spec: str, datasets: list[str]) -> dict[str, int]:
@@ -936,14 +962,17 @@ def build_dataset(root: Path, dataset: str, organs_map: dict[str, str],
     ds_root = root / "data" / dataset
     n_cancer_per_organ = round(cases_per_organ * cancer_rate)
     all_ids: list[str] = []
-    cancer_ids: list[str] = []
-    noncancer_ids: list[str] = []
+    n_cancer = 0
+    n_noncancer = 0
 
     for organ_n, organ in organs_map.items():
         for idx in range(1, cases_per_organ + 1):
             case_id = f"{dataset}{organ_n}_{idx}"
             all_ids.append(case_id)
-            (cancer_ids if idx <= n_cancer_per_organ else noncancer_ids).append(case_id)
+            if idx <= n_cancer_per_organ:
+                n_cancer += 1
+            else:
+                n_noncancer += 1
             gold = gold_for(dataset, organ_n, idx, organs_map, cases_per_organ, cancer_rate)
 
             # Raw report (style depends on dataset)
@@ -974,32 +1003,13 @@ def build_dataset(root: Path, dataset: str, organs_map: dict[str, str],
                         ann,
                     )
 
-    # splits.json — stratified by organ AND cancer/non-cancer
-    split_rng = random.Random(20251117)
-    by_bucket: dict[tuple[str, bool], list[str]] = {}
-    for cid in all_ids:
-        organ_n = cid.replace(dataset, "").split("_")[0]
-        is_cancer = cid in cancer_ids
-        by_bucket.setdefault((organ_n, is_cancer), []).append(cid)
-    train, test = [], []
-    for ids in by_bucket.values():
-        split_rng.shuffle(ids)
-        n_test = max(1, len(ids) // 3)
-        test.extend(ids[:n_test])
-        train.extend(ids[n_test:])
-    write_json(ds_root / "splits.json", {
-        "seed": 20251117,
-        "train": sorted(train),
-        "test": sorted(test),
-    })
-
     # dataset_manifest.yaml
     write_yaml(ds_root / "dataset_manifest.yaml", {
         "dataset": dataset,
         "created_at": now,
         "n_cases": len(all_ids),
-        "n_cancer_cases": len(cancer_ids),
-        "n_noncancer_cases": len(noncancer_ids),
+        "n_cancer_cases": n_cancer,
+        "n_noncancer_cases": n_noncancer,
         "cancer_rate": cancer_rate,
         "organs": [
             {"n": n, "name": organs_map[n], "n_cases": cases_per_organ}
@@ -1141,7 +1151,6 @@ def build_configs(root: Path, organs_per_dataset: dict[str, dict[str, str]],
             "reports_dir": f"data/{ds}/reports",
             "annotations_dir": f"data/{ds}/annotations",
             "preannotation_dir": f"data/{ds}/preannotation",
-            "splits_path": f"data/{ds}/splits.json",
             "manifest_path": f"data/{ds}/dataset_manifest.yaml",
             "organs": [{"n": n, "name": organs_map[n]} for n in organs_map],
         })
@@ -1193,8 +1202,13 @@ def build_model_dirs(root: Path) -> None:
 
 
 def write_skeleton_gitkeeps(root: Path) -> None:
-    """Drop .gitkeep at the root of dummy/data/<ds>/ and dummy/results/ so the
-    layout survives even when generated artifacts are wiped or gitignored.
+    """Drop .gitkeep at every directory under dummy/data/ and dummy/results/.
+
+    The dummy fixture's directory layout is the **committed backbone**:
+    even though generated content is gitignored, the empty layout itself
+    must survive `--clean` so a fresh checkout (or a regen on a different
+    box) reproduces the same tree. We touch a `.gitkeep` at every node
+    (recursively) so directory structure is always preserved by git.
 
     The dummy ``results/`` tree mirrors the production ``workspace/results/``
     architecture: ``predictions/``, ``eval/``, ``ablations/``, ``benchmarks/``.
@@ -1211,23 +1225,34 @@ def write_skeleton_gitkeeps(root: Path) -> None:
         if not sub_root.exists():
             sub_root.mkdir(parents=True)
         (sub_root / ".gitkeep").touch(exist_ok=True)
-        for child in sub_root.iterdir():
-            if child.is_dir():
-                (child / ".gitkeep").touch(exist_ok=True)
+        # Recurse: every directory under data/ and results/ gets a .gitkeep
+        # so the committed backbone is preserved even after a wipe.
+        for d in sub_root.rglob("*"):
+            if d.is_dir():
+                (d / ".gitkeep").touch(exist_ok=True)
 
 
 def write_readme(root: Path) -> None:
     (root / "README.md").write_text("""# Dummy fixture (synthetic, regenerable)
 
-This tree is produced by `scripts/gen_dummy_skeleton.py`. The toolkit is
+This tree is produced by `scripts/data/gen_dummy_skeleton.py`. The toolkit is
 checked in; the output is not. Regenerate any time:
 
 ```
-python scripts/gen_dummy_skeleton.py --out dummy --clean
+python scripts/data/gen_dummy_skeleton.py --out dummy --clean
 ```
 
-Defaults: cmuh = 100 × 10 organs, tcga = 50 × 10 organs, 80% cancer / 20% non-cancer, 3 LLM runs.
+Per-dataset organ scope is read from `configs/organ_code.yaml`:
+
+- **CMUH**: 10 organs (1=pancreas, 2=breast, 3=cervix, 4=colorectal,
+  5=esophagus, 6=liver, 7=lung, 8=prostate, 9=stomach, 10=thyroid).
+- **TCGA**: 5 organs (1=breast, 2=colorectal, 3=esophagus, 4=stomach, 5=liver).
+
+Defaults: cmuh = 100 cases per organ, tcga = 50 cases per organ,
+80% cancer / 20% non-cancer, 3 LLM runs.
 For a 10-run sweep matching the real experiments: `--llm-runs 10`.
+To restrict to a subset: `--organs breast,colorectal,esophagus,stomach,liver`
+(the cross-corpus common-5 set).
 
 CMUH reports are clean key-value text. TCGA reports are chaotic
 (dictation-style, abbreviations, shuffled sections) so the two datasets
@@ -1246,8 +1271,10 @@ def main() -> None:
                          "selected dataset before generating")
     ap.add_argument("--datasets", type=str, default=",".join(DATASETS),
                     help=f"CSV of datasets to (re)generate. Default: {','.join(DATASETS)}")
-    ap.add_argument("--organs", type=int, default=10,
-                    help="Number of organs from the canonical 10. Default: 10")
+    ap.add_argument("--organs", type=str, default=None,
+                    help="CSV of organ NAMES to include (e.g. 'breast,colorectal'). "
+                         "Default: every organ defined for each dataset in "
+                         "configs/organ_code.yaml (TCGA: 5 organs, CMUH: 10).")
     ap.add_argument("--cases-per-organ", type=str, default=DEFAULT_CASES_PER_ORGAN,
                     help=f"Either a bare int (applies to all) or 'ds:N,ds:N' CSV. "
                          f"Default: {DEFAULT_CASES_PER_ORGAN}")
@@ -1263,8 +1290,6 @@ def main() -> None:
     unknown = [d for d in selected if d not in DATASETS]
     if unknown:
         ap.error(f"unknown dataset(s): {unknown}; known: {DATASETS}")
-    if not 1 <= args.organs <= len(ALL_ORGANS):
-        ap.error(f"--organs must be in [1, {len(ALL_ORGANS)}]")
     if not 0.0 <= args.cancer_rate <= 1.0:
         ap.error("--cancer-rate must be in [0.0, 1.0]")
     if args.llm_runs < 1:
@@ -1273,6 +1298,16 @@ def main() -> None:
         cases_by_ds = parse_cases_per_organ(args.cases_per_organ, selected)
     except ValueError as e:
         ap.error(str(e))
+
+    organ_filter: set[str] | None = None
+    if args.organs:
+        organ_filter = {o.strip() for o in args.organs.split(",") if o.strip()}
+        unknown_organs = organ_filter - set(ALL_ORGANS)
+        if unknown_organs:
+            ap.error(
+                f"--organs unknown organ(s): {sorted(unknown_organs)}; "
+                f"valid: {ALL_ORGANS}"
+            )
 
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -1283,16 +1318,26 @@ def main() -> None:
                     shutil.rmtree(sub)
 
     rng = random.Random(args.seed)
-    organs_map = organs_map_for(args.organs)
+    organs_per_dataset: dict[str, dict[str, str]] = {
+        ds: organs_map_for(ds, restrict_to=organ_filter) for ds in selected
+    }
+    empty = [ds for ds, m in organs_per_dataset.items() if not m]
+    if empty:
+        ap.error(
+            f"--organs filter left dataset(s) {empty} with no organs; check "
+            f"that the requested organs exist for those datasets in "
+            f"configs/organ_code.yaml."
+        )
 
     for ds in selected:
+        organs_map = organs_per_dataset[ds]
         n = cases_by_ds[ds]
         build_dataset(out, ds, organs_map, n, args.cancer_rate, rng)
         build_llm_predictions(out, ds, organs_map, n, args.cancer_rate, args.llm_runs, rng)
         build_bert_predictions(out, ds, organs_map, n, args.cancer_rate, rng)
         build_rule_based(out, ds, organs_map, n, args.cancer_rate, rng)
 
-    build_configs(out, {ds: organs_map for ds in selected}, args.llm_runs)
+    build_configs(out, organs_per_dataset, args.llm_runs)
     build_model_dirs(out)
     write_skeleton_gitkeeps(out)
     write_readme(out)
@@ -1303,7 +1348,8 @@ def main() -> None:
             counts[p.suffix or "(no-ext)"] = counts.get(p.suffix or "(no-ext)", 0) + 1
     print(f"Generated fixture at: {out}")
     for ds in selected:
-        print(f"  {ds}: {cases_by_ds[ds]} cases × {args.organs} organs "
+        n_organs = len(organs_per_dataset[ds])
+        print(f"  {ds}: {cases_by_ds[ds]} cases × {n_organs} organs "
               f"× {args.cancer_rate:.0%} cancer, {args.llm_runs} LLM runs")
     for ext, n in sorted(counts.items()):
         print(f"  {ext:>10}: {n}")

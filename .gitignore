@@ -41,7 +41,8 @@ results/**/*.json
 results/**/*.pt
 results/**/*.ckpt
 !results/**/.gitkeep
-workspace/ 
+workspace/
+ckpts/
 
 # Dummy experiment root — configs/models/README tracked; data/results are generated,
 # only the named folder skeleton is kept (via .gitkeep)

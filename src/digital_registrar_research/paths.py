@@ -58,9 +58,6 @@ def results_root(workspace: str | Path | None = None) -> Path:
     return workspace_root(workspace) / "results"
 
 
-# Packaged train/test split
-SPLITS_JSON: Path = Path(__file__).resolve().parent / "benchmarks" / "data" / "splits.json"
-
 # Packaged JSON schemas (generated from canonical Pydantic models)
 SCHEMAS_DATA: Path = Path(__file__).resolve().parent / "schemas" / "data"
 
@@ -69,5 +66,5 @@ __all__ = [
     "WORKSPACE_DIR_NAME", "WORKSPACE_ROOT",
     "RESULTS_ROOT", "BENCHMARKS_RESULTS", "ABLATIONS_RESULTS",
     "workspace_root", "results_root",
-    "SPLITS_JSON", "SCHEMAS_DATA",
+    "SCHEMAS_DATA",
 ]

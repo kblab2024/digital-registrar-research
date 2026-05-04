@@ -31,7 +31,7 @@ Output: `{folder}/results/predictions/{dataset}/rule_based/{organ_n}/{case_id}.j
 
 ```bash
 python scripts/baselines/run_bert.py \
-    [--folder workspace] [--datasets tcga] [--split all] \
+    [--folder workspace] [--datasets tcga] \
     [--heads cls qa merged] \
     [--ckpt-cls ckpts/clinicalbert_cls.pt] \
     [--ckpt-qa  ckpts/clinicalbert_qa] \
@@ -41,8 +41,7 @@ python scripts/baselines/run_bert.py \
 | Flag | Default | Effect |
 |---|---|---|
 | `--folder` | `workspace` | Experiment root. |
-| `--datasets` | `tcga` | TCGA is held out from CMUH-only training. Pass `cmuh` for intra-corpus ablation; the leakage guard then requires `--split test`. |
-| `--split` | `all` | Which split to predict on. `all` = full corpus (the default since TCGA is held out). For intra-corpus ablation use `test`. |
+| `--datasets` | `tcga` | TCGA is held out from CMUH-only training. The leakage guard refuses to predict on a dataset that was in the checkpoint's training set. |
 | `--heads` | `cls qa merged` | Heads to run. `merged` requires both `cls` and `qa` outputs (run them in the same call or beforehand). |
 | `--ckpt-cls` | `ckpts/clinicalbert_cls.pt` | Path to CLS checkpoint. |
 | `--ckpt-qa` | `ckpts/clinicalbert_qa` | Path to QA checkpoint dir. |
@@ -51,7 +50,7 @@ python scripts/baselines/run_bert.py \
 
 **Notes:**
 
-- Default predicts on the **full TCGA corpus** (`--split all`) since TCGA was held out from CMUH-only training. The leakage guard in `clinicalbert_*.predict` will refuse to run if any predict case overlaps the checkpoint's `train_case_ids` — which would happen if you `--datasets cmuh` without `--split test`.
+- Default predicts on the **full TCGA corpus** since TCGA was held out from CMUH-only training. The leakage guard in `clinicalbert_*.predict` reads the checkpoint's `datasets` metadata and refuses to predict on any dataset that was in training (so `--datasets cmuh` against a CMUH-trained checkpoint will fail loudly).
 - Device auto-detected: MPS / CUDA / CPU.
 - `merged` does a per-case key-merge: CLS provides the base (carries `cancer_category` + `cancer_excision_report`); QA's `cancer_data` scalars overlay onto CLS's, with CLS winning on collisions.
 

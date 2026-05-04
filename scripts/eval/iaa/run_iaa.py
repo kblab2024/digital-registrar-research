@@ -221,7 +221,7 @@ def _discover_cases_dir_layout(
             except ParseError as e:
                 logger.warning("skipping %s (%s): %s", case_id, annotator, e)
                 continue
-            organ = normalize(ann.get("cancer_category")) or organ_name(organ_idx)
+            organ = normalize(ann.get("cancer_category")) or organ_name(paths.dataset, organ_idx)
             entry = cases.get(case_id)
             if entry is None:
                 entry = CaseEntry(organ=organ, annotations={}, paths={})

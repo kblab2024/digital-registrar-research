@@ -42,8 +42,9 @@ def main() -> None:
     ap.add_argument("--results-root", type=Path, default=paths.BENCHMARKS_RESULTS,
                     help="Parent folder of <method>/ prediction dirs "
                          "(default: %(default)s)")
-    ap.add_argument("--splits", type=Path, default=paths.SPLITS_JSON,
-                    help="Path to splits.json (default: %(default)s)")
+    ap.add_argument("--splits", type=Path, required=True,
+                    help="Path to a legacy splits.json (no longer packaged "
+                         "in-repo; supply your own).")
     ap.add_argument("--out", type=Path,
                     default=paths.BENCHMARKS_RESULTS / "nested" / "ln_by_method.csv",
                     help="Output CSV of per-case metrics (default: %(default)s)")

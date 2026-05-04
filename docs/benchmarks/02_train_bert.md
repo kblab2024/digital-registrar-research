@@ -18,45 +18,47 @@ The acknowledged trade-off: a 110M-parameter encoder trained on ~100 CMUH cases 
 python scripts/baselines/train_bert.py --datasets cmuh tcga
 ```
 
-## Train/test separation
+## Disjoint corpora — no train/test split within a corpus
 
-Train and test cases are pinned by `splits.json`, which lives at:
+The cross-corpus baseline does **not** split a corpus into train and test folds. CMUH is the training corpus in full; TCGA is the prediction corpus in full. Disjointness is guaranteed by the dataset boundary — CMUH cases never appear in TCGA's case ids and vice versa.
 
-- `{folder}/data/{dataset}/splits.json` (created by `gen_dummy_skeleton.py` for dummy, `registrar-split` for workspace).
-- Packaged TCGA fallback at `src/digital_registrar_research/benchmarks/data/splits.json` when no per-folder file exists for `dataset=tcga`.
+Cases are discovered by walking the gold-annotations tree:
 
-**The split is the contract.** `train_bert.py` loads the train half; `run_bert.py:predict()` loads the test half; the eval wrappers default to `--split test` so the encoder is never scored on its own training cases.
+- Training: `{folder}/data/cmuh/annotations/gold/<organ_n>/*.json`
+- Prediction: `{folder}/data/tcga/annotations/gold/<organ_n>/*.json`
 
-`train_bert.py` runs an explicit pre-flight at the top of every training run:
+`train_bert.py` runs a corpus pre-flight at the top of every training run:
 
 ```
 ============================================================
-Dataset separation step (train/test split)
+Training corpus summary (cross-corpus: train CMUH, predict TCGA)
 ============================================================
-split source: {folder}/data/{dataset}/splits.json (or packaged TCGA fallback)
-[cmuh] train=30  test=20  (sum=50)
-  organ 1: train=3  test=2
-  organ 2: train=3  test=2
-  ...
-[tcga] train=30  test=20  (sum=50)
-  ...
+[cmuh] cases=500
+  organ 2: cases=120
+  organ 4: cases=110
+  organ 5: cases=98
+  organ 6: cases=92
+  organ 9: cases=80
 ============================================================
-pooled: train=60  test=40
+pooled training cases: 500
 ============================================================
 ```
 
-It fails fast if `splits.json` is missing for any requested dataset, or if the train/test lists overlap (which would indicate a corrupted split file). **Refusing to train is the right behavior** — the alternative is silent data leakage.
+It fails fast if any requested dataset has no gold annotations under `{folder}/data/{dataset}/annotations/gold/`.
 
-The exact list of training case IDs is then **embedded in the saved checkpoint**:
+The training datasets are saved in the checkpoint metadata:
 
-- CLS: `torch.save(...)` includes a `"train_case_ids"` key.
-- QA: a sidecar `{ckpt_dir}/_train_meta.json` carries the IDs (HuggingFace `save_pretrained` doesn't pass through custom keys).
+- CLS: `torch.save(...)` includes a `"datasets"` key.
+- QA: a sidecar `{ckpt_dir}/_train_meta.json` carries `"datasets"` (HuggingFace `save_pretrained` doesn't pass through custom keys).
 
-`run_bert.py:predict()` reads these back at inference time and **refuses to predict** if any of the test cases overlap with the training set. This belt-and-suspenders check protects against:
+`run_bert.py:predict()` reads this back at inference time and **refuses to predict** on any dataset that was in the checkpoint's training set:
 
-- A corrupted `splits.json` that violates the train/test contract.
-- A user who points `--folder` at the wrong data root post-hoc.
-- A bug in the data loader that returns train cases when asked for test.
+```
+refusing to predict: dataset(s) ['cmuh'] were in the checkpoint's training set
+(['cmuh']). Cross-corpus baseline predicts on datasets disjoint from training.
+```
+
+This dataset-disjointness guard is the only safety check needed; it's much simpler than per-case overlap tracking and is the actual invariant the cross-corpus baseline depends on.
 
 ## What the two heads do
 
@@ -137,8 +139,9 @@ The dummy fixtures are too small for meaningful learning, but the smoke run vali
 
 ```bash
 python scripts/data/gen_dummy_skeleton.py --out dummy --clean --cases-per-organ 5 --llm-runs 1
-python scripts/baselines/train_bert.py --folder dummy --datasets cmuh tcga --heads cls qa \
+python scripts/baselines/train_bert.py --folder dummy --datasets cmuh --heads cls qa \
     --epochs-cls 1 --epochs-qa 1
+python scripts/baselines/run_bert.py --folder dummy --datasets tcga
 ```
 
 Expect both heads to write checkpoints in <1 minute on CPU; accuracy will be near-random because the dummy data is synthetic noise.

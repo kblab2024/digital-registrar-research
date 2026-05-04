@@ -322,7 +322,7 @@ def _build_atomic_table(
                 logger.warning("skipping %s: %s", case_id, e)
                 continue
 
-            organ = organ_name(organ_idx)
+            organ = organ_name(args.dataset, organ_idx)
             organ_from_gold = normalize(gold.get("cancer_category"))
             if organ_from_gold and organ_from_gold != "others":
                 organ = organ_from_gold

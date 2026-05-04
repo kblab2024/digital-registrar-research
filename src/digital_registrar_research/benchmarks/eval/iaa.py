@@ -39,9 +39,14 @@ Pairwise headline
         For cases where `_nhc` != `_kpc`, tallies which side `_gold`
         matches. Chi-square test for asymmetry.
 
-Outputs consume the same long-form schema as `aggregate_to_csv`:
+Outputs consume the same long-form schema as `aggregate_cases_to_df`:
 columns include `organ, section, field, field_type, n, stat_name,
 estimate, ci_lo, ci_hi, observed_agreement, n_categories`.
+
+Field-type taxonomy: ``classify_field()`` below maps each (field,
+organ) pair to one of binary | ordinal | nominal | continuous |
+nested_list, drawing on ``digital_registrar_research.benchmarks.eval.scope``
+for the canonical organ-aware groupings.
 """
 from __future__ import annotations
 

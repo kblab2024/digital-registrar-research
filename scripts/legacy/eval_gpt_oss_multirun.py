@@ -105,7 +105,7 @@ def main() -> None:
     gold_root = args.annotations or args.splits.parent
     logger.info("building correctness table (this may take a while)")
     df = build_correctness_table(
-        runs, gold_root=gold_root, splits_path=args.splits,
+        runs, gold_root=gold_root,
         gold_suffix=args.gold_suffix,
     )
     by_run_path = args.out / "by_run.csv"
@@ -144,7 +144,7 @@ def main() -> None:
     majority_vote_ensemble(runs, ensemble_dir)
     df_ens = build_correctness_table(
         [("ensemble", ensemble_dir)], gold_root=gold_root,
-        splits_path=args.splits, gold_suffix=args.gold_suffix,
+        gold_suffix=args.gold_suffix,
     )
     df_ens.to_csv(args.out / "ensemble_by_case.csv", index=False)
 

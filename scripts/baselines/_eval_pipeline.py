@@ -11,21 +11,11 @@ Defaults (cross-corpus baseline contract)
 ------------------------------------------
 - ``--folder workspace`` (override to ``dummy`` or absolute path).
 - ``--datasets tcga`` — TCGA is the LLM-comparable evaluation corpus
-  (privacy: OpenAI API can't see CMUH). BERT trains on CMUH only, so
-  TCGA is fully held out.
-- ``--split all`` — score every TCGA case (no test-fold filter needed
-  since TCGA was never in training).
+  (privacy: OpenAI API can't see CMUH). BERT trains on CMUH only; TCGA
+  is the prediction-only corpus, disjoint by dataset boundary.
 
-For intra-corpus ablations (e.g. CMUH-only benchmark), pass
-``--datasets cmuh --split test`` so the leakage guard passes.
-
-Split-aware filtering
----------------------
-When ``--split`` is ``test`` or ``train``, the wrapper resolves
-``splits.json`` per (folder, dataset), writes
-``cases_<split>_<dataset>.txt``, and passes ``--cases @<file>`` to the
-underlying ``non_nested`` call so all methods are scored on the same
-case set.
+Every gold case under ``<folder>/data/<dataset>/annotations/gold/`` is
+scored. There is no train/test split within a corpus.
 """
 from __future__ import annotations
 
@@ -36,11 +26,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-
-from baselines._split_helpers import (
-    SplitName, per_organ_counts, resolve_case_allowlist, write_allowlist_file,
-)
-from _config_loader import resolve_folder
 
 logger = logging.getLogger("scripts.baselines.eval_pipeline")
 
@@ -61,8 +46,7 @@ class MethodSpec:
         self.run_ids = run_ids or []
 
     def non_nested_args(self, root: str, dataset: str, out: Path,
-                         organs: list[str] | None,
-                         cases_file: Path | None) -> list[str]:
+                         organs: list[str] | None) -> list[str]:
         cmd = [
             sys.executable, "-m", "scripts.eval.cli", "non_nested",
             "--root", root, "--dataset", dataset,
@@ -76,19 +60,15 @@ class MethodSpec:
             cmd += ["--run-ids", *self.run_ids]
         if organs:
             cmd += ["--organs", *organs]
-        if cases_file is not None:
-            cmd += ["--cases", f"@{cases_file}"]
         return cmd
 
 
 def run_non_nested(spec: MethodSpec, *, root: str, dataset: str, out_dir: Path,
-                    organs: list[str] | None,
-                    cases_file: Path | None) -> Path:
+                    organs: list[str] | None) -> Path:
     """Invoke non_nested for one (method, dataset). Returns the parquet path."""
     out_dir.mkdir(parents=True, exist_ok=True)
     cmd = spec.non_nested_args(
         root=root, dataset=dataset, out=out_dir, organs=organs,
-        cases_file=cases_file,
     )
     logger.info("[%s/%s] %s", spec.label, dataset, " ".join(cmd))
     subprocess.run(cmd, check=True)
@@ -142,58 +122,15 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--datasets", nargs="+", default=list(DEFAULT_DATASETS),
                     choices=ALL_DATASETS,
                     help="Dataset(s) to evaluate on (default: tcga — the LLM-"
-                         "comparable held-out corpus). Pass 'cmuh' or 'cmuh tcga' "
-                         "for intra-corpus ablations (then use --split test).")
+                         "comparable held-out corpus).")
     ap.add_argument("--organs", nargs="*", default=None,
                     help="Restrict to organ indices (1..10) or names.")
     ap.add_argument("--out", type=Path, required=True,
                     help="Output root. Subdirs non_nested_<label>/ and compare/ "
                          "are created under it.")
-    ap.add_argument("--split", default="all", choices=("test", "train", "all"),
-                    help="Which split to score (default: all, since the default "
-                         "eval corpus is TCGA which is held out from CMUH-only "
-                         "training). Use 'test' for intra-corpus ablations.")
     ap.add_argument("--n-boot", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("-v", "--verbose", action="store_true")
-
-
-def _resolve_cases_per_dataset(
-    args: argparse.Namespace,
-) -> dict[str, Path | None]:
-    """Per-dataset case allowlist files (or None when split=='all').
-
-    Writes ``<out>/cases_<split>_<dataset>.txt`` for each dataset that
-    has a non-empty allowlist; raises if any dataset's split is empty
-    when a non-'all' filter is requested.
-    """
-    out: dict[str, Path | None] = {}
-    if args.split == "all":
-        for ds in args.datasets:
-            out[ds] = None
-        logger.info("split=all: scoring every gold case (no --cases filter)")
-        return out
-    folder = resolve_folder(args.folder)
-    for ds in args.datasets:
-        case_ids = resolve_case_allowlist(folder, ds, args.split)
-        if not case_ids:
-            raise SystemExit(
-                f"split={args.split!r} resolved to an empty case list for "
-                f"({args.folder}, {ds}). Refusing to run an eval on zero cases."
-            )
-        args.out.mkdir(parents=True, exist_ok=True)
-        out_file = args.out / f"cases_{args.split}_{ds}.txt"
-        write_allowlist_file(case_ids, out_file)
-        counts = per_organ_counts(case_ids)
-        pretty_counts = ", ".join(
-            f"organ {organ}: {n}" for organ, n in sorted(counts.items())
-        )
-        logger.info(
-            "[%s] split=%s: %d cases (%s) → %s",
-            ds, args.split, len(case_ids), pretty_counts, out_file,
-        )
-        out[ds] = out_file
-    return out
 
 
 def run_pipeline(specs: list[MethodSpec], args: argparse.Namespace) -> int:
@@ -202,7 +139,6 @@ def run_pipeline(specs: list[MethodSpec], args: argparse.Namespace) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    cases_files = _resolve_cases_per_dataset(args)
 
     # Per method × dataset: run non_nested into a per-dataset subdir.
     # Then concatenate per-dataset parquets per method into a single combined
@@ -215,7 +151,7 @@ def run_pipeline(specs: list[MethodSpec], args: argparse.Namespace) -> int:
             ds_out = method_root / ds
             parquet = run_non_nested(
                 spec, root=args.folder, dataset=ds, out_dir=ds_out,
-                organs=args.organs, cases_file=cases_files.get(ds),
+                organs=args.organs,
             )
             per_ds_parquets[ds] = parquet
         # Combined parquet at the method root (sibling of <dataset>/ subdirs).

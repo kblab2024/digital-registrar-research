@@ -15,7 +15,6 @@ with_preann/data/
 │   │   ├── nhc/{organ_n}/{case_id}.json
 │   │   ├── kpc/{organ_n}/{case_id}.json
 │   │   └── gold/{organ_n}/{case_id}.json            # consensus
-│   ├── splits.json
 │   └── dataset_manifest.yaml
 └── tcga/                                             # mirrors cmuh/
 
@@ -23,7 +22,6 @@ without_preann/data/
 ├── cmuh/                                             # independent subset (no preannotation/)
 │   ├── reports/{organ_n}/{case_id}.txt
 │   ├── annotations/{nhc,kpc,gold}/{organ_n}/{case_id}.json
-│   ├── splits.json
 │   └── dataset_manifest.yaml
 └── tcga/
 
@@ -54,7 +52,7 @@ models/clinicalbert/{v1_baseline,v2_finetuned}/{checkpoint.pt,config.yaml}
 |---|---|---|
 | Dataset | lowercase, no date | `cmuh`, `tcga` |
 | Case ID | `{dataset}{N}_{idx}` | `tcga1_37`, `cmuh1_1` |
-| Organ partition | numeric dir | `1/` = breast, `2/` = colorectal (see `dataset_manifest.yaml`) |
+| Organ partition | numeric dir, **dataset-specific** per [`configs/organ_code.yaml`](../configs/organ_code.yaml) | `tcga/.../1/` = breast, `cmuh/.../1/` = pancreas |
 | LLM model | snake_case with size | `gpt_oss_20b`, `gemma4_e2b` |
 | Run directory | zero-padded, optional machine suffix | `run01`..`run10`, or `run01-alpha`..`run10-alpha` |
 | Mode subtree | `{with,without}_preann/` | `with_preann/` |

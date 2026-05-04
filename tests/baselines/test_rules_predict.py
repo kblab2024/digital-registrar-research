@@ -20,31 +20,34 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_RULE = REPO_ROOT / "scripts" / "baselines" / "run_rule.py"
 
 
-# Per-organ-index schema mirrors gen_dummy_skeleton.py.
-ORGAN_BY_IDX = {
-    "1": "breast",
-    "2": "colorectal",
-    "3": "esophagus",
-    "4": "liver",
-    "5": "stomach",
-}
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from digital_registrar_research.benchmarks import organs as _organs  # noqa: E402
 
 
 def _build_synthetic_root(root: Path) -> None:
-    """Write reports + gold annotations under {root}/data/<ds>/..."""
+    """Write reports + gold annotations under {root}/data/<ds>/...
+
+    Organ folders are dataset-specific per ``configs/organ_code.yaml``:
+        CMUH 2 = breast, CMUH 5 = esophagus
+        TCGA 1 = breast
+    """
+    cmuh_breast = str(_organs.organ_n_for("cmuh", "breast"))      # "2"
+    cmuh_esoph  = str(_organs.organ_n_for("cmuh", "esophagus"))   # "5"
+    tcga_breast = str(_organs.organ_n_for("tcga", "breast"))      # "1"
     fixtures = {
-        ("cmuh", "1", "cmuh1_1"):
+        ("cmuh", cmuh_breast, f"cmuh{cmuh_breast}_1", "breast"):
             "Modified radical mastectomy. Infiltrating ductal carcinoma. "
             "Nottingham grade G2. Tumor size 2.5 cm. "
             "Stage pT2 N1mi MX. Lymphovascular invasion present.",
-        ("cmuh", "3", "cmuh3_1"):
+        ("cmuh", cmuh_esoph, f"cmuh{cmuh_esoph}_1", "esophagus"):
             "Esophagectomy. Squamous cell carcinoma. Grade 2. "
             "pT3 N2 MX. Stage IIIB. Lymphovascular invasion present.",
-        ("tcga", "1", "tcga1_1"):
+        ("tcga", tcga_breast, f"tcga{tcga_breast}_1", "breast"):
             "Wide local excision. Invasive lobular carcinoma. "
             "Grade 1. Tumor size 8 mm. pT1c N0 MX.",
     }
-    for (ds, organ_idx, case_id), text in fixtures.items():
+    for (ds, organ_idx, case_id, organ_name), text in fixtures.items():
         ds_root = root / "data" / ds
         rep_dir = ds_root / "reports" / organ_idx
         ann_dir = ds_root / "annotations" / "gold" / organ_idx
@@ -53,7 +56,7 @@ def _build_synthetic_root(root: Path) -> None:
         (rep_dir / f"{case_id}.txt").write_text(text, encoding="utf-8")
         gold = {
             "cancer_excision_report": True,
-            "cancer_category": ORGAN_BY_IDX[organ_idx],
+            "cancer_category": organ_name,
             "cancer_category_others_description": None,
             "cancer_data": {},
         }
@@ -86,9 +89,11 @@ def test_run_rule_writes_canonical_layout(synthetic_root: Path) -> None:
     assert (out_root / "_run_meta.json").is_file()
     assert (out_root / "_log.jsonl").is_file()
 
-    # Per-organ subdirs with predictions.
-    breast_pred = out_root / "1" / "cmuh1_1.json"
-    eso_pred = out_root / "3" / "cmuh3_1.json"
+    # Per-organ subdirs with predictions (CMUH organ_n: 2=breast, 5=esophagus).
+    cmuh_breast = str(_organs.organ_n_for("cmuh", "breast"))
+    cmuh_esoph = str(_organs.organ_n_for("cmuh", "esophagus"))
+    breast_pred = out_root / cmuh_breast / f"cmuh{cmuh_breast}_1.json"
+    eso_pred = out_root / cmuh_esoph / f"cmuh{cmuh_esoph}_1.json"
     assert breast_pred.is_file()
     assert eso_pred.is_file()
 

@@ -73,7 +73,7 @@ def collect_paired_records(
         except ParseError:
             preann = None
 
-        organ = normalize(gold.get("cancer_category")) or organ_name(pc.organ_idx)
+        organ = normalize(gold.get("cancer_category")) or organ_name(paths.dataset, pc.organ_idx)
         for field in SCALAR_FIELDS:
             if field.startswith("biomarker_") and organ != "breast":
                 continue
@@ -125,7 +125,7 @@ def collect_dual_paired_records(
         except ParseError as e:
             logger.warning("skipping %s: %s", nhc_pc.case_id, e)
             continue
-        organ = normalize(gold.get("cancer_category")) or organ_name(nhc_pc.organ_idx)
+        organ = normalize(gold.get("cancer_category")) or organ_name(paths.dataset, nhc_pc.organ_idx)
         for field in SCALAR_FIELDS:
             if field.startswith("biomarker_") and organ != "breast":
                 continue
