@@ -1,7 +1,11 @@
 """Tests for preann.py — Δκ, anchoring index, convergence-to-preann."""
 from __future__ import annotations
 
-from digital_registrar_research.benchmarks.eval.preann import (
+import pytest
+
+pytest.importorskip("sklearn", reason="sklearn provides cohen_kappa_score for paired_delta_kappa")
+
+from digital_registrar_research.benchmarks.eval.preann import (  # noqa: E402
     PairedRecord,
     anchoring_index,
     convergence_to_preann,
