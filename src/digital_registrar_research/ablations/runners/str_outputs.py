@@ -20,7 +20,7 @@ from ...models.common import ReportJsonize, is_cancer
 from ...models.modellist import organmodels
 from ...util.predictiondump import dump_prediction_plain
 from ..extractors.post_hoc_parser import parse_cancer_data
-from ..signatures.str_outputs import get_str_signature
+from ..signatures.str_outputs import get_str_signature, list_str_fields
 from . import _base
 
 CELL_ID = "str_outputs"
@@ -45,10 +45,16 @@ class StrOutputsPipeline(dspy.Module):
         logger.debug("[str_outputs] %s", fname)
         paragraphs = [p.strip() for p in report.split("\n\n") if p.strip()]
         context_response = self.analyzer_is_cancer(report=paragraphs)
-        if not context_response.cancer_excision_report:
-            return {"cancer_excision_report": False,
-                    "cancer_category": None, "cancer_data": {}}
+        cer = bool(context_response.cancer_excision_report)
         organ = context_response.cancer_category
+        logger.info("[%s] is_cancer -> excision=%s category=%r",
+                    fname, cer, organ)
+        if not cer:
+            logger.warning("[%s] SKIP: is_cancer says not a cancer-excision "
+                           "report", fname)
+            return {"cancer_excision_report": False,
+                    "cancer_category": None, "cancer_data": {},
+                    "_skip_reason": "not_cancer"}
         out: dict = {
             "cancer_excision_report": True,
             "cancer_category": organ,
@@ -57,6 +63,11 @@ class StrOutputsPipeline(dspy.Module):
             "cancer_data": {},
         }
         if organ not in organmodels:
+            logger.warning(
+                "[%s] SKIP: organ %r not in organmodels keys=%s — "
+                "downstream predictor will NOT run",
+                fname, organ, sorted(organmodels))
+            out["_skip_reason"] = "unknown_organ"
             return out
         report_jsonized: dict = {}
         if not self.skip_jsonize:
@@ -67,16 +78,32 @@ class StrOutputsPipeline(dspy.Module):
                 logger.warning("jsonize failed for %s: %s", fname, e)
         try:
             predictor = self._get_organ_predictor(organ)
+            field_names = list_str_fields(organ)
+            logger.info("[%s] invoking %s predictor (signature=%s, n_fields=%d)",
+                        fname, organ, predictor.signature.__name__,
+                        len(field_names))
             organ_response = predictor(
                 report=paragraphs, report_jsonized=report_jsonized)
             raw_data = dump_prediction_plain(organ_response)
             parsed, parse_errs = parse_cancer_data(raw_data, organ)
-            out["cancer_data"] = parsed
+            # Backfill: guarantee every signature field appears in the
+            # output even if the model omitted it.
+            backfilled = {name: None for name in field_names}
+            backfilled.update(parsed)
+            out["cancer_data"] = backfilled
+            n_non_null = sum(1 for v in parsed.values() if v is not None)
+            logger.info(
+                "[%s] %s predictor returned %d non-null fields out of %d",
+                fname, organ, n_non_null, len(field_names))
             if parse_errs:
                 out["_b2_parse_errors"] = parse_errs
             out["_b2_raw"] = raw_data
+            out["_downstream_called"] = True
         except Exception as e:
-            logger.error("str_outputs %s failed for %s: %s", organ, fname, e)
+            logger.error("str_outputs %s failed for %s (signature=%s): %s",
+                         organ, fname,
+                         self._organ_predictors.get(organ).signature.__name__
+                         if organ in self._organ_predictors else "?", e)
             out["_error"] = str(e)
         return out
 
@@ -116,6 +143,9 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"OK={summary.n_ok} ERR={summary.n_pipeline_error} "
           f"CACHED={summary.n_cached} N={summary.n_cases} "
+          f"NOT_CANCER={summary.n_skipped_not_cancer} "
+          f"UNKNOWN_ORGAN={summary.n_skipped_unknown_organ} "
+          f"DOWNSTREAM={summary.n_downstream_called} "
           f"WALL={summary.wall_time_s:.1f}s")
     print(f"run dir: {paths.run_dir(run_name)}")
 

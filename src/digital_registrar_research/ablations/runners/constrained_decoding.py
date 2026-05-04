@@ -18,10 +18,10 @@ import argparse
 import os
 import sys
 
-from ...benchmarks.eval.scope import IMPLEMENTED_ORGANS
 from ...paths import SCHEMAS_DATA
 from ...schemas.builder import flatten_schema_for_prompt, load_organ_schema
 from ...schemas.union_builder import build_union_schema
+from ..utils.categories import CANCER_CATEGORIES
 from . import _base
 
 CELL_ID = "constrained_decoding"
@@ -32,7 +32,7 @@ CLASSIFY_SCHEMA = {
         "cancer_excision_report": {"type": "boolean"},
         "cancer_category": {
             "type": "string",
-            "enum": IMPLEMENTED_ORGANS + ["others"],
+            "enum": list(CANCER_CATEGORIES),
         },
     },
     "required": ["cancer_excision_report", "cancer_category"],
@@ -104,22 +104,27 @@ class ConstrainedRunner:
                 self.model, schema)
         return self._extract_generators[organ]
 
-    def run_case(self, report: str) -> dict:
+    def run_case(self, report: str, organ_n: str | None = None) -> dict:
         cls = self.classify_generator(CLASSIFY_PROMPT.format(report=report))
         if not cls.get("cancer_excision_report"):
             return {"cancer_excision_report": False,
-                    "cancer_category": None, "cancer_data": {}}
+                    "cancer_category": None, "cancer_data": {},
+                    "_skip_reason": "not_cancer"}
         organ = cls.get("cancer_category")
         if (organ in {"others", None}
                 or not (SCHEMAS_DATA / f"{organ}.json").exists()):
             return {"cancer_excision_report": True,
-                    "cancer_category": organ, "cancer_data": {}}
+                    "cancer_category": organ, "cancer_data": {},
+                    "_skip_reason": "unknown_organ",
+                    "_organ_n_folder": organ_n}
         gen = self._extract_generator(organ)
         cancer_data = gen(EXTRACT_PROMPT.format(report=report, organ=organ))
         return {
             "cancer_excision_report": True,
             "cancer_category": organ,
             "cancer_data": cancer_data,
+            "_downstream_called": True,
+            "_organ_n_folder": organ_n,
         }
 
 
@@ -148,7 +153,7 @@ def run(args: argparse.Namespace) -> int:
     runner = ConstrainedRunner(args)
 
     def _predict(report_text: str, organ_n: str, case_id: str) -> dict:
-        return runner.run_case(report_text)
+        return runner.run_case(report_text, organ_n=organ_n)
 
     summary = _base.run_loop(
         paths, organs, run_name, model_alias=args.model,
@@ -165,6 +170,9 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"OK={summary.n_ok} ERR={summary.n_pipeline_error} "
           f"CACHED={summary.n_cached} N={summary.n_cases} "
+          f"NOT_CANCER={summary.n_skipped_not_cancer} "
+          f"UNKNOWN_ORGAN={summary.n_skipped_unknown_organ} "
+          f"DOWNSTREAM={summary.n_downstream_called} "
           f"WALL={summary.wall_time_s:.1f}s")
     print(f"run dir: {paths.run_dir(run_name)}")
 

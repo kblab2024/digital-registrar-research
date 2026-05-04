@@ -75,12 +75,19 @@ class UnionRunner:
         cer = raw.pop("cancer_excision_report", None)
         organ = raw.pop("cancer_category", None)
         others_desc = raw.pop("cancer_category_others_description", None)
-        return {
+        out = {
             "cancer_excision_report": bool(cer),
             "cancer_category": organ,
             "cancer_category_others_description": others_desc,
             "cancer_data": raw,
         }
+        if not bool(cer):
+            out["_skip_reason"] = "not_cancer"
+        elif organ in {"others", None}:
+            out["_skip_reason"] = "unknown_organ"
+        else:
+            out["_downstream_called"] = True
+        return out
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -120,6 +127,9 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"OK={summary.n_ok} ERR={summary.n_pipeline_error} "
           f"CACHED={summary.n_cached} N={summary.n_cases} "
+          f"NOT_CANCER={summary.n_skipped_not_cancer} "
+          f"UNKNOWN_ORGAN={summary.n_skipped_unknown_organ} "
+          f"DOWNSTREAM={summary.n_downstream_called} "
           f"WALL={summary.wall_time_s:.1f}s")
     print(f"run dir: {paths.run_dir(run_name)}")
 

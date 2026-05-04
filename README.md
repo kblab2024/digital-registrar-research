@@ -90,6 +90,8 @@ python -m scripts.eval.cli cross_dataset --left <cmuh_out> --right <tcga_out> --
 python -m scripts.eval.cli headline      --non-nested-out <...> --iaa-out <...> --out <out>
 ```
 
+All eval subcommands also accept `--obfustrated` as an alternative to `--root` — points reads/writes at the schema-conformant synthetic copy `workspace_obfustrated/` produced by `python scripts/obfuscate_workspace.py`. Useful for debugging eval logic without touching PHI; see [docs/obfuscation.md](docs/obfuscation.md). The existing `--root dummy` / `--root workspace` invocations are unchanged.
+
 See [docs/eval/recipes.md](docs/eval/recipes.md) for the full recipe book and [docs/eval/methods_citations.md](docs/eval/methods_citations.md) for paper-ready statistical-method citations. Legacy scripts are archived under `scripts/legacy/` for one transition release.
 
 ## Citation

@@ -184,6 +184,70 @@ def _run_one(cell: str, model: str, experiment_root: Path, dataset: str,
     return manifest
 
 
+def _write_failures(experiment_root: Path, dataset: str,
+                    failures: list[dict]) -> None:
+    """Persist the per-cell failure list under the ablations root so
+    the user can re-run only the failed cells (no need to grep logs)."""
+    ablations_root = experiment_root / "results" / "ablations" / dataset
+    ablations_root.mkdir(parents=True, exist_ok=True)
+    out_path = ablations_root / "grid_failures.json"
+    out_path.write_text(
+        json.dumps({"failures": failures,
+                    "completed_utc": dt.datetime.utcnow().isoformat(
+                        timespec="seconds")},
+                   ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+
+def _preflight(spec: dict, experiment_root: Path, dataset: str,
+               unified_models: tuple[str, ...]) -> list[str]:
+    """Validate the YAML before running ANY cell. Returns a list of
+    error messages — empty means OK. Catches typos / missing artifacts
+    early instead of failing mid-grid."""
+    errors: list[str] = []
+    runs = spec.get("runs") or []
+    cell_typos: set[str] = set()
+    model_typos: set[str] = set()
+    for run in runs:
+        cell = run.get("cell")
+        model = run.get("model")
+        extra = run.get("args") or {}
+        if cell not in CELL_DISPATCH:
+            cell_typos.add(str(cell))
+        if model not in unified_models:
+            model_typos.add(str(model))
+        if cell == "compiled_dspy":
+            artifact = extra.get("compiled")
+            if not artifact:
+                errors.append("compiled_dspy run missing required "
+                              "'compiled' artifact path")
+            elif not Path(artifact).exists():
+                errors.append(
+                    f"compiled_dspy run: artifact {artifact!r} does not exist")
+        if cell == "fewshot_demos":
+            demos_yaml = (REPO_ROOT / "configs" / "ablations"
+                          / "fewshot_demos.yaml")
+            if not demos_yaml.exists():
+                errors.append(
+                    f"fewshot_demos run: {demos_yaml} not found — run "
+                    "scripts/ablations/build_fewshot_demos.py first")
+    if cell_typos:
+        errors.append(
+            f"Unknown cell-id(s): {sorted(cell_typos)}. "
+            f"Known: {sorted(CELL_DISPATCH)}")
+    if model_typos:
+        errors.append(
+            f"Unknown model alias(es): {sorted(model_typos)}. "
+            f"Known: {sorted(unified_models)}")
+    reports_root = experiment_root / "data" / dataset / "reports"
+    if not reports_root.is_dir():
+        errors.append(f"Reports root not found: {reports_root}")
+    gold_root = (experiment_root / "data" / dataset / "annotations" / "gold")
+    if not gold_root.is_dir():
+        errors.append(f"Gold annotations root not found: {gold_root}")
+    return errors
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--config", type=Path, required=True,
@@ -195,6 +259,10 @@ def main() -> int:
                     help="override the YAML's `folder:` field")
     ap.add_argument("--dataset", default=None,
                     help="override the YAML's `dataset:` field")
+    ap.add_argument("--continue-on-cell-error", action="store_true",
+                    help="if a cell run raises, log the failure to "
+                         "grid_failures.json and continue with the next cell "
+                         "instead of halting the whole grid.")
     args = ap.parse_args()
 
     if not args.config.is_file():
@@ -208,11 +276,25 @@ def main() -> int:
                        or resolve_folder(spec["folder"]))
     dataset = args.dataset or spec["dataset"]
 
+    # Pre-flight: validate cell-ids, model aliases, required artifacts,
+    # and data layout BEFORE the first cell runs. Catches typos that
+    # would otherwise fail mid-grid hours later.
+    from digital_registrar_research.ablations.runners._base import (  # noqa: E402
+        UNIFIED_MODELS,
+    )
+    preflight_errors = _preflight(spec, experiment_root, dataset, UNIFIED_MODELS)
+    if preflight_errors:
+        print("[grid] PRE-FLIGHT FAILED:")
+        for err in preflight_errors:
+            print(f"  - {err}")
+        sys.exit(1)
+
     print(f"[grid] config={args.config}")
     print(f"[grid] folder={experiment_root}  dataset={dataset}")
     print(f"[grid] runs={len(spec['runs'])}")
 
     manifests: list[dict] = []
+    failures: list[dict] = []
     cells_seen: set[str] = set()
     models_seen: set[str] = set()
 
@@ -222,12 +304,25 @@ def main() -> int:
         model = run["model"]
         extra = run.get("args") or {}
         print(f"\n[{i}/{len(spec['runs'])}] cell={cell} model={model}")
-        manifest = _run_one(cell, model, experiment_root, dataset, extra)
-        manifests.append(manifest)
-        cells_seen.add(cell)
-        models_seen.add(model)
+        try:
+            manifest = _run_one(cell, model, experiment_root, dataset, extra)
+            manifests.append(manifest)
+            cells_seen.add(cell)
+            models_seen.add(model)
+        except Exception as exc:
+            failure = {"cell": cell, "model": model, "args": extra,
+                       "error": f"{type(exc).__name__}: {exc}"}
+            failures.append(failure)
+            print(f"[grid] CELL FAILED: {failure['error']}")
+            if not args.continue_on_cell_error:
+                # Persist failures so far before halting.
+                _write_failures(experiment_root, dataset, failures)
+                raise
 
     print(f"\n[grid] all runs complete ({time.perf_counter() - t0:.1f}s)")
+    if failures:
+        _write_failures(experiment_root, dataset, failures)
+        print(f"[grid] {len(failures)} cell(s) failed — see grid_failures.json")
 
     # Top-level grid manifest under the ablations root.
     ablations_root = (experiment_root / "results" / "ablations" / dataset)

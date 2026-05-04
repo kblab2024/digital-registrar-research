@@ -139,10 +139,16 @@ def _gold_for(case_id: str, organ_n: str, gold_root: Path) -> dict | None:
 # Long-form scoring
 # ---------------------------------------------------------------------------
 
-def _grade_run(run_dir: Path, gold_root: Path) -> list[dict]:
+def _grade_run(run_dir: Path, gold_root: Path,
+               dataset: str | None = None) -> list[dict]:
     """Score every per-case JSON under a single run dir.
 
-    Yields long-form rows ready for the master DataFrame.
+    Yields long-form rows ready for the master DataFrame. For each case
+    where both gold and prediction supply ``cancer_category``, the rows
+    carry ``cancer_category_mismatch=True`` when the two strings
+    disagree — an accuracy signal, not a runtime error. Folder numbers
+    are treated as case-id keys only and are not compared against
+    ``cancer_category``.
     """
     rows: list[dict] = []
     for organ_dir in sorted(run_dir.iterdir()):
@@ -153,11 +159,11 @@ def _grade_run(run_dir: Path, gold_root: Path) -> list[dict]:
             case_id = pred_path.stem
             gold = _gold_for(case_id, organ_n, gold_root)
             if gold is None:
-                # No gold for this case — record as un-gradable.
                 for field in FAIR_SCOPE:
                     rows.append({
                         "case_id": case_id, "organ": organ_n, "field": field,
                         "correct": None, "attempted": False,
+                        "cancer_category_mismatch": False,
                     })
                 continue
             try:
@@ -165,11 +171,23 @@ def _grade_run(run_dir: Path, gold_root: Path) -> list[dict]:
                     pred = json.load(f)
             except Exception:
                 pred = {}
+            cc_mismatch = (
+                isinstance(pred, dict)
+                and isinstance(gold, dict)
+                and pred.get("cancer_category") is not None
+                and gold.get("cancer_category") is not None
+                and pred["cancer_category"] != gold["cancer_category"]
+            )
+            if cc_mismatch:
+                print(f"[aggregate] cancer_category mismatch: case={case_id} "
+                      f"folder={organ_n} gold={gold['cancer_category']!r} "
+                      f"pred={pred['cancer_category']!r}")
             if isinstance(pred, dict) and pred.get("_pipeline_error"):
                 for field in FAIR_SCOPE:
                     rows.append({
                         "case_id": case_id, "organ": organ_n, "field": field,
                         "correct": None, "attempted": False,
+                        "cancer_category_mismatch": cc_mismatch,
                     })
                 continue
             result = score_case(gold, pred)
@@ -181,27 +199,31 @@ def _grade_run(run_dir: Path, gold_root: Path) -> list[dict]:
                     "case_id": case_id, "organ": organ_n, "field": field,
                     "correct": (bool(correct) if correct is not None else None),
                     "attempted": correct is not None,
+                    "cancer_category_mismatch": cc_mismatch,
                 })
             for nested_field, f1d in result.get("_nested", {}).items():
                 rows.append({
                     "case_id": case_id, "organ": organ_n,
                     "field": nested_field,
                     "correct": f1d["f1"], "attempted": True,
+                    "cancer_category_mismatch": cc_mismatch,
                 })
     return rows
 
 
 def build_grid_dataframe(runs: list[tuple[str, str, str, Path]],
-                         gold_root: Path) -> pd.DataFrame:
+                         gold_root: Path,
+                         dataset: str | None = None) -> pd.DataFrame:
     """Build the ablation_grid.csv master long-form table.
 
     Each row carries ``cell, model, run, case_id, organ, field, correct,
-    attempted, method`` (where ``method = f"{cell}_{model}"`` for
-    backward compatibility with downstream stats code).
+    attempted, cancer_category_mismatch, method`` (where
+    ``method = f"{cell}_{model}"`` for backward compatibility with
+    downstream stats code).
     """
     all_rows: list[dict] = []
     for cell, model, run_id, run_dir in runs:
-        rows = _grade_run(run_dir, gold_root)
+        rows = _grade_run(run_dir, gold_root, dataset=dataset)
         for r in rows:
             r["cell"] = cell
             r["model"] = model
@@ -240,8 +262,18 @@ def compute_efficiency(runs: list[tuple[str, str, str, Path]]) -> pd.DataFrame:
                         latencies.append(float(lat))
 
         # Per-case error counts from the on-disk JSONs.
-        schema_errors = 0
-        parse_errors = 0
+        # Mutually-exclusive buckets so the rates can never sum past 1.0:
+        #   - schema_only: case has _schema_errors AND no other failure
+        #   - parse_only:  case has _parse_error / _error / _pipeline_error
+        #                  AND no _schema_errors
+        #   - both:        case has both flags
+        # ``schema_errors`` and ``parse_errors`` are exposed separately so
+        # downstream stats can still report each rate independently;
+        # ``failed_total`` = schema_only + parse_only + both gives the
+        # overall failure rate (always <= 1.0).
+        schema_only = 0
+        parse_only = 0
+        both = 0
         for organ_dir in run_dir.iterdir():
             if not organ_dir.is_dir() or organ_dir.name.startswith("_"):
                 continue
@@ -250,15 +282,24 @@ def compute_efficiency(runs: list[tuple[str, str, str, Path]]) -> pd.DataFrame:
                     with pred_path.open(encoding="utf-8") as f:
                         pred = json.load(f)
                 except Exception:
-                    parse_errors += 1
+                    parse_only += 1
                     continue
                 if not isinstance(pred, dict):
                     continue
-                if pred.get("_schema_errors"):
-                    schema_errors += 1
-                if (pred.get("_parse_error") or pred.get("_error")
-                        or pred.get("_pipeline_error")):
-                    parse_errors += 1
+                has_schema = bool(pred.get("_schema_errors"))
+                has_parse = bool(pred.get("_parse_error")
+                                 or pred.get("_error")
+                                 or pred.get("_pipeline_error"))
+                if has_schema and has_parse:
+                    both += 1
+                elif has_schema:
+                    schema_only += 1
+                elif has_parse:
+                    parse_only += 1
+
+        schema_errors = schema_only + both
+        parse_errors = parse_only + both
+        failed_total = schema_only + parse_only + both
 
         rows.append({
             "cell": cell,
@@ -271,6 +312,7 @@ def compute_efficiency(runs: list[tuple[str, str, str, Path]]) -> pd.DataFrame:
                                  if latencies else None),
             "schema_errors": schema_errors,
             "parse_errors": parse_errors,
+            "failed_total": failed_total,
             "validation_retries": summary.get("validation_retries", 0),
         })
     return pd.DataFrame(rows)
@@ -352,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[aggregate] discovered {len(runs)} runs across "
           f"{len({(c, m) for c, m, _, _ in runs})} (cell, model) pairs")
 
-    grid_df = build_grid_dataframe(runs, gold_root)
+    grid_df = build_grid_dataframe(runs, gold_root, dataset=args.dataset)
     grid_csv = results_root / "ablation_grid.csv"
     grid_df.to_csv(grid_csv, index=False)
     print(f"Wrote {grid_csv}  ({len(grid_df)} rows)")
@@ -401,4 +443,4 @@ if __name__ == "__main__":
 
 
 # Silence unused-import warnings for re-exports kept for downstream use.
-_ = (NESTED_LIST_FIELDS, IMPLEMENTED_ORGANS, match_nested_list)
+_ = (FAIR_SCOPE, NESTED_LIST_FIELDS, IMPLEMENTED_ORGANS, match_nested_list)

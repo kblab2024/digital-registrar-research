@@ -42,23 +42,38 @@ MONOLITHIC_DOCSTRING = (
     "pass. DO NOT JUST RETURN NULL. If an item is not present in the "
     "report, return null for that item, but try your best to fill in "
     "the others. Return every field in your response even if it is "
-    "null — do not omit fields."
+    "null — do not omit fields.\n\n"
+    "REQUIRED FIELDS (you MUST include every name below as a key in "
+    "your output, with the value or null):\n{field_list}"
 )
 
 INPUT_FIELD_NAMES = {"report", "report_jsonized"}
 
 
 def _iter_output_fields(cls: type) -> list[tuple[str, object, object]]:
-    """Yield (name, type_hint, dspy.OutputField descriptor) for each
-    output field declared on a DSPy signature class."""
+    """Yield ``(name, type_hint, dspy.OutputField descriptor)`` for each
+    output field declared on a DSPy signature class.
+
+    DSPy stores fields on ``cls.output_fields`` (a dict of pydantic
+    ``FieldInfo``) — NOT on ``cls.__dict__``. The previous implementation
+    inspected ``__dict__`` and silently produced an empty list, which
+    caused ``get_monolithic_signature`` to build degenerate signatures
+    with no output fields at all (the root cause of the
+    ``dspy_monolithic`` / ``str_outputs`` "no organ-specific output" bug).
+    """
     out = []
-    annotations = getattr(cls, "__annotations__", {})
-    for name, type_hint in annotations.items():
+    output_fields = getattr(cls, "output_fields", {}) or {}
+    for name, finfo in output_fields.items():
         if name in INPUT_FIELD_NAMES:
             continue
-        descriptor = cls.__dict__.get(name)
-        if descriptor is None:
-            continue
+        type_hint = finfo.annotation
+        # Re-build a fresh OutputField descriptor from the original
+        # `desc` so the merged signature renders the same prompt the
+        # parent pipeline uses. (We can't reuse the FieldInfo object
+        # directly because dspy.Signature's metaclass will overwrite
+        # json_schema_extra during class construction.)
+        extras = dict(finfo.json_schema_extra or {})
+        descriptor = dspy.OutputField(desc=extras.get("desc", ""))
         out.append((name, type_hint, descriptor))
     return out
 
@@ -109,7 +124,10 @@ def get_monolithic_signature(organ: str) -> type[dspy.Signature]:
              "by an upstream signature. May be an empty dict if that step "
              "is skipped.")
     merged_attrs["__annotations__"] = merged_annotations
-    merged_attrs["__doc__"] = MONOLITHIC_DOCSTRING.format(organ=organ)
+    field_names = [n for n in merged_annotations if n not in INPUT_FIELD_NAMES]
+    field_list = "\n".join(f"  - {n}" for n in field_names)
+    merged_attrs["__doc__"] = MONOLITHIC_DOCSTRING.format(
+        organ=organ, field_list=field_list)
 
     cls_name = f"{organ.title()}CancerMonolithic"
     sig_cls = type(cls_name, (dspy.Signature,), merged_attrs)

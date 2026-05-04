@@ -47,6 +47,7 @@ MODEL_PROFILES: dict[str, dict] = {
     "ollama_chat/gpt-oss:20b":   {"temperature": 0.3,  "top_p": 1.0,  "top_k": 40, "num_ctx": 8192, "max_tokens": 4096},
     "ollama_chat/gemma3:27b":    {"temperature": 0.15, "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
     "ollama_chat/gemma4:26b":    {"temperature": 0.1,  "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
+    "ollama_chat/gemma4:e2b":    {"temperature": 0.1,  "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
     "ollama_chat/qwen3.5:27b":   {"temperature": 0.15, "top_p": 0.9,  "top_k": 40, "num_ctx": 8192, "max_tokens": 4096},
     "ollama_chat/medgemma:27b":  {"temperature": 0.15, "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
     "ollama_chat/medgemma:4b":   {"temperature": 0.2,  "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},

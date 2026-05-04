@@ -27,9 +27,9 @@ from ...schemas.builder import (
     load_organ_schema,
 )
 from ..extractors.flat_grader import renest_cancer_data
+from ..utils.categories import CANCER_CATEGORIES
 from . import _base
 from .raw_json import (
-    CANCER_CATEGORIES,
     CLASSIFY_SYSTEM,
     _parse_json_best_effort,
 )
@@ -47,6 +47,29 @@ plain English strings — one string per item — not as lists of objects.
 Schema (field_name (type): description):
 {field_list}
 """
+
+
+def _renest_with_errors(raw: dict) -> tuple[dict, list[str]]:
+    """Run :func:`renest_cancer_data` and report any nested-list field
+    where re-parsing the model's free-text strings produced a different
+    item count or shape. Lets us tell flat-schema accuracy loss apart
+    from re-parser loss in the eval.
+    """
+    renested = renest_cancer_data(raw)
+    errors: list[str] = []
+    for field in NESTED_KEY:
+        before = raw.get(field)
+        after = renested.get(field)
+        if isinstance(before, list) and isinstance(after, list):
+            if len(before) != len(after):
+                errors.append(
+                    f"{field}: re-nest changed item count "
+                    f"{len(before)}->{len(after)}")
+        elif (before is None) != (after is None):
+            errors.append(f"{field}: re-nest produced shape mismatch "
+                          f"(raw={type(before).__name__}, "
+                          f"renested={type(after).__name__})")
+    return renested, errors
 
 
 def _flatten_nested_to_string_arrays(schema: dict) -> dict:
@@ -107,23 +130,29 @@ class FlatRunner:
         cls = self.classify(report)
         if not cls.get("cancer_excision_report"):
             return {"cancer_excision_report": False,
-                    "cancer_category": None, "cancer_data": {}}
+                    "cancer_category": None, "cancer_data": {},
+                    "_skip_reason": "not_cancer"}
         organ = cls.get("cancer_category")
         if (organ in {"others", None}
                 or organ not in CANCER_CATEGORIES
                 or not (SCHEMAS_DATA / f"{organ}.json").exists()):
             return {"cancer_excision_report": True,
-                    "cancer_category": organ, "cancer_data": {}}
+                    "cancer_category": organ, "cancer_data": {},
+                    "_skip_reason": "unknown_organ"}
         raw = self.extract(report, organ)
-        renested = renest_cancer_data(raw)
-        return {
+        renested, renest_errors = _renest_with_errors(raw)
+        out = {
             "cancer_excision_report": True,
             "cancer_category": organ,
             "cancer_category_others_description":
                 cls.get("cancer_category_others_description"),
             "cancer_data": renested,
             "_flat_raw": raw,
+            "_downstream_called": True,
         }
+        if renest_errors:
+            out["_renest_errors"] = renest_errors
+        return out
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -161,6 +190,9 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"OK={summary.n_ok} ERR={summary.n_pipeline_error} "
           f"CACHED={summary.n_cached} N={summary.n_cases} "
+          f"NOT_CANCER={summary.n_skipped_not_cancer} "
+          f"UNKNOWN_ORGAN={summary.n_skipped_unknown_organ} "
+          f"DOWNSTREAM={summary.n_downstream_called} "
           f"WALL={summary.wall_time_s:.1f}s")
     print(f"run dir: {paths.run_dir(run_name)}")
 

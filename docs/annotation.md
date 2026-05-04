@@ -14,7 +14,7 @@ The flow is **GPT-OSS pre-annotates → doctor corrects in app → save as final
 | `registrar-annotate-workspace` | `app_canonical.py` | `<repo>/workspace/` | Live patient data (gitignored) |
 | `registrar-annotate-dummy` | `app_canonical.py` | `<repo>/dummy/` | Public skeleton / demo / smoke test |
 
-The canonical launchers export `REGISTRAR_ANNOTATE_BASE_DIR` before spawning `streamlit run`; setting that env var yourself before calling either command overrides the default.
+The canonical launchers export `REGISTRAR_ANNOTATE_BASE_DIR` before spawning `streamlit run`; setting that env var yourself before calling either command overrides the default. Set it to `<repo>/workspace_obfustrated/` to point the annotator UI at the obfuscator-produced synthetic workspace for PHI-free debugging — see [obfuscation.md](obfuscation.md).
 
 ## Canonical dataset layout (`registrar-annotate-workspace` / `-dummy`)
 

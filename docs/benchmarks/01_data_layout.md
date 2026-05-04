@@ -4,6 +4,11 @@ Every method (rule, BERT, LLM) reads inputs from the same place and writes outpu
 
 ## Input layout (`{folder}/data/{dataset}/`)
 
+`{folder}` is one of `dummy`, `workspace`, `workspace_obfustrated`, or an
+absolute path. The first three are sibling directories at the repo root that
+serve different purposes (real PHI / small unit-test fixture / real-shape
+synthetic-from-real for debugging — see [../obfuscation.md](../obfuscation.md)).
+
 ```
 {folder}/data/{dataset}/
 ├── reports/{organ_n}/{case_id}.txt           Pathology report text, one file per case

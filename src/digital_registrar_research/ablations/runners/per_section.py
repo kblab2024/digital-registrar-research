@@ -21,11 +21,12 @@ import logging
 
 import dspy
 
+from ...benchmarks.organs import organ_n_to_name
 from ...util.predictiondump import dump_prediction_plain
 from ..signatures.per_section import get_section_signature, list_section_fields
+from ..utils.organ_classifier import classify_organ_from_text
 from ..utils.section_splitter import SECTION_NAMES, split_report
 from . import _base
-from .no_router import _organ_from_index
 
 CELL_ID = "per_section"
 
@@ -52,6 +53,16 @@ class PerSectionPipeline(dspy.Module):
             "_per_section_used": [],
         }
         sections = split_report(report)
+        # Detect silent degradation: section splitter regex collapses to a
+        # single ``dx`` section when headers are non-canonical.
+        non_empty = [s for s in SECTION_NAMES
+                     if (sections.get(s, "") or "").strip()]
+        if len(non_empty) <= 1:
+            logger.warning(
+                "[%s] section split degraded: only %d non-empty section(s) "
+                "found (%s) — per_section will collapse to monolithic "
+                "extraction", fname, len(non_empty), non_empty)
+            out["_section_split_degraded"] = True
         merged: dict = {}
         for section in SECTION_NAMES:
             slice_text = sections.get(section, "").strip()
@@ -72,6 +83,7 @@ class PerSectionPipeline(dspy.Module):
                                organ, section, fname, e)
                 out.setdefault("_per_section_errors", {})[section] = str(e)
         out["cancer_data"] = merged
+        out["_downstream_called"] = True
         return out
 
 
@@ -93,15 +105,27 @@ def run(args: argparse.Namespace) -> int:
                 [o[0] for o in organs])
 
     pipe = PerSectionPipeline()
+    dataset = args.dataset
 
     def _predict(report_text: str, organ_n: str, case_id: str) -> dict:
-        organ = _organ_from_index(organ_n)
+        organ = classify_organ_from_text(
+            report_text, dataset=dataset, fallback_organ_n=organ_n)
+        folder_organ = organ_n_to_name(dataset, organ_n)
         if organ is None:
-            return {"cancer_excision_report": True, "cancer_category": None,
-                    "cancer_data": {},
-                    "_error": f"cannot infer organ from organ_n={organ_n!r}"}
-        return pipe(report=report_text, organ=organ,
-                    logger=logger, fname=case_id)
+            raise RuntimeError(
+                f"cannot infer organ for case={case_id} organ_n={organ_n!r}: "
+                f"no rule-based match and no dataset fallback")
+        if folder_organ and folder_organ != organ:
+            logger.warning(
+                "[%s] organ-folder mismatch: text says %r, folder %r maps to %r",
+                case_id, organ, organ_n, folder_organ)
+        payload = pipe(report=report_text, organ=organ,
+                       logger=logger, fname=case_id)
+        payload["_organ_n_folder"] = organ_n
+        payload["_folder_organ"] = folder_organ
+        if folder_organ and folder_organ != organ:
+            payload["_organ_folder_mismatch"] = True
+        return payload
 
     summary = _base.run_loop(
         paths, organs, run_name, model_alias=args.model,
@@ -114,6 +138,7 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"OK={summary.n_ok} ERR={summary.n_pipeline_error} "
           f"CACHED={summary.n_cached} N={summary.n_cases} "
+          f"DOWNSTREAM={summary.n_downstream_called} "
           f"WALL={summary.wall_time_s:.1f}s")
     print(f"run dir: {paths.run_dir(run_name)}")
 

@@ -105,6 +105,11 @@ def main(argv: list[str] | None = None) -> int:
             args.subcommand, args._unavailable,
         )
         return 2
+    # Resolve --root/--out from --obfustrated when not explicitly set.
+    # Only applies to subcommands that called add_common_args (which sets _subcommand).
+    if hasattr(args, "_subcommand") and hasattr(args, "obfustrated"):
+        from scripts.eval._common.args import apply_obfustrated_defaults
+        apply_obfustrated_defaults(args)
     handler = getattr(args, "_handler", None)
     if handler is None:
         parser.error(f"subcommand {args.subcommand!r} did not register a handler")

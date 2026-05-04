@@ -97,7 +97,7 @@ python scripts/baselines/eval_rule_bert_llm.py \
 
 ## Conventions used throughout
 
-- **`{folder}`** in commands means `dummy` (synthetic data), `workspace` (live data on this box), or any absolute path. Resolved via `scripts/_config_loader.py:resolve_folder`. Default is `workspace`.
+- **`{folder}`** in commands means `dummy` (synthetic data), `workspace` (live data on this box), `workspace_obfustrated` / `obfustrated` (schema-conformant synthetic copy of `workspace/` for PHI-free debugging — see [../obfuscation.md](../obfuscation.md)), or any absolute path. Resolved via `scripts/_config_loader.py:resolve_folder`. Default is `workspace`.
 - **`{dataset}`** is `cmuh` or `tcga`.
 - **`{organ_n}`** is the 1-based numeric organ index (1=breast, 2=colorectal, 3=esophagus, 4=liver, 5=stomach, 6=lung, 7=prostate, 8=pancreas, 9=thyroid, 10=cervix). Defined in `scripts/eval/_common/stratify.py`.
 - **`{case_id}`** is the corpus-prefixed report id, e.g. `cmuh1_17` (cmuh dataset, organ index 1, case 17).
