@@ -2,8 +2,8 @@
 ClinicalBERT multi-head classifier baseline.
 
 One shared Bio_ClinicalBERT encoder + one linear head per categorical
-(`Literal[...]`) field. Trained on the 100-case train split, evaluated
-on the 51-case test split.
+(`Literal[...]`) field. Trained on the pooled cmuh.train + tcga.train
+split, evaluated per-dataset (cmuh.test, tcga.test).
 
 Why this design
 ---------------
@@ -11,6 +11,14 @@ ClinicalBERT (Alsentzer et al., 2019) is encoder-only and cannot generate
 structured outputs. We therefore reduce every categorical field to a
 classification task over the `[CLS]` pooled embedding. Nullable fields
 use an extra "null" class so the model can say "absent / not mentioned".
+
+Training across organs is pooled because the annotated pool is modest;
+per-organ fine-tuning would severely undertrain a 110M-parameter encoder.
+The cross-corpus contract is **train on full CMUH, predict on full TCGA**:
+disjointness is guaranteed by the dataset boundary, enforced at predict
+time by a check that the predict datasets do not overlap the checkpoint's
+training datasets. Evaluation stays per-dataset so per-corpus accuracy
+stays visible.
 
 Scope covered
 -------------
@@ -26,9 +34,13 @@ architectural-scope argument):
 - Free-text fields (description, station_name, etc.).
 
 Usage:
-    python baselines/clinicalbert_cls.py --phase train
-    python baselines/clinicalbert_cls.py --phase predict \\
-        --ckpt ckpts/clinicalbert_cls.pt --out ../results/clinicalbert_cls
+    # Default cross-corpus train (CMUH only), 5-organ scope, dummy data:
+    python -m digital_registrar_research.benchmarks.baselines.clinicalbert_cls \
+        --phase train --data-root dummy
+
+    # Predict on TCGA (held out from CMUH training):
+    python -m digital_registrar_research.benchmarks.baselines.clinicalbert_cls \
+        --phase predict --data-root dummy --dataset tcga
 """
 from __future__ import annotations
 
@@ -42,36 +54,24 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
-from ...paths import SPLITS_JSON
-
-# Reuse scope definitions from the eval module.
+from ...paths import BENCHMARKS_RESULTS
+from .. import organs as _organs
 from ..eval.scope import (
-    CANCER_CATEGORIES,  # list[str] — top-level cancer_category options
-    CATEGORICAL_FIELDS,  # dict[field_name, list[str]] — option lists
-    get_field_value,  # helper to read a field out of a gold annotation
+    CANCER_CATEGORIES,
+    CATEGORICAL_FIELDS,
+    get_field_value,
 )
+from ._data import load_cases, per_dataset_counts
 
 MODEL_ID = "emilyalsentzer/Bio_ClinicalBERT"
 MAX_LEN = 512
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-SPLITS_PATH = SPLITS_JSON
-
-# Cases counted as "included" in the study scope: true cancer excision
-# reports whose top-level cancer_category is one of the implemented organs.
-# Everything else ("others", null, non-excision) has empty cancer_data and
-# provides no signal for per-field classification heads.
-INCLUDED_CATEGORIES = {
-    "breast", "lung", "colorectal", "prostate", "esophagus",
-    "pancreas", "thyroid", "cervix", "liver", "stomach",
-}
-
-
-def is_included(annotation: dict) -> bool:
-    return (
-        bool(annotation.get("cancer_excision_report"))
-        and annotation.get("cancer_category") in INCLUDED_CATEGORIES
-    )
+# Cross-corpus baseline scope: the 5 organs present in BOTH TCGA and CMUH
+# (= TCGA's full set, since TCGA's organ list is a subset of CMUH's).
+# Configured in configs/organ_code.yaml; do not duplicate the literal here.
+DEFAULT_ORGANS = list(_organs.common_organs("cmuh", "tcga"))
+DEFAULT_DATASETS = list(_organs.all_datasets())
 
 
 # --- Dataset ------------------------------------------------------------------
@@ -99,7 +99,6 @@ class PathologyCases(Dataset):
         labels: dict[str, int] = {}
         for field, idx_map in self.field_to_idx.items():
             val = get_field_value(gold, field)
-            # 'null' bucket captures absent fields consistently.
             key = "null" if val is None else str(val).lower()
             labels[field] = idx_map.get(key, idx_map.get("null", 0))
 
@@ -141,10 +140,9 @@ class MultiHeadClassifier(nn.Module):
         return {f: head(h) for f, head in self.heads.items()}
 
 
-# --- Train / predict ----------------------------------------------------------
+# --- Vocab / loaders ----------------------------------------------------------
 
 def build_field_vocab() -> tuple[dict[str, dict[str, int]], dict[str, int]]:
-    """field_to_idx[field][value] = class_index,  field_cardinalities[field] = N"""
     field_to_idx: dict[str, dict[str, int]] = {}
     for field, options in {**CATEGORICAL_FIELDS,
                             "cancer_category": CANCER_CATEGORIES}.items():
@@ -155,20 +153,11 @@ def build_field_vocab() -> tuple[dict[str, dict[str, int]], dict[str, int]]:
     return field_to_idx, card
 
 
-def load_cases(split_name: str, included_only: bool = False) -> list[dict]:
-    with SPLITS_PATH.open(encoding="utf-8") as f:
-        split = json.load(f)
-    cases = split[split_name]
-    if not included_only:
-        return cases
-    kept = []
-    for c in cases:
-        with open(c["annotation_path"], encoding="utf-8") as f:
-            ann = json.load(f)
-        if is_included(ann):
-            kept.append(c)
-    return kept
+def parse_csv(s: str) -> list[str]:
+    return [x.strip() for x in s.split(",") if x.strip()]
 
+
+# --- Train / predict ----------------------------------------------------------
 
 def train(args) -> None:
     field_to_idx, card = build_field_vocab()
@@ -177,9 +166,23 @@ def train(args) -> None:
     opt = torch.optim.AdamW(model.parameters(), lr=2e-5)
     loss_fn = nn.CrossEntropyLoss()
 
-    cases = load_cases("train", included_only=args.included_only)
-    print(f"Training on {len(cases)} cases"
-          f"{' (included-only)' if args.included_only else ''}")
+    organs = set(parse_csv(args.organs))
+    datasets = parse_csv(args.datasets)
+
+    cases = load_cases(
+        datasets=datasets,
+        root=Path(args.data_root),
+        organs=organs,
+        included_only=args.included_only,
+    )
+    counts = per_dataset_counts(cases)
+    pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
+    print(f"Training on {len(cases)} cases ({pretty})"
+          f"{' [included-only]' if args.included_only else ''}"
+          f"  organs={sorted(organs)}")
+    if not cases:
+        raise SystemExit("no training cases — check --data-root, --datasets, --organs")
+
     train_loader = DataLoader(
         PathologyCases(cases, tok, field_to_idx),
         batch_size=4, shuffle=True, collate_fn=collate,
@@ -202,14 +205,17 @@ def train(args) -> None:
             total += loss.item()
         print(f"epoch {epoch + 1}: loss={total / len(train_loader):.4f}")
 
-    ckpt_dir = Path(args.ckpt).parent
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_path = Path(args.ckpt)
+    ckpt_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"state": model.state_dict(),
                 "field_to_idx": field_to_idx,
                 "card": card,
                 "included_only": args.included_only,
-                "n_train_cases": len(cases)}, args.ckpt)
-    print(f"Saved checkpoint to {args.ckpt}")
+                "organs": sorted(organs),
+                "datasets": datasets,
+                "n_train_cases": len(cases),
+                "per_dataset_counts": counts}, ckpt_path)
+    print(f"Saved checkpoint to {ckpt_path}")
 
 
 def predict(args) -> None:
@@ -223,10 +229,43 @@ def predict(args) -> None:
     model.load_state_dict(ckpt["state"])
     model.eval()
 
-    out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    organs = set(parse_csv(args.organs))
+    if args.dataset == "both":
+        datasets = parse_csv(args.datasets)
+    else:
+        datasets = [args.dataset]
 
-    for case in load_cases("test"):
+    # Leakage guard: refuse to predict on a dataset that was in the
+    # checkpoint's training set. The cross-corpus baseline relies on
+    # train and predict corpora being disjoint (CMUH-train, TCGA-test).
+    train_datasets = set(ckpt.get("datasets") or [])
+    if not train_datasets:
+        print("[warn] checkpoint lacks 'datasets' metadata — leakage "
+              "guard disabled. Retrain with the current train_bert.py.")
+    else:
+        overlap = train_datasets & set(datasets)
+        if overlap:
+            raise SystemExit(
+                f"refusing to predict: dataset(s) {sorted(overlap)} were "
+                f"in the checkpoint's training set "
+                f"({sorted(train_datasets)}). Cross-corpus baseline "
+                f"predicts on datasets disjoint from training."
+            )
+
+    out_root = Path(args.out)
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    cases = load_cases(
+        datasets=datasets,
+        root=Path(args.data_root),
+        organs=organs,
+    )
+    counts = per_dataset_counts(cases)
+    pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
+    print(f"Predicting on {len(cases)} cases ({pretty})  "
+          f"organs={sorted(organs)}")
+
+    for case in tqdm(cases, desc="predict"):
         report = Path(case["report_path"]).read_text(encoding="utf-8")
         enc = tok(report, max_length=MAX_LEN, padding="max_length",
                   truncation=True, return_tensors="pt").to(DEVICE)
@@ -235,7 +274,6 @@ def predict(args) -> None:
         preds = {f: idx_to_field[f][logit.argmax(dim=-1).item()]
                  for f, logit in logits.items()}
 
-        # Shape output like the gold schema.
         cancer_category = preds.pop("cancer_category", None)
         if cancer_category == "null":
             cancer_category = None
@@ -248,7 +286,13 @@ def predict(args) -> None:
             "cancer_category_others_description": None,
             "cancer_data": cancer_data,
         }
-        with (out_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
+
+        # Canonical layout: <out>/<organ_n>/<case_id>.json. The caller
+        # (scripts/baselines/run_bert.py) sets <out> to
+        # {folder}/results/predictions/{dataset}/clinicalbert/cls/.
+        organ_dir = out_root / case["organ_n"]
+        organ_dir.mkdir(parents=True, exist_ok=True)
+        with (organ_dir / f"{case['id']}.json").open("w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 
 
@@ -257,13 +301,22 @@ def main() -> None:
     ap.add_argument("--phase", choices=["train", "predict"], required=True)
     ap.add_argument("--epochs", type=int, default=5)
     ap.add_argument("--ckpt", default="ckpts/clinicalbert_cls.pt")
-    ap.add_argument("--out", default="../results/clinicalbert_cls")
+    ap.add_argument("--out", default=str(BENCHMARKS_RESULTS / "clinicalbert_cls"),
+                    help="Output dir; per-organ subdirs are created under it.")
+    ap.add_argument("--data-root", default="dummy",
+                    help="Root containing data/<dataset>/ subtrees (default: dummy).")
+    ap.add_argument("--organs", default=",".join(DEFAULT_ORGANS),
+                    help="CSV of cancer_category values to include.")
+    ap.add_argument("--datasets", default=",".join(DEFAULT_DATASETS),
+                    help="CSV of dataset names. Train pools all of them; predict "
+                         "uses these unless --dataset overrides.")
+    ap.add_argument("--dataset", default="both",
+                    choices=["cmuh", "tcga", "both"],
+                    help="Predict-time dataset selector (default: both). 'both' uses --datasets.")
     ap.add_argument(
         "--included-only", action="store_true",
-        help="Train only on cases where cancer_excision_report is True "
-             "and cancer_category is one of the implemented organs "
-             "(drops 'others' / null / non-excision cases that have "
-             "empty cancer_data).",
+        help="Drop cases where cancer_excision_report is False (no organ-specific "
+             "fields to learn from).",
     )
     args = ap.parse_args()
 

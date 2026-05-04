@@ -39,9 +39,14 @@ Pairwise headline
         For cases where `_nhc` != `_kpc`, tallies which side `_gold`
         matches. Chi-square test for asymmetry.
 
-Outputs consume the same long-form schema as `aggregate_to_csv`:
+Outputs consume the same long-form schema as `aggregate_cases_to_df`:
 columns include `organ, section, field, field_type, n, stat_name,
 estimate, ci_lo, ci_hi, observed_agreement, n_categories`.
+
+Field-type taxonomy: ``classify_field()`` below maps each (field,
+organ) pair to one of binary | ordinal | nominal | continuous |
+nested_list, drawing on ``digital_registrar_research.benchmarks.eval.scope``
+for the canonical organ-aware groupings.
 """
 from __future__ import annotations
 
@@ -856,7 +861,12 @@ def whole_report_stats(
                 else:
                     units.append([normalize(va), normalize(vb)])
         if level == "ordinal":
-            distinct = sorted({v for u in units for v in u if v is not None})
+            # Some ordinal fields mix int and str values across units;
+            # sorting with a string key keeps the comparison total.
+            distinct = sorted(
+                {v for u in units for v in u if v is not None},
+                key=lambda x: ("" if x is None else str(x)),
+            )
             alpha = krippendorff_alpha(units, level="ordinal",
                                        value_order=distinct)
         else:

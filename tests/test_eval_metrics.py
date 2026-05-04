@@ -3,7 +3,7 @@ from digital_registrar_research.benchmarks.eval import metrics
 
 
 def test_metrics_module_exposes_aggregate_and_summary():
-    assert hasattr(metrics, "aggregate_to_csv")
+    assert hasattr(metrics, "aggregate_cases_to_df")
     assert hasattr(metrics, "summary_table")
 
 

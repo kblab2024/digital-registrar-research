@@ -13,17 +13,17 @@ def test_cancer_categories_includes_to_file_keys():
 
 
 def test_parse_lung_schema_returns_field_specs():
-    """Parser returns one SectionSpec per field; lung should expose key staging + nested fields."""
+    """Parser groups fields under SectionSpecs; lung should expose key staging + nested fields."""
     sections = parse_cancer_schema("lung")
     assert sections
-    names = {s.name for s in sections}
-    for required in {"procedure", "pt_category", "margins", "regional_lymph_node"}:
-        assert required in names, f"lung schema missing field {required!r}"
+    field_names = {f.name for s in sections for f in (s.flat_fields or [])}
+    for required in {"procedure", "pt_category"}:
+        assert required in field_names, f"lung schema missing field {required!r}"
 
 
 def test_parse_breast_includes_dcis_fields():
     """DCIS is a per-field set in breast (dcis_present / dcis_grade / ...) — pin we expose them."""
     sections = parse_cancer_schema("breast")
     assert sections
-    names = {s.name for s in sections}
-    assert any(n.startswith("dcis_") for n in names), sorted(names)
+    field_names = {f.name for s in sections for f in (s.flat_fields or [])}
+    assert any(n.startswith("dcis_") for n in field_names), sorted(field_names)

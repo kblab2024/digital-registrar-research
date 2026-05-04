@@ -60,24 +60,49 @@ def flatten_schema_for_prompt(schema: dict) -> dict:
     """Return a schema describing the flat cancer_data dict the parent
     pipeline emits at runtime.
 
-    The input schema has shape:
-        { properties: { BreastCancerNonnested: {properties: {...fields...}},
-                        BreastCancerStaging:   {properties: {...}},
-                        ... } }
+    Two input shapes are supported:
 
-    The runtime output has shape:
-        { ...fields_from_nonnested..., ...fields_from_staging..., ... }
-    (i.e. `.update()`-merged).
+    1. Already-flat (current canonical organ schemas under
+       ``schemas/data/{organ}.json``)::
+
+           { properties: { field_name: <field_schema>, ... } }
+
+       Returned as-is (with ``additionalProperties=False`` set).
+
+    2. Nested-by-subsection (legacy)::
+
+           { properties: { BreastCancerNonnested: {properties: {...}},
+                           BreastCancerStaging:   {properties: {...}},
+                           ... } }
+
+       Subsection groups are merged into one flat properties dict
+       (first-wins, matching ``CancerPipeline.forward``'s
+       ``.update()`` semantics).
     """
+    top_props = schema.get("properties", {})
+    # Detect already-flat: at least one property whose value lacks a
+    # nested ``properties`` key (i.e. is a field spec, not a subsection
+    # group). Field specs use ``anyOf`` / ``type`` / ``enum``.
+    already_flat = any(
+        isinstance(v, dict) and "properties" not in v
+        for v in top_props.values()
+    )
+    if already_flat:
+        return {
+            "type": "object",
+            "title": schema.get("title", "cancer_data"),
+            "properties": dict(top_props),
+            "$defs": schema.get("$defs", {}),
+            "additionalProperties": False,
+        }
+
     merged_props: dict = {}
-    subsection_props = schema.get("properties", {})
-    for _subsection_name, subsection_schema in subsection_props.items():
+    for _subsection_name, subsection_schema in top_props.items():
         if not isinstance(subsection_schema, dict):
             continue
         fields = subsection_schema.get("properties", {})
         for field_name, field_schema in fields.items():
             if field_name in merged_props:
-                # First-wins, matching CancerPipeline.forward semantics.
                 continue
             merged_props[field_name] = field_schema
 
@@ -85,6 +110,7 @@ def flatten_schema_for_prompt(schema: dict) -> dict:
         "type": "object",
         "title": schema.get("title", "cancer_data"),
         "properties": merged_props,
+        "$defs": schema.get("$defs", {}),
         "additionalProperties": False,
     }
 
@@ -98,6 +124,50 @@ def describe_field_list(flat_schema: dict) -> str:
         desc = spec.get("description", "")
         lines.append(f"  - {name} ({type_desc}): {desc}")
     return "\n".join(lines)
+
+
+def _enum_values(spec: dict) -> list:
+    """Return the inline enum value list for a field spec, recursing
+    through ``anyOf`` arms (e.g. ``Literal[...] | None``). Empty list if
+    no enum is found."""
+    if "enum" in spec:
+        return list(spec["enum"])
+    for arm in spec.get("anyOf", []):
+        vals = _enum_values(arm)
+        if vals:
+            return vals
+    if spec.get("type") == "array":
+        return _enum_values(spec.get("items", {}))
+    return []
+
+
+def describe_field_list_strict(flat_schema: dict) -> str:
+    """Like :func:`describe_field_list` but renders one block per field
+    so the model has more guidance: a name + type, then the description
+    on its own line, then (for enum-typed fields) an explicit
+    ``Allowed:`` line listing every permitted value. Pushes the model
+    harder to comply with the schema instead of inventing values."""
+    blocks: list[str] = []
+    for name, spec in flat_schema.get("properties", {}).items():
+        type_desc = _spec_type_label(spec)
+        desc = spec.get("description", "")
+        block = [f"- {name} ({type_desc}):"]
+        if desc:
+            block.append(f"    {desc}")
+        enum_vals = _enum_values(spec)
+        if enum_vals:
+            rendered = ", ".join(json.dumps(v) for v in enum_vals)
+            block.append(f"    Allowed: [{rendered}] or null")
+        blocks.append("\n".join(block))
+    return "\n".join(blocks)
+
+
+def describe_skeleton(flat_schema: dict) -> str:
+    """Return a literal JSON skeleton (every field set to ``null``) so
+    the model can fill in the blanks rather than synthesise the shape
+    from scratch."""
+    skeleton = {name: None for name in flat_schema.get("properties", {})}
+    return json.dumps(skeleton, indent=2, ensure_ascii=False)
 
 
 def _spec_type_label(spec: dict) -> str:

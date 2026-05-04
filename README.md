@@ -27,7 +27,7 @@ The core install (no extras) gives you the DSPy extraction pipeline plus the can
 After cloning, install the local pre-commit hook so lint errors are caught before they hit CI:
 
 ```bash
-bash scripts/install_git_hooks.sh
+bash scripts/repo/install_git_hooks.sh
 ```
 
 ## What's in the box
@@ -49,7 +49,7 @@ Data and results use a flat, convention-driven layout covering
 `data/{dataset}/reports|preannotation|annotations/` and
 `results/predictions/{dataset}/{llm,clinicalbert,rule_based}/...` —
 see [docs/data.md](docs/data.md) for the full tree, and
-[scripts/gen_dummy_skeleton.py](scripts/gen_dummy_skeleton.py) to
+[scripts/data/gen_dummy_skeleton.py](scripts/data/gen_dummy_skeleton.py) to
 generate a runnable dummy under `dummy/`.
 
 ## Console scripts
@@ -59,7 +59,6 @@ registrar-pipeline   --input data/tcga_20251117/dataset/tcga1     # batch extrac
 registrar-annotate                                                # launches Streamlit UI
 registrar-benchmark                                               # aggregates baseline comparisons
 registrar-ablate                                                  # runs ablation grid
-registrar-split                                                   # regenerates train/test split
 registrar-schemas                                                 # regenerates JSON from Pydantic (use --check in CI)
 ```
 
@@ -74,6 +73,25 @@ registrar-schemas                                                 # regenerates 
 - [docs/data.md](docs/data.md) — datasets, layout, and naming conventions
 - [docs/experiment_protocol.md](docs/experiment_protocol.md) — the 2026-04 experiment cross-product, evaluation questions, and invariants
 - [docs/branching_strategy.md](docs/branching_strategy.md) — the 12-branch working model (testing / refactor / experiment state)
+- [docs/eval/index.md](docs/eval/index.md) — evaluation pipeline (paper-grade metric explanations + citations)
+
+## Evaluation pipeline
+
+The `scripts/eval/` tree exposes a unified subcommand CLI for all evaluation work:
+
+```bash
+python -m scripts.eval.cli non_nested    --root dummy --dataset cmuh --model gpt_oss_20b --annotator gold --out <out>
+python -m scripts.eval.cli nested        --root dummy --dataset cmuh --model gpt_oss_20b --annotator gold --field regional_lymph_node --out <out>
+python -m scripts.eval.cli iaa           --root dummy --dataset cmuh --annotators gold nhc_with_preann nhc_without_preann kpc_with_preann kpc_without_preann --out <out>
+python -m scripts.eval.cli completeness  --root dummy --dataset cmuh --methods llm:gpt_oss_20b clinicalbert:v2_finetuned rule_based: --annotator gold --out <out>
+python -m scripts.eval.cli diagnostics   --non-nested-out <...> --iaa-out <...> --out <out>
+python -m scripts.eval.cli cross_dataset --left <cmuh_out> --right <tcga_out> --out <out>
+python -m scripts.eval.cli headline      --non-nested-out <...> --iaa-out <...> --out <out>
+```
+
+All eval subcommands also accept `--obfustrated` as an alternative to `--root` — points reads/writes at the schema-conformant synthetic copy `workspace_obfustrated/` produced by `python scripts/obfuscate_workspace.py`. Useful for debugging eval logic without touching PHI; see [docs/obfuscation.md](docs/obfuscation.md). The existing `--root dummy` / `--root workspace` invocations are unchanged.
+
+See [docs/eval/recipes.md](docs/eval/recipes.md) for the full recipe book and [docs/eval/methods_citations.md](docs/eval/methods_citations.md) for paper-ready statistical-method citations. Legacy scripts are archived under `scripts/legacy/` for one transition release.
 
 ## Citation
 
