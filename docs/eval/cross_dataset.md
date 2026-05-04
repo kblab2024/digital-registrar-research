@@ -1,6 +1,6 @@
 # Cross-dataset generalization
 
-Direct response to **Reviewer 1.e** ("external validation is limited in scope, as only a subset of fields and datasets are evaluated"). The `cross_dataset` subcommand compares per-field accuracy and gold-class distributions between two datasets (typically CMUH vs TCGA) and surfaces the external-validity story.
+A model that scores well on one institution's reports does not necessarily transfer to another. The `cross_dataset` subcommand compares per-field accuracy and gold-class distributions between two datasets (typically CMUH vs TCGA) and surfaces the external-validity story — separating "the model is genuinely worse here" from "the data distribution is different here."
 
 ## ELI5
 

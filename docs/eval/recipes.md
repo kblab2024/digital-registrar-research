@@ -190,7 +190,7 @@ python -m digital_registrar_research.ablations.eval.run_ablations \
 
 Without `--results-root` it defaults to `workspace/results/ablations/` — the canonical location for real-sweep outputs.
 
-## Reviewer-rebuttal diagnostics
+## Error-source diagnostics
 
 After running `non_nested` and `iaa`:
 

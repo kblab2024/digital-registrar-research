@@ -86,7 +86,7 @@ Per (field, organ), the confusion matrix is written to `non_nested/confusion/<fi
 
 Top-N most-frequent confusion pairs per (field, organ), with a curated `is_semantic_neighbor` flag for known clinically-equivalent pairs (anatomic vs pathologic stage, t1 vs t1a substages, m0 vs mx, sentinel vs axillary level I, etc.). See [confusion_pairs.md](confusion_pairs.md) for the curated list.
 
-`accuracy_collapsing_neighbors` re-computes accuracy treating curated neighbor errors as correct. Useful for the writeup paragraph addressing **R2.1** (anatomic vs pathologic staging confusion).
+`accuracy_collapsing_neighbors` re-computes accuracy treating curated neighbor errors as correct. Useful for the writeup paragraph that quantifies clinically-equivalent confusions (anatomic vs pathologic staging, T-substages within the same major stage).
 
 **Output:** `non_nested/confusion_pairs.csv`, `non_nested/accuracy_collapsing_neighbors.csv`.
 
@@ -103,7 +103,7 @@ For ordinal fields, an "off-by-one" error is materially less bad than "off-by-th
 
 ## Multi-primary subgroup column
 
-Every metric is also broken down by `subgroup ∈ {single_primary, multi_primary, all}`. Multi-primary detection lives in `digital_registrar_research.benchmarks.eval.multi_primary` (heuristics: `cancer_laterality == "bilateral"`, multi-clock / multi-quadrant strings, multifocal flags, etc.). Tied to **R2.2** (double primary malignancies misidentified by single-primary schemas).
+Every metric is also broken down by `subgroup ∈ {single_primary, multi_primary, all}`. Multi-primary detection lives in `digital_registrar_research.benchmarks.eval.multi_primary` (heuristics: `cancer_laterality == "bilateral"`, multi-clock / multi-quadrant strings, multifocal flags, etc.). Multi-primary cases are clinically distinct and per-organ schemas designed for single-primary disease can systematically misidentify them; reporting per-subgroup accuracy makes this visible instead of hiding it in the aggregate.
 
 `per_field_by_subgroup.csv` reports the same metric set per subgroup so the writeup can cite "in the multi-primary subgroup, accuracy was X with 95% CI [...]".
 

@@ -1,6 +1,6 @@
 # Diagnostics — source-of-error decomposition, difficulty tiers, worst cases
 
-The reviewer-rebuttal narrative. **Reviewer 2.4** flagged that performance is lower on poorly-documented or quantitative fields (surgical technique, tumor percentages) and asked whether this stems from model reasoning or inherent inconsistency in the source reports. Diagnostics answers exactly that question.
+When a model gets a field wrong, the cause matters: a model that misreads a clearly-stated value is fixable by better prompting; a model that "fails" on a field annotators themselves disagree about is bounded by the source reports, not by the model. Diagnostics decomposes errors into model-bound vs report-bound buckets so the actionable signal isn't hidden by an aggregate accuracy number.
 
 ## ELI5
 
@@ -93,6 +93,6 @@ Inputs are pre-computed outputs from the `non_nested` and `iaa` subcommands — 
 
 ## Implementation references
 
-Foundational citations are in [methods_citations.md](methods_citations.md). The diagnostics-specific concepts are not novel: the source-of-error decomposition philosophy follows standard IE evaluation practice (e.g. Sang & De Meulder 2003 on CoNLL annotation difficulty stratification), and difficulty-tier stratification by IAA is the conventional response to reviewer concerns about gold-standard quality.
+Foundational citations are in [methods_citations.md](methods_citations.md). The diagnostics-specific concepts are not novel: the source-of-error decomposition philosophy follows standard IE evaluation practice (e.g. Sang & De Meulder 2003 on CoNLL annotation difficulty stratification), and difficulty-tier stratification by IAA is the standard way to characterise gold-standard quality so that model accuracy can be read against the human ceiling.
 
 - Sang, E. F. T. K., & De Meulder, F. (2003). "Introduction to the CoNLL-2003 Shared Task: Language-Independent Named Entity Recognition." *CoNLL 2003*.

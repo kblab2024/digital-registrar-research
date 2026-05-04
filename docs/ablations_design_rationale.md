@@ -6,8 +6,8 @@ ablation grid is extended.
 
 ## Entanglement caveat — why this isn't a clean factorial
 
-A reviewer's natural framing of the ablation is "what does each
-component contribute?". The honest answer is that the components are
+A natural framing of the ablation is "what does each component
+contribute?". The honest answer is that the components are
 **not orthogonal**:
 
 - **DSPy is itself a prompting framework.** "Removing DSPy"
@@ -27,11 +27,6 @@ choices** (modular-vs-monolithic decomposition, with-vs-without
 ReportJsonize, DSPy-vs-raw-JSON output channel) rather than as a clean
 factorial of independent components. Where one knob necessarily co-varies
 with another we say so explicitly and report both endpoints separately.
-
-This caveat is the rebuttal-paragraph from
-[`workspace/reviewer-response-suggestions.md` §1.7](../workspace/reviewer-response-suggestions.md)
-(gitignored) — it should also appear as a footnote in the manuscript's
-ablation section.
 
 ## Why these three cells?
 
@@ -88,9 +83,10 @@ components stay the same across all cells:
    [`scripts/ablations/run_cell_b.py`](../scripts/ablations/run_cell_b.py)
    adds a supplementary "no jsonize" variant of Cell B for the lesion
    study.
-3. **Test split** — the 51-case stratified test split is loaded from
-   `digital_registrar_research.paths.SPLITS_JSON`. Every cell predicts
-   on the exact same cases.
+3. **Case set** — every cell predicts on the same fixture set under
+   `<folder>/data/<dataset>/`. No train/test split is applied: the
+   dataset is the test set, and the gold annotations under
+   `annotations/gold/` are the reference.
 
 ## Schema source of truth
 
@@ -120,8 +116,7 @@ contribution is **the engineering**, not the model.
 
 ## Future axes (not yet wired into the runners)
 
-The full menu of ablation axes from the reviewer-response suggestions
-doc §1.2 includes:
+The full menu of axes for future expansion includes:
 
 - **Output structuring discipline** — beyond the DSPy-Literal vs raw-
   JSON contrast, integrate constrained decoding (`outlines`,
@@ -129,8 +124,8 @@ doc §1.2 includes:
   baseline (axis B4 / B5).
 - **Prompting strategy** — few-shot demos, `dspy.ChainOfThought`,
   compiled DSPy programs (`BootstrapFewShotWithRandomSearch`) — the
-  axes that actually answer the reviewer's "prompting" question rather
-  than the framework question (axes C2–C5).
+  axes that target prompting strategy independent of the framework
+  question (axes C2–C5).
 - **Schema specificity** — narrow per-organ Literal enums (current) vs
   union-across-organs vs flat schema (axes F1–F3).
 
@@ -138,8 +133,7 @@ Each of these requires a new cell-runner under
 [`src/digital_registrar_research/ablations/runners/`](../src/digital_registrar_research/ablations/runners/);
 [`scripts/ablations/run_grid.py`](../scripts/ablations/run_grid.py)
 already has TODO markers in `CELL_DISPATCH` showing where to register
-them. See [`workspace/reviewer-response-suggestions.md`](../workspace/reviewer-response-suggestions.md)
-(gitignored) for the prioritisation.
+them.
 
 ## Metrics
 
@@ -221,12 +215,13 @@ Before kicking off a real grid:
    [`configs/eval_endpoints.yaml`](../configs/eval_endpoints.yaml).
 3. Lock the decoding seed in the relevant model config; capture it in
    `_run_meta.json` per cell.
-4. Reference the locked endpoint config (with git SHA) in the response
-   letter / paper Methods.
+4. Reference the locked endpoint config (with git SHA) in the paper
+   Methods.
 
-This pre-registration is what reviewer-1's "statistical rigor" concern
-is really asking for. See
-[`workspace/reviewer-response-suggestions.md` §2.3](../workspace/reviewer-response-suggestions.md).
+Pre-registration matters because the eval suite produces hundreds of
+p-values across fields × organs × methods × cells; without locking the
+primary-endpoint set in advance, post-hoc selection of "significant"
+results is statistically unsound.
 
 ## 2026-04 redesign — what changed and why
 

@@ -78,7 +78,7 @@ When citing in the paper:
 Many CSVs include a `subgroup` column with values `single_primary` / `multi_primary` / `all`. Use:
 
 - `subgroup = "all"` for the headline number.
-- `subgroup = "single_primary"` and `subgroup = "multi_primary"` to stratify (R2.2 response).
+- `subgroup = "single_primary"` and `subgroup = "multi_primary"` when stratification matters (multi-primary cases are clinically distinct and tend to have systematically different accuracy).
 
 See [glossary.md](glossary.md).
 
