@@ -11,7 +11,7 @@ def test_tcga_folder_mapping():
     # Per configs/organ_code.yaml — TCGA's five-organ subset.
     assert organ_n_to_name("tcga", "1") == "breast"
     assert organ_n_to_name("tcga", "2") == "colorectal"
-    assert organ_n_to_name("tcga", "3") == "thyroid"
+    assert organ_n_to_name("tcga", "3") == "esophagus"
     assert organ_n_to_name("tcga", "4") == "stomach"
     assert organ_n_to_name("tcga", "5") == "liver"
 
@@ -19,7 +19,7 @@ def test_tcga_folder_mapping():
 def test_cmuh_folder_mapping():
     # Per configs/organ_code.yaml — CMUH's full ten-organ list. Note
     # CMUH and TCGA have *different* numbering: folder 3 is cervix in
-    # CMUH but thyroid in TCGA.
+    # CMUH but esophagus in TCGA.
     assert organ_n_to_name("cmuh", "1") == "pancreas"
     assert organ_n_to_name("cmuh", "2") == "breast"
     assert organ_n_to_name("cmuh", "3") == "cervix"
@@ -41,7 +41,7 @@ def test_organ_name_to_n_inverse():
 
 def test_dataset_organs_ordered_by_folder_number():
     organs = dataset_organs("tcga")
-    assert organs == ["breast", "colorectal", "thyroid", "stomach", "liver"]
+    assert organs == ["breast", "colorectal", "esophagus", "stomach", "liver"]
 
 
 def test_load_organ_code_matches_yaml():

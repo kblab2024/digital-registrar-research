@@ -39,7 +39,7 @@ def test_fallback_to_dataset_lookup():
     # Empty text → no keyword hit. With dataset+folder it falls back to
     # configs/organ_code.yaml.
     assert classify_organ_from_text(
-        "", dataset="tcga", fallback_organ_n="3") == "thyroid"
+        "", dataset="tcga", fallback_organ_n="3") == "esophagus"
     assert classify_organ_from_text(
         "", dataset="cmuh", fallback_organ_n="3") == "cervix"
 
