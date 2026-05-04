@@ -26,11 +26,11 @@ if ([string]::IsNullOrEmpty($Platform)) {
 if ([string]::IsNullOrEmpty($AnnotatorSet)) {
     throw "ANNOTATOR_SET env var must be set (single|multi) by the wrapper."
 }
-if ($Platform -notin @('windows','unix')) {
-    throw "unknown PLATFORM='$Platform' (expected windows|unix)"
+if ($Platform -notin @('windows','unix','macos')) {
+    throw "unknown PLATFORM='$Platform' (expected windows|unix|macos)"
 }
-if ($AnnotatorSet -notin @('single','multi')) {
-    throw "unknown ANNOTATOR_SET='$AnnotatorSet' (expected single|multi)"
+if ($AnnotatorSet -notin @('single','single_kpc','multi')) {
+    throw "unknown ANNOTATOR_SET='$AnnotatorSet' (expected single|single_kpc|multi)"
 }
 
 # ── Pins ──────────────────────────────────────────────────────────────────────
@@ -39,9 +39,13 @@ $PythonShort     = '3.12'
 $PythonTag       = 'cp312'
 $RuntimeReqs     = @('streamlit>=1.35,<2', 'pydantic>=2,<3')
 
-# python-build-standalone pinned release (Linux x86_64 install_only tarball).
-$PbsRelease      = '20241016'
+# python-build-standalone pinned release (install_only tarballs).
+# 20250115 is the release that ships cpython 3.12.8 for both Linux x86_64 and
+# macOS arm64. The project moved from indygreg/ to astral-sh/ — both URLs work
+# (GitHub redirects), but use the canonical org.
+$PbsRelease      = '20250115'
 $PbsLinuxTarball = "cpython-${PythonVersion}+${PbsRelease}-x86_64-unknown-linux-gnu-install_only.tar.gz"
+$PbsMacArmTarball = "cpython-${PythonVersion}+${PbsRelease}-aarch64-apple-darwin-install_only.tar.gz"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 $PkgDir     = Split-Path -Parent $PSCommandPath
@@ -180,12 +184,25 @@ import site
     Invoke-Native $PyHost @pipArgs
 
 } else {
-    # Unix: download python-build-standalone tarball, extract, cross-install manylinux wheels.
-    $pbsUrl  = "https://github.com/indygreg/python-build-standalone/releases/download/${PbsRelease}/${PbsLinuxTarball}"
-    $pbsPath = Join-Path $DlDir $PbsLinuxTarball
+    # Unix / macOS: download a python-build-standalone install_only tarball,
+    # extract it (top-level `python/` directory), then cross-install wheels
+    # for the target platform tag.
+    if ($Platform -eq 'unix') {
+        $pbsTarball  = $PbsLinuxTarball
+        $pipPlatform = 'manylinux2014_x86_64'
+        $wheelLabel  = 'Unix (manylinux)'
+    } else {
+        # macos = Apple Silicon (Mac mini M1/M2/M3+ etc.)
+        $pbsTarball  = $PbsMacArmTarball
+        $pipPlatform = 'macosx_11_0_arm64'
+        $wheelLabel  = 'macOS arm64'
+    }
+
+    $pbsUrl  = "https://github.com/astral-sh/python-build-standalone/releases/download/${PbsRelease}/${pbsTarball}"
+    $pbsPath = Join-Path $DlDir $pbsTarball
 
     if (-not (Test-Path $pbsPath)) {
-        Say "Downloading python-build-standalone $PythonVersion ($PbsRelease)"
+        Say "Downloading python-build-standalone $PythonVersion ($PbsRelease) for $Platform"
         Invoke-Native 'curl.exe' '-fLsS' '--retry' '3' '-o' "$pbsPath.part" $pbsUrl
         Move-Item "$pbsPath.part" $pbsPath
     } else {
@@ -202,12 +219,12 @@ import site
     $SitePackages = Join-Path $PythonDir "lib\python${PythonShort}\site-packages"
     New-Item -ItemType Directory -Path $SitePackages -Force | Out-Null
 
-    Say 'Cross-installing Unix (manylinux) wheels into bundled site-packages'
+    Say "Cross-installing $wheelLabel wheels into bundled site-packages"
     $pipArgs = @(
         '-m', 'pip', 'install',
         '--disable-pip-version-check',
         '--target', $SitePackages,
-        '--platform', 'manylinux2014_x86_64',
+        '--platform', $pipPlatform,
         '--python-version', $PythonShort,
         '--implementation', 'cp',
         '--abi', $PythonTag,
@@ -254,7 +271,8 @@ Invoke-Native $PyHost (Join-Path $PkgDir 'precompute_section_groups.py') `
 
 # ── Write annotators.json baked to the chosen annotator set ──────────────────
 Say "Baking annotators.json ($AnnotatorSet)"
-$annotatorsJson = if ($AnnotatorSet -eq 'single') {
+$annotatorsJson = switch ($AnnotatorSet) {
+    'single' {
 @'
 {
   "annotators": [
@@ -262,7 +280,17 @@ $annotatorsJson = if ($AnnotatorSet -eq 'single') {
   ]
 }
 '@
-} else {
+    }
+    'single_kpc' {
+@'
+{
+  "annotators": [
+    {"name": "Kai-Po Chang", "suffix": "kpc"}
+  ]
+}
+'@
+    }
+    'multi' {
 @'
 {
   "annotators": [
@@ -271,6 +299,7 @@ $annotatorsJson = if ($AnnotatorSet -eq 'single') {
   ]
 }
 '@
+    }
 }
 # Write UTF-8 *without* BOM. PS 5.1's `Set-Content -Encoding UTF8` emits a BOM,
 # which makes Python's json.loads() raise JSONDecodeError — the runtime loader
@@ -306,8 +335,11 @@ if ($Platform -eq 'windows') {
     Copy-Item (Join-Path $PkgDir "run_workspace_locked_${AnnotatorSet}.bat") (Join-Path $BundleDir 'run.bat')
     Copy-Item (Join-Path $PkgDir "run_dummy_unlocked_${AnnotatorSet}.bat")   (Join-Path $BundleDir 'run_demo.bat')
 } else {
-    Copy-Item (Join-Path $PkgDir "run_workspace_locked_${AnnotatorSet}.sh")  (Join-Path $BundleDir 'run.sh')
-    Copy-Item (Join-Path $PkgDir "run_dummy_unlocked_${AnnotatorSet}.sh")    (Join-Path $BundleDir 'run_demo.sh')
+    # macOS launchers also strip the Gatekeeper quarantine bit from the bundled
+    # Python tree on first run; otherwise the unsigned python binary is blocked.
+    $launcherSuffix = if ($Platform -eq 'macos') { '_macos' } else { '' }
+    Copy-Item (Join-Path $PkgDir "run_workspace_locked_${AnnotatorSet}${launcherSuffix}.sh") (Join-Path $BundleDir 'run.sh')
+    Copy-Item (Join-Path $PkgDir "run_dummy_unlocked_${AnnotatorSet}${launcherSuffix}.sh")   (Join-Path $BundleDir 'run_demo.sh')
     # Windows filesystems don't carry POSIX exec bits; tar will add them via --mode below.
 }
 Copy-Item (Join-Path $PkgDir 'README.txt') (Join-Path $BundleDir 'README.txt')
@@ -334,11 +366,28 @@ if ($Platform -eq 'windows') {
     $archivePath = Join-Path $DistDir "$BundleName.tar.gz"
     if (Test-Path $archivePath) { Remove-Item -Force $archivePath }
     Say 'Tarring'
-    Push-Location $BuildDir
-    try {
-        # Mark the launchers executable inside the archive so `./run.sh` works on the target.
-        Invoke-Native 'tar.exe' '--mode=a+rx' '-czf' $archivePath $BundleName
-    } finally { Pop-Location }
+    # Windows' bsdtar doesn't support `--mode=...`, so we use Python's tarfile to
+    # write the archive with explicit POSIX modes: 0755 for directories, .sh
+    # launchers, and the bundled python binary tree (so `./run.sh` works and the
+    # bundled python is executable on the target); 0644 for everything else.
+    $tarScript = @"
+import os, sys, tarfile
+src, dst, name = sys.argv[1], sys.argv[2], sys.argv[3]
+def fix(ti):
+    ti.uid = 0; ti.gid = 0
+    ti.uname = ''; ti.gname = ''
+    needs_exec = (
+        ti.isdir()
+        or ti.name.endswith('.sh')
+        or '/python/bin/' in (ti.name + '/')
+    )
+    ti.mode = 0o755 if needs_exec else 0o644
+    return ti
+os.chdir(src)
+with tarfile.open(dst, 'w:gz') as tf:
+    tf.add(name, recursive=True, filter=fix)
+"@
+    Invoke-Native $PyHost '-c' $tarScript $BuildDir $archivePath $BundleName
 }
 $archiveSize = (Get-Item $archivePath).Length
 $archiveMiB  = "{0:N1} MiB" -f ($archiveSize / 1MB)
@@ -349,6 +398,8 @@ Write-Host ("   archive: {0}" -f $archiveMiB)
 Write-Host ''
 if ($Platform -eq 'windows') {
     Write-Host "Next: copy $archivePath to the Windows machine, unzip, double-click run.bat."
+} elseif ($Platform -eq 'macos') {
+    Write-Host "Next: copy $archivePath to the Mac (Apple Silicon), 'tar -xzf' it, then in Terminal: cd <bundle> && ./run.sh"
 } else {
     Write-Host "Next: copy $archivePath to the Linux machine, tar -xzf it, ./run.sh"
 }
