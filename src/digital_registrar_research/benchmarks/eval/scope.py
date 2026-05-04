@@ -153,6 +153,25 @@ FAIR_SCOPE: list[str] = [
 BREAST_BIOMARKERS: list[str] = ["er", "pr", "her2"]
 
 
+# --- Stat-test exclusions ----------------------------------------------------
+#
+# Fields filtered out before any per-field statistical comparison test
+# (McNemar, paired bootstrap, GLMM, per-field CI). They are matching
+# keys, free-text, or version metadata — they support scoring (e.g.
+# station_name is the bipartite-matching key for regional_lymph_node)
+# but are not themselves comparison endpoints.
+#
+# Diagnostic / coverage tables retain these fields. The filter applies
+# only at the stat-test layer.
+
+STATS_EXCLUDED_FIELDS: frozenset[str] = frozenset({
+    "ajcc_version",      # version metadata
+    "treatment_effect",  # free-text
+    "station_name",      # LN bipartite matching key
+    "description",       # margin free-text Jaccard component
+})
+
+
 # --- Accessors ---------------------------------------------------------------
 
 @cache
@@ -250,6 +269,7 @@ __all__ = [
     "LIST_OF_LITERALS_FIELDS",
     "FAIR_SCOPE",
     "BREAST_BIOMARKERS",
+    "STATS_EXCLUDED_FIELDS",
     "get_allowed_values",
     "get_categorical_fields",
     "get_bool_fields",

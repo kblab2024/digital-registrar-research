@@ -18,9 +18,9 @@ Output files, all under ``--results-root`` (default:
     cell_deltas.csv           per-field deltas vs the configured baseline
     efficiency.csv            mean / median latency, schema-error rate, parse-error rate
 
-Reviewer-grade statistical CSVs (``ablation_paired_deltas.csv`` etc.)
-are written by :mod:`stats` when ``--with-stats`` is on (default for
-non-smoke results-roots).
+Statistical CSVs (``ablation_paired_deltas.csv`` etc.) are written by
+:mod:`stats` when ``--with-stats`` is on (default for non-smoke
+results-roots).
 
 Usage::
 
@@ -136,6 +136,196 @@ def _gold_for(case_id: str, organ_n: str, gold_root: Path) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Case- and field-level status classification
+# ---------------------------------------------------------------------------
+#
+# Mutually-exclusive case_status precedence. Earlier entries win when a
+# case carries multiple sentinels.
+CASE_STATUS_PRECEDENCE: tuple[str, ...] = (
+    "gold_missing",
+    "prediction_unreadable",
+    "pipeline_error",
+    "parse_error",
+    "schema_error",
+    "renest_error",
+    "b2_parse_error",
+    "section_error",
+    "skipped_intentional",
+    "ok",
+)
+
+# Case statuses under which a field can still be graded normally. The
+# others render every field unscoreable_due_to_case_error.
+_GRADABLE_CASE_STATUS: frozenset[str] = frozenset({
+    "ok",
+    "schema_error",
+    "renest_error",
+    "b2_parse_error",
+    "section_error",
+})
+
+
+def _classify_case(pred: dict | None,
+                   pred_unreadable_reason: str | None = None,
+                   gold_missing: bool = False,
+                   ) -> tuple[str, list[str]]:
+    """Resolve a case-level status from runner sentinel keys.
+
+    Reads the runner-emitted sentinels (``_pipeline_error``,
+    ``_parse_error`` / ``_error``, ``_schema_errors``,
+    ``_renest_errors``, ``_b2_parse_errors``, ``_per_section_errors``,
+    ``_skip_reason``) and resolves to a single ``case_status`` plus the
+    full list of truthy flags.
+
+    Args:
+        pred: parsed prediction dict, or None if unreadable.
+        pred_unreadable_reason: short repr of the parse exception, if
+            the prediction file failed to load. Forces
+            ``prediction_unreadable``.
+        gold_missing: whether the matching gold annotation is absent.
+            Forces ``gold_missing``.
+
+    Returns:
+        ``(case_status, flags)`` — ``flags`` is the list of every
+        truthy sentinel observed, in precedence order. Useful for
+        diagnostic columns; the chosen ``case_status`` is the first
+        entry of the precedence list that fired.
+    """
+    flags: list[str] = []
+    if gold_missing:
+        flags.append("gold_missing")
+    if pred_unreadable_reason is not None:
+        flags.append("prediction_unreadable")
+    if isinstance(pred, dict):
+        if pred.get("_pipeline_error"):
+            flags.append("pipeline_error")
+        if pred.get("_parse_error") or pred.get("_error"):
+            flags.append("parse_error")
+        if pred.get("_schema_errors"):
+            flags.append("schema_error")
+        if pred.get("_renest_errors"):
+            flags.append("renest_error")
+        if pred.get("_b2_parse_errors"):
+            flags.append("b2_parse_error")
+        if pred.get("_per_section_errors"):
+            flags.append("section_error")
+        if pred.get("_skip_reason") in ("not_cancer", "unknown_organ"):
+            flags.append("skipped_intentional")
+    if not flags:
+        flags.append("ok")
+    # Precedence resolution.
+    for status in CASE_STATUS_PRECEDENCE:
+        if status in flags:
+            return status, flags
+    return "ok", flags
+
+
+def _classify_field(case_status: str,
+                    gold: dict | None,
+                    pred: dict | None,
+                    field: str,
+                    scored: object,
+                    is_nested: bool = False,
+                    schema_errors: list[str] | None = None,
+                    ) -> tuple[str, str]:
+    """Resolve a field-level status given the case-level outcome and
+    the per-field scoring result from ``score_case`` / ``match_nested_list``.
+
+    Returns ``(field_status, field_error_detail)``. ``field_error_detail``
+    is ≤120 chars and is empty for ``correct`` rows.
+    """
+    if case_status not in _GRADABLE_CASE_STATUS:
+        return "unscoreable_due_to_case_error", ""
+
+    # Gold-presence check. Missing gold field is distinct from gold
+    # being null (which still scores against null).
+    g_value = None
+    if isinstance(gold, dict):
+        if field in gold:
+            g_value = gold.get(field)
+        else:
+            cd = gold.get("cancer_data") or {}
+            if field in cd:
+                g_value = cd.get(field)
+            else:
+                # biomarker_<X> fields live under cancer_data.biomarkers
+                if field.startswith("biomarker_"):
+                    bm = (cd.get("biomarkers") or {})
+                    if field[len("biomarker_"):] not in bm:
+                        return "gold_missing", ""
+                else:
+                    return "gold_missing", ""
+
+    # Nested fields (regional_lymph_node, margins): scored is a float
+    # F1 in (0, 1]. f1==1 → correct; f1==0 with any non-empty side →
+    # treat as wrong_value; in-between → misaligned_list.
+    if is_nested and isinstance(scored, (int, float)):
+        if scored >= 1.0:
+            return "correct", ""
+        if scored <= 0.0:
+            return "wrong_value", ""
+        return "misaligned_list", f"nested_f1={float(scored):.2f}"
+
+    # Scalar / list-of-literals fields.
+    if scored is True:
+        return "correct", ""
+    if scored is False:
+        # Distinguish wrong_type from wrong_value using schema errors
+        # that name this field.
+        detail = ""
+        if schema_errors:
+            for err in schema_errors:
+                if isinstance(err, str) and field in err:
+                    detail = err[:120]
+                    return "wrong_type", detail
+        return "wrong_value", _short_pred_gold(g_value, _pred_value(pred, field))
+    # scored is None: not attempted. Distinguish missing_key vs null_value.
+    if isinstance(pred, dict):
+        if _pred_has_key(pred, field):
+            return "null_value", ""
+        return "missing_key", ""
+    return "missing_key", ""
+
+
+def _pred_has_key(pred: dict, field: str) -> bool:
+    if field in pred:
+        return True
+    cd = pred.get("cancer_data") or {}
+    if field in cd:
+        return True
+    if field.startswith("biomarker_"):
+        bm = (cd.get("biomarkers") or {})
+        return field[len("biomarker_"):] in bm
+    return False
+
+
+def _pred_value(pred: dict | None, field: str):
+    if not isinstance(pred, dict):
+        return None
+    if field in pred:
+        return pred[field]
+    cd = pred.get("cancer_data") or {}
+    if field in cd:
+        return cd[field]
+    if field.startswith("biomarker_"):
+        bm = (cd.get("biomarkers") or {})
+        return bm.get(field[len("biomarker_"):])
+    return None
+
+
+def _short_pred_gold(gold_value, pred_value) -> str:
+    """Format a short ``gold=… pred=…`` description, ≤120 chars."""
+    g = repr(gold_value)
+    p = repr(pred_value)
+    if len(g) > 50:
+        g = g[:47] + "..."
+    if len(p) > 50:
+        p = p[:47] + "..."
+    out = f"gold={g} pred={p}"
+    return out[:120]
+
+
+# ---------------------------------------------------------------------------
 # Long-form scoring
 # ---------------------------------------------------------------------------
 
@@ -158,19 +348,20 @@ def _grade_run(run_dir: Path, gold_root: Path,
         for pred_path in sorted(organ_dir.glob("*.json")):
             case_id = pred_path.stem
             gold = _gold_for(case_id, organ_n, gold_root)
-            if gold is None:
-                for field in FAIR_SCOPE:
-                    rows.append({
-                        "case_id": case_id, "organ": organ_n, "field": field,
-                        "correct": None, "attempted": False,
-                        "cancer_category_mismatch": False,
-                    })
-                continue
+            gold_missing = gold is None
+            pred: dict | object = {}
+            pred_unreadable_reason: str | None = None
             try:
                 with pred_path.open(encoding="utf-8") as f:
                     pred = json.load(f)
-            except Exception:
+            except Exception as exc:
                 pred = {}
+                pred_unreadable_reason = repr(exc)[:200]
+            case_status, case_flags = _classify_case(
+                pred if isinstance(pred, dict) else None,
+                pred_unreadable_reason=pred_unreadable_reason,
+                gold_missing=gold_missing,
+            )
             cc_mismatch = (
                 isinstance(pred, dict)
                 and isinstance(gold, dict)
@@ -182,31 +373,66 @@ def _grade_run(run_dir: Path, gold_root: Path,
                 print(f"[aggregate] cancer_category mismatch: case={case_id} "
                       f"folder={organ_n} gold={gold['cancer_category']!r} "
                       f"pred={pred['cancer_category']!r}")
-            if isinstance(pred, dict) and pred.get("_pipeline_error"):
+            schema_errors = (pred.get("_schema_errors")
+                             if isinstance(pred, dict) else None)
+            flags_str = "|".join(case_flags)
+
+            # When gold is missing OR the case is not gradable, emit
+            # FAIR_SCOPE rows with correct=None / attempted=False and
+            # the appropriate field_status.
+            if gold_missing or case_status not in _GRADABLE_CASE_STATUS:
                 for field in FAIR_SCOPE:
+                    f_status, f_detail = _classify_field(
+                        case_status, gold, pred if isinstance(pred, dict) else None,
+                        field, scored=None, is_nested=False,
+                        schema_errors=schema_errors,
+                    )
                     rows.append({
                         "case_id": case_id, "organ": organ_n, "field": field,
                         "correct": None, "attempted": False,
                         "cancer_category_mismatch": cc_mismatch,
+                        "case_status": case_status,
+                        "case_flags": flags_str,
+                        "field_status": f_status,
+                        "field_error_detail": f_detail,
                     })
                 continue
+
             result = score_case(gold, pred)
             for field in FAIR_SCOPE + [f"biomarker_{b}" for b in BREAST_BIOMARKERS]:
                 if field not in result:
                     continue
                 correct = result[field]
+                f_status, f_detail = _classify_field(
+                    case_status, gold, pred, field, scored=correct,
+                    is_nested=False, schema_errors=schema_errors,
+                )
                 rows.append({
                     "case_id": case_id, "organ": organ_n, "field": field,
                     "correct": (bool(correct) if correct is not None else None),
                     "attempted": correct is not None,
                     "cancer_category_mismatch": cc_mismatch,
+                    "case_status": case_status,
+                    "case_flags": flags_str,
+                    "field_status": f_status,
+                    "field_error_detail": f_detail,
                 })
             for nested_field, f1d in result.get("_nested", {}).items():
+                f1_val = f1d["f1"]
+                f_status, f_detail = _classify_field(
+                    case_status, gold, pred, nested_field,
+                    scored=f1_val, is_nested=True,
+                    schema_errors=schema_errors,
+                )
                 rows.append({
                     "case_id": case_id, "organ": organ_n,
                     "field": nested_field,
-                    "correct": f1d["f1"], "attempted": True,
+                    "correct": f1_val, "attempted": True,
                     "cancer_category_mismatch": cc_mismatch,
+                    "case_status": case_status,
+                    "case_flags": flags_str,
+                    "field_status": f_status,
+                    "field_error_detail": f_detail,
                 })
     return rows
 
@@ -387,7 +613,27 @@ def main(argv: list[str] | None = None) -> int:
 
     runs = _discover_runs(results_root, cells=args.cells, models=args.models)
     if not runs:
-        sys.exit(f"No completed runs found under {results_root}.")
+        # Soft-fail: emit empty CSVs with full headers so downstream
+        # consumers (multirun, paper-table orchestrators) can still run
+        # to completion.
+        print(f"[aggregate][warn] No completed runs found under "
+              f"{results_root}. Writing empty summary scaffolding.",
+              file=sys.stderr)
+        results_root.mkdir(parents=True, exist_ok=True)
+        empty_grid_cols = [
+            "cell", "model", "run", "case_id", "organ", "field",
+            "correct", "attempted", "cancer_category_mismatch", "method",
+            "case_status", "case_flags", "field_status", "field_error_detail",
+        ]
+        pd.DataFrame(columns=empty_grid_cols).to_csv(
+            results_root / "ablation_grid.csv", index=False)
+        pd.DataFrame(columns=empty_grid_cols).to_parquet(
+            results_root / "atomic.parquet")
+        pd.DataFrame(columns=[
+            "method", "field", "attempted", "total",
+            "coverage", "accuracy_attempted",
+        ]).to_csv(results_root / "ablation_summary.csv", index=False)
+        return 0
 
     print(f"[aggregate] results_root={results_root}")
     print(f"[aggregate] gold_root={gold_root}")
@@ -398,6 +644,16 @@ def main(argv: list[str] | None = None) -> int:
     grid_csv = results_root / "ablation_grid.csv"
     grid_df.to_csv(grid_csv, index=False)
     print(f"Wrote {grid_csv}  ({len(grid_df)} rows)")
+
+    # Atomic parquet — long-form, identical schema to the CSV but with
+    # Arrow types and used as the canonical input by canonical_stats.
+    atomic_path = results_root / "atomic.parquet"
+    try:
+        grid_df.to_parquet(atomic_path)
+        print(f"Wrote {atomic_path}  ({len(grid_df)} rows)")
+    except Exception as exc:
+        print(f"[aggregate][warn] failed to write {atomic_path}: {exc!r}",
+              file=sys.stderr)
 
     summary = summary_table(grid_df.rename(columns={}))  # method col present
     summary_path = results_root / "ablation_summary.csv"
@@ -420,6 +676,17 @@ def main(argv: list[str] | None = None) -> int:
     if not eff.empty:
         eff.to_csv(results_root / "efficiency.csv", index=False)
         print(f"Wrote {results_root / 'efficiency.csv'}")
+
+    # Canonical statistics suite — runs against the same long-form grid.
+    # ``method`` column is built as f"{cell}_{model}"; the modular
+    # baseline supplied via --baseline becomes the comparator.
+    try:
+        from . import canonical_stats
+        canonical_stats.run_canonical_stats(
+            grid_df, modular_method=args.baseline, out_dir=results_root)
+    except Exception as exc:
+        print(f"[aggregate][warn] canonical stats layer failed: {exc!r}",
+              file=sys.stderr)
 
     is_smoke = results_root.name.startswith("_smoke")
     with_stats = args.with_stats if args.with_stats is not None else not is_smoke

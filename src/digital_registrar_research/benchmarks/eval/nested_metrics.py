@@ -147,6 +147,81 @@ def _safe_list(v) -> list[dict]:
     return v if isinstance(v, list) else []
 
 
+def _per_station_counts(g_list: list[dict],
+                        p_list: list[dict]) -> dict[str, dict]:
+    """For each station_name appearing in gold OR pred, summarise the
+    per-station (examined, involved) counts.
+
+    Sums duplicate entries with the same station_name so the comparison
+    is at the station-aggregate level, not the bipartite-row level.
+    Items lacking a station_name are dropped (they cannot be grouped).
+    """
+    def _bucket(items: list[dict]) -> dict[str, dict]:
+        out: dict[str, dict] = {}
+        for it in items:
+            sn = normalize(it.get("station_name"))
+            if sn is None:
+                continue
+            cur = out.setdefault(sn, {"examined": 0, "involved": 0})
+            for k in ("examined", "involved"):
+                v = it.get(k)
+                if isinstance(v, (int, float)):
+                    cur[k] += int(v)
+        return out
+
+    g_buckets = _bucket(g_list)
+    p_buckets = _bucket(p_list)
+    stations = set(g_buckets) | set(p_buckets)
+    out: dict[str, dict] = {}
+    for sn in stations:
+        g_ex = g_buckets.get(sn, {}).get("examined", 0)
+        p_ex = p_buckets.get(sn, {}).get("examined", 0)
+        g_in = g_buckets.get(sn, {}).get("involved", 0)
+        p_in = p_buckets.get(sn, {}).get("involved", 0)
+        out[sn] = {
+            "gold_examined": g_ex,
+            "pred_examined": p_ex,
+            "examined_correct_tol": int(abs(g_ex - p_ex) <= LN_COUNT_TOLERANCE),
+            "gold_involved": g_in,
+            "pred_involved": p_in,
+            "involved_correct_tol": int(abs(g_in - p_in) <= LN_COUNT_TOLERANCE),
+        }
+    return out
+
+
+def _per_category_status(g_list: list[dict],
+                         p_list: list[dict]) -> dict[str, dict]:
+    """For each margin_category in gold ∪ pred, summarise whether ANY
+    item under that category was involved.
+
+    Independent of the bipartite-matched aggregate. Categories absent
+    from one side default to involved=False on that side. Items lacking
+    a margin_category are dropped.
+    """
+    def _by_cat(items: list[dict]) -> dict[str, list[dict]]:
+        out: dict[str, list[dict]] = {}
+        for it in items:
+            c = normalize(it.get("margin_category"))
+            if c is None:
+                continue
+            out.setdefault(c, []).append(it)
+        return out
+
+    g_by = _by_cat(g_list)
+    p_by = _by_cat(p_list)
+    cats = set(g_by) | set(p_by)
+    out: dict[str, dict] = {}
+    for c in cats:
+        g_inv = any(bool(x.get("margin_involved")) for x in g_by.get(c, []))
+        p_inv = any(bool(x.get("margin_involved")) for x in p_by.get(c, []))
+        out[c] = {
+            "gold_involved": int(g_inv),
+            "pred_involved": int(p_inv),
+            "involved_correct": int(g_inv == p_inv),
+        }
+    return out
+
+
 def score_lymph_nodes(gold: dict, pred: dict) -> dict:
     """Returns a flat dict of per-case metrics for `regional_lymph_node`.
 
@@ -195,6 +270,13 @@ def score_lymph_nodes(gold: dict, pred: dict) -> dict:
         if normalize(g.get("lymph_node_side")) == normalize(p.get("lymph_node_side")):
             side_ok += 1
 
+    # Total-stations: count of distinct station entries in the list.
+    # Distinct from ``ln_examined_total`` (which sums per-station node
+    # counts) — answers "did the model identify the right number of
+    # station-level entries", regardless of node counts inside each.
+    g_total_stations = len(g_list)
+    p_total_stations = len(p_list)
+
     return {
         "ln_examined_total_gold": g_exam,
         "ln_examined_total_pred": p_exam,
@@ -207,6 +289,12 @@ def score_lymph_nodes(gold: dict, pred: dict) -> dict:
         "ln_any_positive_gold": int(g_any),
         "ln_any_positive_pred": int(p_any),
         "ln_any_positive_correct": int(g_any == p_any),
+        "ln_total_stations_gold": g_total_stations,
+        "ln_total_stations_pred": p_total_stations,
+        "ln_total_stations_abs_err": abs(g_total_stations - p_total_stations),
+        "ln_total_stations_correct_tol": int(
+            abs(g_total_stations - p_total_stations) <= LN_COUNT_TOLERANCE),
+        "ln_per_station": _per_station_counts(g_list, p_list),
         "ln_station_tp": tp,
         "ln_station_fp": fp,
         "ln_station_fn": fn,
@@ -281,6 +369,7 @@ def score_margins(gold: dict, pred: dict) -> dict:
         "margin_closest_distance_abs_err": abs_err,
         "margin_closest_distance_correct_tol": dist_correct_tol,
         "margin_closest_distance_has_both": int(has_both),
+        "margin_per_category": _per_category_status(g_list, p_list),
         "margin_tp": tp,
         "margin_fp": fp,
         "margin_fn": fn,
@@ -382,7 +471,7 @@ def summarize_ln(df: pd.DataFrame) -> pd.DataFrame:
         tp, fp, fn = sub["ln_station_tp"].sum(), sub["ln_station_fp"].sum(), sub["ln_station_fn"].sum()
         prec, rec, f1 = _prf(tp, fp, fn)
         matched = sub["ln_station_matched"].sum()
-        return pd.Series({
+        out = {
             "coverage": len(sub) / len(df.loc[df["method"] == sub.name]),
             "cases_scored": len(sub),
             "examined_mae": sub["ln_examined_total_abs_err"].mean(),
@@ -398,9 +487,50 @@ def summarize_ln(df: pd.DataFrame) -> pd.DataFrame:
             "matched_examined_acc": (sub["ln_station_examined_correct"].sum() / matched) if matched else float("nan"),
             "matched_category_acc": (sub["ln_station_category_correct"].sum() / matched) if matched else float("nan"),
             "matched_side_acc": (sub["ln_station_side_correct"].sum() / matched) if matched else float("nan"),
-        })
+        }
+        if "ln_total_stations_correct_tol" in sub.columns:
+            out["total_stations_mae"] = sub["ln_total_stations_abs_err"].mean()
+            out["total_stations_acc_tol1"] = sub["ln_total_stations_correct_tol"].mean()
+        return pd.Series(out)
 
     return attempted.groupby("method").apply(_per_method, include_groups=False).reset_index()
+
+
+def expand_ln_per_station(df: pd.DataFrame) -> pd.DataFrame:
+    """Flatten the ``ln_per_station`` dict column into one row per
+    (method, case_id, station_name).
+
+    Output columns: method, case_id, station_name, gold_examined,
+    pred_examined, examined_correct_tol, gold_involved, pred_involved,
+    involved_correct_tol. Cases without a per-station dict are skipped.
+    """
+    if "ln_per_station" not in df.columns:
+        return pd.DataFrame()
+    rows: list[dict] = []
+    for _, r in df.iterrows():
+        per = r.get("ln_per_station")
+        if not isinstance(per, dict) or not per:
+            continue
+        for sn, vals in per.items():
+            row = {"method": r.get("method"), "case_id": r.get("case_id"),
+                   "station_name": sn}
+            row.update(vals)
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def summarize_ln_per_station(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-(method, station_name) accuracy of examined / involved counts.
+
+    Consumes the long-form output of :func:`expand_ln_per_station`.
+    """
+    if df.empty:
+        return df
+    return (df.groupby(["method", "station_name"])
+            .agg(n_cases=("case_id", "nunique"),
+                 examined_acc_tol1=("examined_correct_tol", "mean"),
+                 involved_acc_tol1=("involved_correct_tol", "mean"))
+            .reset_index())
 
 
 def summarize_margins(df: pd.DataFrame) -> pd.DataFrame:
@@ -414,7 +544,7 @@ def summarize_margins(df: pd.DataFrame) -> pd.DataFrame:
         prec, rec, f1 = _prf(tp, fp, fn)
         matched = sub["margin_matched"].sum()
         both = sub[sub["margin_closest_distance_has_both"] == 1]
-        return pd.Series({
+        out = {
             "coverage": len(sub) / len(df.loc[df["method"] == sub.name]),
             "cases_scored": len(sub),
             "any_involved_acc": sub["margin_any_involved_correct"].mean(),
@@ -428,9 +558,58 @@ def summarize_margins(df: pd.DataFrame) -> pd.DataFrame:
             "matched_status_acc": (sub["margin_status_correct"].sum() / matched) if matched else float("nan"),
             "matched_distance_acc": (sub["margin_distance_correct"].sum() / matched) if matched else float("nan"),
             "matched_category_acc": (sub["margin_category_correct"].sum() / matched) if matched else float("nan"),
-        })
+        }
+        if "margin_per_category" in sub.columns:
+            # Average of per-category involved-correct rates, weighted
+            # by the number of cases in which each category appeared.
+            tot_pairs = 0
+            tot_correct = 0
+            for per in sub["margin_per_category"]:
+                if not isinstance(per, dict):
+                    continue
+                for vals in per.values():
+                    tot_pairs += 1
+                    tot_correct += int(vals.get("involved_correct", 0))
+            out["per_category_acc"] = (tot_correct / tot_pairs
+                                       if tot_pairs else float("nan"))
+        return pd.Series(out)
 
     return attempted.groupby("method").apply(_per_method, include_groups=False).reset_index()
+
+
+def expand_margin_per_category(df: pd.DataFrame) -> pd.DataFrame:
+    """Flatten the ``margin_per_category`` dict column into one row per
+    (method, case_id, margin_category).
+
+    Output columns: method, case_id, margin_category, gold_involved,
+    pred_involved, involved_correct.
+    """
+    if "margin_per_category" not in df.columns:
+        return pd.DataFrame()
+    rows: list[dict] = []
+    for _, r in df.iterrows():
+        per = r.get("margin_per_category")
+        if not isinstance(per, dict) or not per:
+            continue
+        for cat, vals in per.items():
+            row = {"method": r.get("method"), "case_id": r.get("case_id"),
+                   "margin_category": cat}
+            row.update(vals)
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def summarize_margin_per_category(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-(method, margin_category) involved-correct accuracy.
+
+    Consumes the long-form output of :func:`expand_margin_per_category`.
+    """
+    if df.empty:
+        return df
+    return (df.groupby(["method", "margin_category"])
+            .agg(n_cases=("case_id", "nunique"),
+                 involved_acc=("involved_correct", "mean"))
+            .reset_index())
 
 
 __all__ = [
@@ -442,4 +621,8 @@ __all__ = [
     "aggregate_margin_to_csv",
     "summarize_ln",
     "summarize_margins",
+    "expand_ln_per_station",
+    "summarize_ln_per_station",
+    "expand_margin_per_category",
+    "summarize_margin_per_category",
 ]

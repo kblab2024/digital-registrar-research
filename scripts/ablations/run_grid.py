@@ -248,7 +248,7 @@ def _preflight(spec: dict, experiment_root: Path, dataset: str,
     return errors
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--config", type=Path, required=True,
                     help="YAML grid spec — see configs/ablations/grid_1.yaml")
@@ -263,7 +263,7 @@ def main() -> int:
                     help="if a cell run raises, log the failure to "
                          "grid_failures.json and continue with the next cell "
                          "instead of halting the whole grid.")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     if not args.config.is_file():
         sys.exit(f"Grid config not found: {args.config}")
