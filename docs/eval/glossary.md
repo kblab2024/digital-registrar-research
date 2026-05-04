@@ -99,7 +99,7 @@ A case is `multi_primary` if it describes more than one distinct tumor (bilatera
 - `tumor_focality` ∈ {multifocal, multicentric, ...} → `multi_primary`.
 - Multi-clock / multi-quadrant strings (e.g. `"12 and 3"`) → `multi_primary`.
 
-Subgroup column: `single_primary` / `multi_primary` / `unknown`. Used to stratify all metrics so the writeup can say "in the multi-primary subgroup, accuracy was X" — direct response to **Reviewer 2.2**.
+Subgroup column: `single_primary` / `multi_primary` / `unknown`. Used to stratify all metrics so the writeup can say "in the multi-primary subgroup, accuracy was X" — multi-primary cases are clinically distinct and a single aggregate accuracy hides large per-subgroup differences.
 
 ## Endpoint tiers
 

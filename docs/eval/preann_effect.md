@@ -1,8 +1,8 @@
 # Pre-annotation effect — measuring the anchoring bias
 
-**Reviewer 1 (b)** asked for inter-annotator agreement metrics; **Reviewer 2 (3)** noted that with only two reviewers, the gold standard's representativeness is unclear. The pre-annotation (preann) effect analysis is the principled response: by re-annotating a subset of cases *from scratch* (without seeing the model's pre-fill), we can quantify how much the human annotations were anchored on the model's suggestions.
+When LLM pre-annotations are presented as a starting point for human annotators, the human's final answer can be *anchored* on the model's suggestion — they may skim, see something plausible, and click through rather than reading the report from scratch. If the model is mostly right this is a useful workflow accelerant; if the model is consistently wrong in subtle ways it actively contaminates the gold standard.
 
-This document is the headline of the IAA work, and the new dimension that didn't exist in the original `eval_iaa.py`.
+The pre-annotation (preann) effect analysis quantifies this: by re-annotating a subset of cases *from scratch* (without seeing the model's pre-fill), we can compare the with-preann gold against the without-preann gold and measure how much the model's suggestions shifted the human's answer.
 
 ## ELI5
 
@@ -115,10 +115,10 @@ Stratified by whether the human's final answer matched gold. **Editing rate when
 **Implementation:** `preann.edit_distance_from_preann`.
 **Output:** `iaa/preann/edit_distance__<annotator>.csv`.
 
-## How this answers the reviewers
+## What the metrics together tell you
 
-- **R1.b ("annotation bias since initial labels were generated using the same model"):** The preann effect *quantifies* the bias. Reporting Δκ, AI, and convergence-rate stratified by `preann_correct` directly tells the reviewer how much the LLM-pre-fill influenced the gold standard. If `ai_incorrect` is small (close to zero), the bias is bounded; if it's large and positive, the bias is real and we need a paragraph in Discussion acknowledging it.
-- **R2.3 ("only two reviewers; gold representativeness"):** The without-preann subset is the *unbiased reference* — gold for these cases was assembled without LLM pre-fill, so any agreement with the original (with-preann) gold validates representativeness. Cross-reading IAA and preann tables together gives the reader a richer picture than either alone.
+- **Quantifying anchoring bias.** Δκ, AI, and convergence-rate stratified by `preann_correct` together quantify how much the LLM pre-fill influenced the gold standard. If `ai_incorrect` is small (close to zero) the bias is bounded; if it is large and positive the bias is real and the Discussion section needs to acknowledge it.
+- **Validating gold representativeness.** The without-preann subset is the *unbiased reference* — gold for these cases was assembled without any LLM pre-fill, so agreement between the with-preann and without-preann golds validates that the with-preann gold isn't systematically distorted. Cross-reading the IAA and preann tables together gives a richer picture than either alone.
 
 ## What to do if your numbers are bad
 

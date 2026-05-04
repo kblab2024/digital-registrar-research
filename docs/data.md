@@ -72,7 +72,7 @@ suffix:
 
 | Path | Who | What they saw |
 |---|---|---|
-| `with_preann/data/{dataset}/annotations/nhc/` | Annotator NHC | gpt-oss:20b pre-annotation pre-filled, reviewer edits in place |
+| `with_preann/data/{dataset}/annotations/nhc/` | Annotator NHC | gpt-oss:20b pre-annotation pre-filled, annotator edits in place |
 | `without_preann/data/{dataset}/annotations/nhc/` | Annotator NHC | blank template, annotator fills from scratch |
 | `with_preann/data/{dataset}/annotations/kpc/` | Annotator KPC | gpt-oss:20b pre-annotation pre-filled |
 | `without_preann/data/{dataset}/annotations/kpc/` | Annotator KPC | blank template |

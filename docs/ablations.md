@@ -44,7 +44,7 @@ alphabetical ordering. The mapping lives in
 |--------|---------------|-----------|
 | 1      | breast        | pancreas  |
 | 2      | colorectal    | breast    |
-| 3      | thyroid       | cervix    |
+| 3      | esophagus     | cervix    |
 | 4      | stomach       | colorectal|
 | 5      | liver         | esophagus |
 | 6      | —             | liver     |
@@ -157,9 +157,9 @@ constructs a Namespace and calls `run()` directly.
 
 ## Ablation axes
 
-The full menu of ablation axes is enumerated in
-[`workspace/reviewer-response-suggestions.md` §1.2](../workspace/reviewer-response-suggestions.md)
-(gitignored). This document tracks **what's currently implemented** vs
+The pipeline's design choices fall into six axes — pipeline decomposition,
+output structuring, prompting, decoding, model identity, and schema
+specificity. This document tracks **what's currently implemented** vs
 what's wired up as a TODO in [run_grid.py](../scripts/ablations/run_grid.py).
 
 ### Axis 1 — Pipeline decomposition
@@ -215,7 +215,7 @@ Schema specificity (Axis 6) gets two new runners:
 The minimum-viable lesion study lives at
 [`configs/ablations/grid_1.yaml`](../configs/ablations/grid_1.yaml).
 
-Conditions (suggestions doc §1.3):
+Conditions:
 
 1. **Full pipeline** — modular DSPy + ReportJsonize + Literal enums
 2. **Monolithic DSPy** — drops the modular per-section chain
@@ -342,7 +342,7 @@ python scripts/ablations/run_cell_c5.py --folder dummy --dataset tcga --model gp
 When `--with-stats` is on (default for any non-smoke results-root) the
 aggregator also calls
 [`ablations.eval.stats.run_all`](../src/digital_registrar_research/ablations/eval/stats.py)
-to emit the reviewer-grade statistics pack:
+to emit the full statistics pack:
 
 | File | Contents |
 |---|---|
@@ -387,8 +387,7 @@ quality:
   prose** (anything in "Comments" or "Final Diagnosis" sections), which
   the intermediate JSON structuring step normally surfaces.
 
-The OFAT factorial in Grid 2 is reported as supplementary depth — see
-the suggestions doc §1.3 for the recipe.
+The OFAT factorial in Grid 2 is reported as supplementary depth.
 
 ## Pre-registration discipline
 
@@ -403,8 +402,8 @@ Before kicking off a real grid:
    = nested F1, completeness, latency.
 3. Multiple-comparisons correction within each axis: Holm-Bonferroni
    ([`scripts/eval/_common/stats_extra.py`](../scripts/eval/_common/stats_extra.py)).
-4. Reference the locked endpoint config (with git SHA) in the response
-   letter / paper Methods section.
+4. Reference the locked endpoint config (with git SHA) in the paper
+   Methods section.
 
 ## Related documentation
 
@@ -418,6 +417,3 @@ Before kicking off a real grid:
   consistency
 - [eval/multiple_comparisons.md](eval/multiple_comparisons.md) —
   Holm-Bonferroni vs BH-FDR
-- [`workspace/reviewer-response-suggestions.md`](../workspace/reviewer-response-suggestions.md)
-  *(gitignored)* — full menu of ablation axes and the rebuttal-letter
-  ordering.

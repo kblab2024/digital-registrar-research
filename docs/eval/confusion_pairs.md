@@ -1,6 +1,6 @@
 # Confusion pairs and semantic neighbors
 
-Some categorical errors are clinically equivalent. **Reviewer 2.1** specifically flagged this: "minor variations in TNM staging due to details such as 'anatomic' vs 'pathologic' staging." The confusion-pair / semantic-neighbor analysis surfaces these systematically.
+Some categorical errors are clinically equivalent. Minor variations in TNM staging — for example "anatomic" vs "pathologic" descriptors, or T2 vs T2a substaging — do not change downstream treatment decisions, but a strict string-equality check counts them as wrong. The confusion-pair / semantic-neighbor analysis surfaces these systematically so a reader can separate clinically meaningful errors from cosmetic ones.
 
 ## ELI5
 
@@ -20,7 +20,7 @@ Defined in [src/digital_registrar_research/benchmarks/eval/semantic_neighbors.py
 
 **Adding a pair here loosens the accuracy definition** — only add pairs where the literature supports the equivalence. Conservative defaults today:
 
-- `tnm_descriptor`: `anatomic` ↔ `pathologic` — addresses R2.1 directly.
+- `tnm_descriptor`: `anatomic` ↔ `pathologic` — clinically equivalent in most treatment contexts.
 - `pt_category`: t1 ↔ t1a/t1b/t1c, t2 ↔ t2a/t2b, t3 ↔ t3a/t3b, t4 ↔ t4a/t4b.
 - `pn_category`: n1 ↔ n1a/n1b, n2 ↔ n2a/n2b.
 - `pm_category`: m0 ↔ mx (clinically equivalent absent distant-metastasis workup).
@@ -45,7 +45,7 @@ Per (field, organ):
 - `accuracy_collapsing_neighbors` — alternative accuracy where curated neighbor pairs are counted as correct.
 - `n_neighbor_recovered` — how many cases moved from "wrong" to "correct" under the relaxed definition.
 
-This is the **headline** number for the writeup paragraph addressing R2.1.
+This is the **headline** number for the clinical-equivalence writeup paragraph.
 
 ## Mean rank distance for ordinals
 
