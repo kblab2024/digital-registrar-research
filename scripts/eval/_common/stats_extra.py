@@ -134,6 +134,27 @@ def odds_ratio_with_ci(
 
 # --- Classification metrics --------------------------------------------------
 
+def _drop_none_pairs(
+    y_true: Sequence, y_pred: Sequence,
+) -> "tuple[list, list]":
+    """Drop ``(t, p)`` pairs where either side is ``None``.
+
+    Newer sklearn versions call ``np.unique`` inside ``_check_targets``
+    when they receive ``object`` arrays, and numpy cannot sort arrays
+    that mix ``str`` and ``NoneType``. Callers in this module that
+    constrain their ``labels`` arg to non-``None`` values already
+    intend for ``None`` rows to be excluded; pre-filtering is
+    semantically equivalent and avoids the sklearn explosion on
+    environments with newer numpy/sklearn.
+    """
+    paired = [(t, p) for t, p in zip(y_true, y_pred)
+              if t is not None and p is not None]
+    if not paired:
+        return [], []
+    a, b = zip(*paired)
+    return list(a), list(b)
+
+
 def confusion_matrix_long(
     y_true: Sequence,
     y_pred: Sequence,
@@ -145,12 +166,23 @@ def confusion_matrix_long(
     Implementation: ``sklearn.metrics.confusion_matrix(y_true, y_pred,
     labels=labels)`` (Pedregosa et al. 2011). Output rows have keys
     ``gold_value``, ``pred_value``, ``count`` for direct DataFrame
-    ingestion.
+    ingestion. ``None`` pairs are filtered out — see
+    :func:`_drop_none_pairs`.
     """
     from sklearn.metrics import confusion_matrix
 
+    y_true, y_pred = _drop_none_pairs(y_true, y_pred)
+
     if labels is None:
         labels = sorted({*y_true, *y_pred}, key=lambda v: ("" if v is None else str(v)))
+    if not y_true:
+        # Empty matrix: all-zero counts at the requested labels.
+        rows = []
+        for gold_v in labels:
+            for pred_v in labels:
+                rows.append({"gold_value": gold_v,
+                             "pred_value": pred_v, "count": 0})
+        return rows
     cm = confusion_matrix(y_true, y_pred, labels=list(labels))
     rows = []
     for i, gold_v in enumerate(labels):
@@ -177,8 +209,17 @@ def per_class_prf1(
     """
     from sklearn.metrics import precision_recall_fscore_support
 
+    y_true, y_pred = _drop_none_pairs(y_true, y_pred)
     if labels is None:
         labels = sorted({*y_true, *y_pred}, key=lambda v: ("" if v is None else str(v)))
+    if not y_true:
+        out: dict[str, "dict | float"] = {}
+        for label in labels:
+            out[str(label)] = {"precision": 0.0, "recall": 0.0,
+                                "f1": 0.0, "support": 0}
+        for avg in ("macro", "micro", "weighted"):
+            out[f"{avg}_avg"] = {"precision": 0.0, "recall": 0.0, "f1": 0.0}
+        return out
     prec, rec, f1, support = precision_recall_fscore_support(
         y_true, y_pred, labels=list(labels), zero_division=0,
     )
@@ -208,6 +249,9 @@ def matthews_corrcoef(y_true: Sequence, y_pred: Sequence) -> float:
     binary metric of choice here. See Matthews (1975).
     """
     from sklearn.metrics import matthews_corrcoef as _mcc
+    y_true, y_pred = _drop_none_pairs(y_true, y_pred)
+    if not y_true:
+        return float("nan")
     return float(_mcc(y_true, y_pred))
 
 
@@ -219,6 +263,9 @@ def balanced_accuracy(y_true: Sequence, y_pred: Sequence) -> float:
     distribution is skewed.
     """
     from sklearn.metrics import balanced_accuracy_score
+    y_true, y_pred = _drop_none_pairs(y_true, y_pred)
+    if not y_true:
+        return float("nan")
     return float(balanced_accuracy_score(y_true, y_pred))
 
 
