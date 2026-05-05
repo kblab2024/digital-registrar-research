@@ -310,7 +310,7 @@ def run_cancer_pipeline_structured(
     pipeline = StructuredCancerPipeline()
     logger = logging.getLogger("experiment_logger")
     t0 = time.perf_counter()
-    output = pipeline.forward(report=report, logger=logger, fname=fname)
+    output = pipeline(report=report, logger=logger, fname=fname)
     return output, time.perf_counter() - t0
 
 
