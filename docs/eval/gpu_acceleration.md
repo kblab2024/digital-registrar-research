@@ -137,8 +137,13 @@ historical run), call the underlying functions directly without a
 
 - **MPS lacks an op** — set `PYTORCH_ENABLE_MPS_FALLBACK=1` so unsupported
   ops fall back to CPU instead of erroring. The bootstrap primitives
-  here use only `gather`, `mean`, `scatter_add_`, and basic arithmetic
-  on `float64` / `int64` tensors, all of which MPS supports.
+  here use only `gather`, `mean`, `scatter_add_`, and basic arithmetic.
+- **MPS does not support float64** — the Metal framework is float32-only
+  for floating-point compute. `ci_gpu` automatically casts to float32
+  on `--device mps` for the per-row reductions, then casts the
+  bootstrap distribution back to float64 on CPU before quantile / BCa.
+  The accuracy hit is far below the natural Monte-Carlo noise floor of
+  `n_boot=2000`. CPU and CUDA paths stay at float64.
 - **CUDA OOM** — unlikely at typical `n_boot=2000` and `n ≤ a few
   thousand`, but if you scale `n_boot` to 100k+ you may need to chunk
   the index matrix. File an issue if this comes up in practice.

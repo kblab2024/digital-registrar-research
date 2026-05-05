@@ -341,6 +341,13 @@ def _resample_mean_cpu(
     return sum_vw / sum_w_safe
 
 
+def _torch_float_dtype(device: str):
+    """MPS doesn't support float64; use float32 there. CPU/CUDA stay
+    at float64 for full precision."""
+    import torch
+    return torch.float32 if device == "mps" else torch.float64
+
+
 def _resample_mean_torch(
     values: np.ndarray,
     weights: np.ndarray | None,
@@ -351,25 +358,29 @@ def _resample_mean_torch(
 
     Indices are constructed on CPU (via numpy) so the bootstrap stream
     matches the safety-net implementation exactly; only the gather +
-    reduction runs on-device.
+    reduction runs on-device. On MPS the per-row reduction runs in
+    float32 (Metal lacks float64); the resulting bootstrap distribution
+    is cast back to float64 on CPU before quantile / BCa, so CI
+    endpoints retain full-precision arithmetic.
     """
     import torch
 
     dev = torch.device(device)
-    v_t = torch.as_tensor(values, dtype=torch.float64, device=dev)
+    fdtype = _torch_float_dtype(device)
+    v_t = torch.as_tensor(values, dtype=fdtype, device=dev)
     idx_t = torch.as_tensor(indices, dtype=torch.long, device=dev)
     if weights is None:
         gathered = v_t[idx_t]                     # (n_boot, n)
         boot_t = gathered.mean(dim=1)
     else:
-        w_t = torch.as_tensor(weights, dtype=torch.float64, device=dev)
+        w_t = torch.as_tensor(weights, dtype=fdtype, device=dev)
         v_g = v_t[idx_t]
         w_g = w_t[idx_t]
         sum_vw = (v_g * w_g).sum(dim=1)
         sum_w = w_g.sum(dim=1)
         sum_w_safe = torch.where(sum_w > 0, sum_w, torch.ones_like(sum_w))
         boot_t = sum_vw / sum_w_safe
-    return boot_t.detach().cpu().numpy()
+    return boot_t.detach().cpu().numpy().astype(np.float64, copy=False)
 
 
 # --- Paired bootstrap of mean(a) - mean(b) -----------------------------------
@@ -415,11 +426,12 @@ def paired_bootstrap_diff(
     else:
         import torch
         dev = torch.device(resolved_device)
-        a_t = torch.as_tensor(arr_a, dtype=torch.float64, device=dev)
-        b_t = torch.as_tensor(arr_b, dtype=torch.float64, device=dev)
+        fdtype = _torch_float_dtype(resolved_device)
+        a_t = torch.as_tensor(arr_a, dtype=fdtype, device=dev)
+        b_t = torch.as_tensor(arr_b, dtype=fdtype, device=dev)
         idx_t = torch.as_tensor(indices, dtype=torch.long, device=dev)
         boot_t = a_t[idx_t].mean(dim=1) - b_t[idx_t].mean(dim=1)
-        boot = boot_t.detach().cpu().numpy()
+        boot = boot_t.detach().cpu().numpy().astype(np.float64, copy=False)
 
     lo = _quantile(boot, alpha / 2)
     hi = _quantile(boot, 1 - alpha / 2)
@@ -597,23 +609,24 @@ def _vectorized_kappa(
 
     import torch
     dev = torch.device(device)
+    fdtype = _torch_float_dtype(device)
     a_t = torch.as_tensor(a_codes, dtype=torch.long, device=dev)
     b_t = torch.as_tensor(b_codes, dtype=torch.long, device=dev)
     idx_t = torch.as_tensor(indices, dtype=torch.long, device=dev)
     a_g = a_t[idx_t]   # (n_boot, n)
     b_g = b_t[idx_t]
-    p_o = (a_g == b_g).to(torch.float64).mean(dim=1)
+    p_o = (a_g == b_g).to(fdtype).mean(dim=1)
     # Per-row category counts via scatter_add.
-    one = torch.ones_like(a_g, dtype=torch.float64)
-    a_counts = torch.zeros((n_boot, K), dtype=torch.float64, device=dev)
+    one = torch.ones_like(a_g, dtype=fdtype)
+    a_counts = torch.zeros((n_boot, K), dtype=fdtype, device=dev)
     a_counts.scatter_add_(1, a_g, one)
-    b_counts = torch.zeros((n_boot, K), dtype=torch.float64, device=dev)
+    b_counts = torch.zeros((n_boot, K), dtype=fdtype, device=dev)
     b_counts.scatter_add_(1, b_g, one)
     p_e = (a_counts * b_counts).sum(dim=1) / float(n * n)
     denom = 1.0 - p_e
     kappa = torch.where(denom > 0, (p_o - p_e) / denom,
                         torch.full_like(p_o, float("nan")))
-    return kappa.detach().cpu().numpy()
+    return kappa.detach().cpu().numpy().astype(np.float64, copy=False)
 
 
 def bootstrap_kappa_ci(
@@ -872,12 +885,13 @@ def independent_bootstrap_diff(
     else:
         import torch
         dev = torch.device(resolved_device)
-        a_t = torch.as_tensor(arr_a, dtype=torch.float64, device=dev)
-        b_t = torch.as_tensor(arr_b, dtype=torch.float64, device=dev)
+        fdtype = _torch_float_dtype(resolved_device)
+        a_t = torch.as_tensor(arr_a, dtype=fdtype, device=dev)
+        b_t = torch.as_tensor(arr_b, dtype=fdtype, device=dev)
         il = torch.as_tensor(idx_l, dtype=torch.long, device=dev)
         ir = torch.as_tensor(idx_r, dtype=torch.long, device=dev)
         boot_t = a_t[il].mean(dim=1) - b_t[ir].mean(dim=1)
-        boot = boot_t.detach().cpu().numpy()
+        boot = boot_t.detach().cpu().numpy().astype(np.float64, copy=False)
 
     lo = _quantile(boot, alpha / 2)
     hi = _quantile(boot, 1 - alpha / 2)
