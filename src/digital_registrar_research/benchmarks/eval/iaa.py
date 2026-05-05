@@ -61,6 +61,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats as sstats
 
+from . import ci_gpu
 from .ci import (
     bootstrap_ci,
     fisher_z_ci_for_corr,
@@ -504,6 +505,7 @@ def score_field_pair(
     *,
     n_boot: int = 2000,
     random_state: int | None = 0,
+    device: str = "cpu",
 ) -> list[dict]:
     """Dispatch on field type. Returns a list of long-form rows suitable
     for the output CSV. Each row is one statistic with point estimate +
@@ -537,10 +539,11 @@ def score_field_pair(
 
     if ftype in ("binary", "nominal"):
         order = None
-        res = bootstrap_ci(
-            pairs,
-            lambda xs: cohen_kappa(xs),
+        # Unweighted κ → vectorized GPU/CPU path.
+        res = ci_gpu.bootstrap_kappa_ci(
+            [p.a for p in pairs], [p.b for p in pairs],
             n_boot=n_boot, strata=strata, random_state=random_state,
+            device=device,
         )
         _add("cohen_kappa", res.point, res.lo, res.hi, obs=obs,
              n_cat=len({p.a for p in pairs} | {p.b for p in pairs}))
@@ -556,13 +559,18 @@ def score_field_pair(
         order = organ_cats.get(field) or sorted({p.a for p in pairs if p.a is not None}
                                                 | {p.b for p in pairs if p.b is not None})
         order_bst = order  # closed-over in lambdas below
-        res_unw = bootstrap_ci(
-            pairs,
-            lambda xs: cohen_kappa(xs),
+        # Unweighted κ → vectorized.
+        res_unw = ci_gpu.bootstrap_kappa_ci(
+            [p.a for p in pairs], [p.b for p in pairs],
             n_boot=n_boot, strata=strata, random_state=random_state,
+            device=device,
         )
         _add("cohen_kappa_unweighted", res_unw.point, res_unw.lo, res_unw.hi,
              obs=obs, n_cat=len(order_bst))
+        # Quadratic-weighted κ stays on the safety-net path: ci_gpu's
+        # vectorized κ is unweighted-only, and the cohen_kappa(weights=
+        # "quadratic", ordinal_order=...) callable here can't be cleanly
+        # closed-formed without expanding the GPU module's surface.
         res_wt = bootstrap_ci(
             pairs,
             lambda xs: cohen_kappa(xs, weights="quadratic",
@@ -670,6 +678,7 @@ def pairwise_iaa(
     fields: Sequence[str] | None = None,
     n_boot: int = 2000,
     random_state: int | None = 0,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """Long-form per-(organ × field × stat) IAA DataFrame for a specific
     annotator pair.
@@ -696,7 +705,8 @@ def pairwise_iaa(
             if not pairs:
                 continue
             sub = score_field_pair(field, organ, pairs,
-                                   n_boot=n_boot, random_state=random_state)
+                                   n_boot=n_boot, random_state=random_state,
+                                   device=device)
             for r in sub:
                 r["organ"] = organ if organ is not None else "ALL"
                 r["section"] = classify_section(field)
@@ -706,11 +716,13 @@ def pairwise_iaa(
             # Coverage κ: agreement on "attempted vs null" indicator
             cov_pairs = _coverage_pairs(organ_cases, field, ann_a, ann_b)
             if cov_pairs:
-                res = bootstrap_ci(
-                    cov_pairs, lambda xs: cohen_kappa(xs),
+                res = ci_gpu.bootstrap_kappa_ci(
+                    [p.a for p in cov_pairs],
+                    [p.b for p in cov_pairs],
                     n_boot=n_boot,
                     strata=[p.organ for p in cov_pairs],
                     random_state=random_state,
+                    device=device,
                 )
                 rows.append({
                     "organ": organ if organ is not None else "ALL",

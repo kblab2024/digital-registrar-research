@@ -27,6 +27,7 @@ from typing import Iterable
 
 import pandas as pd
 
+from digital_registrar_research.benchmarks.eval.ci_gpu import pick_device
 from digital_registrar_research.benchmarks.eval.completeness import (
     aggregate_missingness, method_pair_deltas,
     position_in_schema_correlation, refusal_calibration,
@@ -80,6 +81,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 def _main(args: argparse.Namespace) -> int:
     setup_logging(args.verbose)
+    requested_device = getattr(args, "device", "cpu")
+    resolved_device = pick_device(requested_device)
+    logger.info("device: requested=%s resolved=%s",
+                requested_device, resolved_device)
+    args.resolved_device = resolved_device
+
     paths = from_args(args.root, args.dataset)
     paths.assert_exists()
     organs = parse_organs(args)
@@ -146,7 +153,9 @@ def _main(args: argparse.Namespace) -> int:
         write_csv(em, args.out / "error_mode_decomposition.csv")
 
     # --- Method-pair Δ ---------------------------------------------------
-    deltas = _method_pair_deltas_using_label(atomic, by=("field", "organ"))
+    deltas = _method_pair_deltas_using_label(
+        atomic, by=("field", "organ"), device=resolved_device,
+    )
     if not deltas.empty:
         write_csv(deltas, args.out / "method_pairwise_deltas.csv")
 
@@ -210,6 +219,8 @@ def _main(args: argparse.Namespace) -> int:
         extra={
             "method_specs": [_describe_spec(s) for s in method_specs],
             "n_atomic_rows": int(len(atomic)),
+            "device_requested": requested_device,
+            "device_resolved": resolved_device,
         },
     )
     logger.info("done. outputs in %s", args.out)
@@ -315,11 +326,12 @@ def _build_atomic_for_method(
     return pd.DataFrame(rows), n_per_organ
 
 
-def _method_pair_deltas_using_label(df: pd.DataFrame, *, by) -> pd.DataFrame:
+def _method_pair_deltas_using_label(df: pd.DataFrame, *, by,
+                                     device: str = "cpu") -> pd.DataFrame:
     """Wrapper to call src/.../eval/completeness.method_pair_deltas with
     ``method_label`` instead of ``method`` as the grouping column."""
     df = df.rename(columns={"method": "_orig_method", "method_label": "method"})
-    out = method_pair_deltas(df, by=by)
+    out = method_pair_deltas(df, by=by, device=device)
     if out.empty:
         return out
     return out

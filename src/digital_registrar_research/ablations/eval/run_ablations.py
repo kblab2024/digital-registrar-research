@@ -596,6 +596,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="also call ablations.eval.stats.run_all "
                          "(default: ON for real results-root, OFF for _smoke_)")
     ap.add_argument("--no-stats", dest="with_stats", action="store_false")
+    ap.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"),
+                    default="cpu",
+                    help="Device for the canonical_stats and ablations.stats "
+                         "paired-bootstrap layers. Default: cpu (safety net).")
     args = ap.parse_args(argv)
 
     # Resolve --folder via the same shortcut as the runners.
@@ -680,10 +684,12 @@ def main(argv: list[str] | None = None) -> int:
     # Canonical statistics suite — runs against the same long-form grid.
     # ``method`` column is built as f"{cell}_{model}"; the modular
     # baseline supplied via --baseline becomes the comparator.
+    device = getattr(args, "device", "cpu")
     try:
         from . import canonical_stats
         canonical_stats.run_canonical_stats(
-            grid_df, modular_method=args.baseline, out_dir=results_root)
+            grid_df, modular_method=args.baseline, out_dir=results_root,
+            device=device)
     except Exception as exc:
         print(f"[aggregate][warn] canonical stats layer failed: {exc!r}",
               file=sys.stderr)
@@ -694,7 +700,7 @@ def main(argv: list[str] | None = None) -> int:
         from . import stats as ablation_stats
         try:
             outputs = ablation_stats.run_all(
-                results_root, baseline_method=args.baseline)
+                results_root, baseline_method=args.baseline, device=device)
             for stage, path in outputs.items():
                 print(f"Wrote {path}  (stats: {stage})")
         except Exception as exc:

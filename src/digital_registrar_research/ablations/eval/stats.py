@@ -241,6 +241,7 @@ def paired_deltas_vs_baseline(
     n_boot: int = 2000,
     alpha: float = 0.05,
     random_state: int = 0,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """For every (cell, model, field) ≠ baseline: paired-bootstrap Δ + McNemar.
 
@@ -294,9 +295,12 @@ def paired_deltas_vs_baseline(
             n_paired = a.size
             if n_paired == 0:
                 continue
-            res = paired_bootstrap_diff(b, a,  # target − baseline
-                                        n_boot=n_boot, alpha=alpha,
-                                        random_state=random_state)
+            from digital_registrar_research.benchmarks.eval import ci_gpu
+            res = ci_gpu.paired_bootstrap_diff(
+                b, a,  # target − baseline
+                n_boot=n_boot, alpha=alpha,
+                random_state=random_state, device=device,
+            )
             row = {
                 "cell": cell, "model": model, "field": field,
                 "n_paired": n_paired,
@@ -766,17 +770,22 @@ def cancer_category_mismatch_stats(grid_df: pd.DataFrame) -> pd.DataFrame:
 
 def run_all(results_root: Path,
             *, baseline_method: str = "dspy_modular_gpt-oss",
-            n_boot: int = 2000) -> dict[str, Path]:
+            n_boot: int = 2000,
+            device: str = "cpu") -> dict[str, Path]:
     """Read ``ablation_grid.csv`` from ``results_root`` and write all stats CSVs.
 
     Returns a mapping of stage → output path.
+
+    ``device`` (``cpu`` | ``cuda`` | ``mps`` | ``auto``) routes the
+    paired-bootstrap call sites through :mod:`ci_gpu`. Default is
+    ``cpu`` (the safety-net path).
     """
     results_root = Path(results_root)
     grid_df = _load_grid(results_root)
     out: dict[str, Path] = {}
 
     deltas = paired_deltas_vs_baseline(grid_df, baseline_method=baseline_method,
-                                       n_boot=n_boot)
+                                       n_boot=n_boot, device=device)
     if not deltas.empty:
         path = results_root / "ablation_paired_deltas.csv"
         deltas.to_csv(path, index=False)

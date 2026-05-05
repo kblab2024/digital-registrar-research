@@ -21,6 +21,7 @@ ELI5-style explanations of every metric the `scripts/eval/` pipeline produces, p
 | "Anatomic vs pathologic stage / curated semantic neighbors?" | [confusion_pairs.md](confusion_pairs.md) |
 | "What does field type / section / scope mean?" | [glossary.md](glossary.md) |
 | "Show me the canonical CLI invocations." | [recipes.md](recipes.md) |
+| "How do I run eval on GPU (CUDA / MPS)?" | [gpu_acceleration.md](gpu_acceleration.md) |
 | "How do I cite this in the paper Methods section?" | [methods_citations.md](methods_citations.md) |
 | "I want to debug eval without exposing PHI." | [../obfuscation.md](../obfuscation.md) |
 

@@ -242,6 +242,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--out-dir", type=Path, default=None,
                     help="Output directory. Default: "
                          "{folder}/results/canonical/{dataset}/.")
+    ap.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"),
+                    default="cpu",
+                    help="Device for the per-(method, field) bootstrap "
+                         "tables. Default: cpu.")
     return ap.parse_args(argv)
 
 
@@ -285,9 +289,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Master atomic: {len(master)} rows. Wrote {master_path}")
 
     folder = _resolve_folder(args.folder) if args.folder else None
+    from digital_registrar_research.benchmarks.eval.ci_gpu import pick_device
+    resolved_device = pick_device(getattr(args, "device", "cpu"))
+    print(f"device: requested={args.device} resolved={resolved_device}")
     canonical_stats.run_canonical_stats(
         master, modular_method=args.modular_method, out_dir=out_dir,
-        command_line=" ".join(sys.argv))
+        command_line=" ".join(sys.argv),
+        device=resolved_device)
     _publish_iaa_summary(folder, args.dataset, out_dir)
     print(f"\nCanonical paper tables: {out_dir}")
     return 0

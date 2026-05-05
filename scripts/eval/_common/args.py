@@ -88,6 +88,14 @@ def add_common_args(parser: argparse.ArgumentParser, *, subcommand: str) -> None
              "set >1 with care — memory cost scales with n_jobs).",
     )
     parser.add_argument(
+        "--device", choices=("auto", "cpu", "cuda", "mps"), default="cpu",
+        help="Device for bootstrap / McNemar / Fleiss-κ statistics. "
+             "Default: cpu (uses the original safety-net implementation in "
+             "ci.py). 'auto' picks mps→cuda→cpu. Explicit 'cuda'/'mps' "
+             "errors out if the backend is unavailable. Affects only the "
+             "statistical reductions, not model inference.",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true",
         help="Enable DEBUG logging.",
     )

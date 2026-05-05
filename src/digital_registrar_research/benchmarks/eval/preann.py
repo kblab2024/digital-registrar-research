@@ -94,6 +94,7 @@ def paired_delta_kappa(
     *,
     n_boot: int = 2000,
     random_state: int = 0,
+    device: str = "cpu",
 ) -> dict:
     """Paired Δκ = κ(with_preann, gold) − κ(without_preann, gold).
 
@@ -102,6 +103,12 @@ def paired_delta_kappa(
 
     Returns ``{kappa_with, kappa_without, delta, delta_ci_lo,
     delta_ci_hi, n_paired_cases}``.
+
+    The bootstrap is routed through
+    :func:`ci_gpu.paired_kappa_delta_ci` (vectorized confusion-matrix κ;
+    optional GPU). For a typical ~50-200 case slice, the per-resample
+    cost drops from a Python loop calling sklearn ``cohen_kappa_score``
+    twice to one batched gather + two κ-from-confusion computations.
     """
     if not records:
         return {
@@ -109,37 +116,27 @@ def paired_delta_kappa(
             "delta": float("nan"), "delta_ci_lo": float("nan"),
             "delta_ci_hi": float("nan"), "n_paired_cases": 0,
         }
-    gold = [r.gold_value for r in records]
-    with_vals = [r.with_value for r in records]
-    without_vals = [r.without_value for r in records]
+    from . import ci_gpu
+
+    gold = [normalize(r.gold_value) for r in records]
+    with_vals = [normalize(r.with_value) for r in records]
+    without_vals = [normalize(r.without_value) for r in records]
     k_with = _kappa(gold, with_vals)
     k_without = _kappa(gold, without_vals)
-
-    # Paired bootstrap on Δκ. Use case-level resampling: each bootstrap
-    # draw picks indices i ∈ [0, n) with replacement, recomputes both
-    # κ's on the resampled records, takes Δ.
-    rng = np.random.default_rng(random_state)
     n = len(records)
-    boot = np.empty(n_boot, dtype=float)
-    for i in range(n_boot):
-        idx = rng.integers(0, n, size=n)
-        sub_gold = [gold[j] for j in idx]
-        sub_with = [with_vals[j] for j in idx]
-        sub_without = [without_vals[j] for j in idx]
-        boot[i] = _kappa(sub_gold, sub_with) - _kappa(sub_gold, sub_without)
-    boot = boot[~np.isnan(boot)]
-    if boot.size == 0:
-        lo = hi = float("nan")
-    else:
-        lo = float(np.quantile(boot, 0.025))
-        hi = float(np.quantile(boot, 0.975))
+
+    boot = ci_gpu.paired_kappa_delta_ci(
+        gold, with_vals, gold, without_vals,
+        n_boot=n_boot, alpha=0.05,
+        random_state=random_state, device=device,
+    )
     delta = (k_with - k_without) if (not np.isnan(k_with) and not np.isnan(k_without)) else float("nan")
     return {
         "kappa_with": k_with,
         "kappa_without": k_without,
         "delta": delta,
-        "delta_ci_lo": lo,
-        "delta_ci_hi": hi,
+        "delta_ci_lo": boot.lo,
+        "delta_ci_hi": boot.hi,
         "n_paired_cases": int(n),
     }
 
@@ -261,6 +258,7 @@ def disagreement_reduction(
     *,
     n_boot: int = 2000,
     random_state: int = 0,
+    device: str = "cpu",
 ) -> dict:
     """Δ-disagreement = (1 − κ(a_with, b_with)) − (1 − κ(a_without, b_without)).
 
@@ -268,7 +266,9 @@ def disagreement_reduction(
     (annotators converge with preann). Positive Δ means preann
     increased disagreement.
 
-    Paired bootstrap CI on Δ via case-level resampling.
+    Paired bootstrap CI on Δ via case-level resampling, routed through
+    :func:`ci_gpu.paired_kappa_delta_ci`. The CI is reported on the
+    Δκ scale (k_with − k_without); ``delta_disagreement`` flips the sign.
     """
     if not records:
         return {"k_with": float("nan"), "k_without": float("nan"),
@@ -277,44 +277,38 @@ def disagreement_reduction(
                 "delta_ci_lo": float("nan"), "delta_ci_hi": float("nan"),
                 "n": 0}
 
-    a_with = [r.a_with for r in records]
-    b_with = [r.b_with for r in records]
-    a_without = [r.a_without for r in records]
-    b_without = [r.b_without for r in records]
+    from . import ci_gpu
+
+    a_with = [normalize(r.a_with) for r in records]
+    b_with = [normalize(r.b_with) for r in records]
+    a_without = [normalize(r.a_without) for r in records]
+    b_without = [normalize(r.b_without) for r in records]
 
     k_with = _kappa(a_with, b_with)
     k_without = _kappa(a_without, b_without)
-    delta_disag = ((1 - k_with) - (1 - k_without)
-                   if (not np.isnan(k_with) and not np.isnan(k_without))
-                   else float("nan"))
     delta_kappa = (k_with - k_without
                    if (not np.isnan(k_with) and not np.isnan(k_without))
                    else float("nan"))
+    delta_disag = (-delta_kappa if not np.isnan(delta_kappa) else float("nan"))
 
-    rng = np.random.default_rng(random_state)
-    n = len(records)
-    boot = np.empty(n_boot, dtype=float)
-    for i in range(n_boot):
-        idx = rng.integers(0, n, size=n)
-        sub_aw = [a_with[j] for j in idx]
-        sub_bw = [b_with[j] for j in idx]
-        sub_an = [a_without[j] for j in idx]
-        sub_bn = [b_without[j] for j in idx]
-        kw = _kappa(sub_aw, sub_bw)
-        kn = _kappa(sub_an, sub_bn)
-        boot[i] = (1 - kw) - (1 - kn)
-    boot = boot[~np.isnan(boot)]
-    if boot.size == 0:
-        lo = hi = float("nan")
+    boot = ci_gpu.paired_kappa_delta_ci(
+        a_with, b_with, a_without, b_without,
+        n_boot=n_boot, alpha=0.05,
+        random_state=random_state, device=device,
+    )
+    # The original returned the CI on (1 - k_w) - (1 - k_n) = k_n - k_w
+    # = -(k_w - k_n). bootstrap is on Δκ = k_w - k_n; flip endpoints.
+    if np.isnan(boot.lo) or np.isnan(boot.hi):
+        lo, hi = float("nan"), float("nan")
     else:
-        lo = float(np.quantile(boot, 0.025))
-        hi = float(np.quantile(boot, 0.975))
+        lo, hi = -boot.hi, -boot.lo
+
     return {
         "k_with": k_with, "k_without": k_without,
         "delta_kappa": delta_kappa,
         "delta_disagreement": delta_disag,
         "delta_ci_lo": lo, "delta_ci_hi": hi,
-        "n": int(n),
+        "n": int(len(records)),
     }
 
 

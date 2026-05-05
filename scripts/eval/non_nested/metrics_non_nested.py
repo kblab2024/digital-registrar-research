@@ -20,6 +20,7 @@ from typing import Any, Sequence
 import numpy as np
 import pandas as pd
 
+from digital_registrar_research.benchmarks.eval import ci_gpu
 from digital_registrar_research.benchmarks.eval.ci import (
     BootstrapResult, bootstrap_ci, t_ci, wilson_ci,
 )
@@ -68,6 +69,7 @@ def per_field_summary(
     n_boot: int,
     alpha: float,
     seed: int,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """Per-field accuracy (attempted + effective) with multiple CI flavors.
 
@@ -79,11 +81,15 @@ def per_field_summary(
         mean_per_run_accuracy + Student-t CI,
         attempted_rate, parse_error_rate, field_missing_rate
         (each + Wilson CI).
+
+    ``device`` selects the bootstrap backend: ``"cpu"`` (default) keeps
+    the original :mod:`ci` path; ``"cuda"`` / ``"mps"`` / ``"auto"``
+    routes the bootstrap CIs through :mod:`ci_gpu`.
     """
     out_rows: list[dict] = []
     for field, sub in df.groupby("field"):
         out_rows.append(_per_field_row(sub, field=field, n_boot=n_boot,
-                                       alpha=alpha, seed=seed))
+                                       alpha=alpha, seed=seed, device=device))
     return pd.DataFrame(out_rows)
 
 
@@ -93,12 +99,13 @@ def per_field_by_organ_summary(
     n_boot: int,
     alpha: float,
     seed: int,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """Same as :func:`per_field_summary` but stratified by ``organ``."""
     out_rows: list[dict] = []
     for (organ, field), sub in df.groupby(["organ", "field"], dropna=False):
         row = _per_field_row(sub, field=field, n_boot=n_boot,
-                             alpha=alpha, seed=seed)
+                             alpha=alpha, seed=seed, device=device)
         row["organ"] = organ
         out_rows.append(row)
     cols = ["organ"] + [c for c in out_rows[0].keys() if c != "organ"] if out_rows else []
@@ -111,12 +118,13 @@ def per_field_subgroup_summary(
     n_boot: int,
     alpha: float,
     seed: int,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """Per (field, subgroup) — multi_primary vs single_primary breakdown."""
     out_rows: list[dict] = []
     for (subgroup, field), sub in df.groupby(["subgroup", "field"], dropna=False):
         row = _per_field_row(sub, field=field, n_boot=n_boot,
-                             alpha=alpha, seed=seed)
+                             alpha=alpha, seed=seed, device=device)
         row["subgroup"] = subgroup
         out_rows.append(row)
     cols = ["subgroup"] + [c for c in out_rows[0].keys() if c != "subgroup"] if out_rows else []
@@ -129,6 +137,7 @@ def per_organ_overall_summary(
     n_boot: int,
     alpha: float,
     seed: int,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """Aggregate accuracy across all fields per organ + a cross-organ ALL row.
 
@@ -141,16 +150,19 @@ def per_organ_overall_summary(
     for organ in sorted(df["organ"].dropna().unique().tolist()):
         sub = df[df["organ"] == organ]
         out_rows.append(_overall_row(sub, organ=organ, label=organ,
-                                     n_boot=n_boot, alpha=alpha, seed=seed))
+                                     n_boot=n_boot, alpha=alpha, seed=seed,
+                                     device=device))
     # Cross-organ ALL row.
     out_rows.append(_overall_row(df, organ="ALL", label="ALL",
-                                 n_boot=n_boot, alpha=alpha, seed=seed))
+                                 n_boot=n_boot, alpha=alpha, seed=seed,
+                                 device=device))
     return pd.DataFrame(out_rows)
 
 
 def _overall_row(
     sub: pd.DataFrame, *, organ: str, label: str,
     n_boot: int, alpha: float, seed: int,
+    device: str = "cpu",
 ) -> dict:
     """Single aggregate row across all fields in ``sub``."""
     n_total = len(sub)
@@ -174,11 +186,10 @@ def _overall_row(
 
     # Bootstrap CI on attempted accuracy, resampling case×field rows.
     if n_attempted > 0:
-        records = sub[sub["attempted"]][["case_id", "correct"]].to_dict("records")
-        boot = bootstrap_ci(
-            records,
-            lambda xs: float(np.mean([r["correct"] for r in xs])),
-            n_boot=n_boot, alpha=alpha, random_state=seed,
+        correct_arr = sub.loc[sub["attempted"], "correct"].astype(np.float64).to_numpy()
+        boot = ci_gpu.bootstrap_mean_ci(
+            correct_arr, n_boot=n_boot, alpha=alpha,
+            random_state=seed, device=device,
         )
         boot_lo, boot_hi = boot.lo, boot.hi
     else:
@@ -234,6 +245,7 @@ def _overall_row(
 def _per_field_row(
     sub: pd.DataFrame, *, field: str,
     n_boot: int, alpha: float, seed: int,
+    device: str = "cpu",
 ) -> dict:
     """One headline row for a (field, ...) slice of the atomic table."""
     n_total = len(sub)
@@ -256,18 +268,15 @@ def _per_field_row(
                                      if n_total else (float("nan"), float("nan")))
 
     # Bootstrap CI on attempted accuracy via case-level resampling.
-    case_ids = sub["case_id"].tolist()
-    correct_vec = sub["correct"].astype(int).tolist()
-    attempted_vec = sub["attempted"].astype(bool).tolist()
+    # Bootstrap-of-mean call shape with weights = attempted-mask: matches
+    # `sum(c * a) / max(1, sum(a))` from the original lambda.
     if n_attempted > 0:
-        records = list(zip(case_ids, correct_vec, attempted_vec))
-        att_boot = bootstrap_ci(
-            records,
-            lambda xs: (
-                float(np.sum([c for _, c, a in xs if a])) /
-                max(1, sum(1 for _, _, a in xs if a))
-            ),
-            n_boot=n_boot, alpha=alpha, random_state=seed,
+        correct_arr = sub["correct"].astype(np.float64).to_numpy()
+        attempted_arr = sub["attempted"].astype(np.float64).to_numpy()
+        att_boot = ci_gpu.bootstrap_mean_ci(
+            correct_arr, weights=attempted_arr,
+            n_boot=n_boot, alpha=alpha,
+            random_state=seed, device=device,
         )
     else:
         att_boot = BootstrapResult(float("nan"), float("nan"), float("nan"),
@@ -596,7 +605,8 @@ def top_k_for_ordinal_field(
 # --- Run-to-run consistency (extends multirun.run_consistency) --------------
 
 
-def run_consistency_extended(df: pd.DataFrame) -> pd.DataFrame:
+def run_consistency_extended(df: pd.DataFrame, *,
+                              device: str = "cpu") -> pd.DataFrame:
     """Per-field consistency: Fleiss κ on correctness, Fleiss κ on
     prediction values, missing-flip rate, stability accuracy.
 
@@ -604,13 +614,23 @@ def run_consistency_extended(df: pd.DataFrame) -> pd.DataFrame:
         field, n_cases, n_runs, fleiss_kappa_correctness,
         fleiss_kappa_values, flip_rate, missing_flip_rate,
         stability_accuracy, brittle_case_rate.
+
+    Per-field Fleiss-κ calls are routed through
+    :func:`ci_gpu.fleiss_kappa_batch`, which gathers every (correctness +
+    values) matrix into one call. ``device`` is accepted for API symmetry
+    — the Fleiss-κ math is small closed-form arithmetic where vectorized
+    numpy already saturates available speedup.
     """
-    from digital_registrar_research.benchmarks.eval.multirun import fleiss_kappa
+    del device  # see docstring; ci_gpu.fleiss_kappa_batch is CPU-vectorized.
     rows: list[dict] = []
+
+    # First pass: gather all (correctness, values) matrices in lockstep
+    # with the row metadata so we can single-shot the κ computations.
+    fields_iter = []
+    matrices: list[np.ndarray] = []
     for field, sub in df.groupby("field"):
         if sub["run_id"].nunique() < 2:
             continue
-        # Fleiss κ on correctness (binary 0/1).
         pivot_corr = sub.pivot_table(
             index="case_id", columns="run_id", values="correct",
             aggfunc="first",
@@ -619,10 +639,6 @@ def run_consistency_extended(df: pd.DataFrame) -> pd.DataFrame:
             index="case_id", columns="run_id", values="attempted",
             aggfunc="first",
         ).astype(float)
-
-        # Fleiss κ on the value itself (categorical) — codes as integers.
-        # For continuous values this is meaningless; skip categorical
-        # κ if too many distinct values.
         pivot_val = sub.pivot_table(
             index="case_id", columns="run_id", values="pred_value",
             aggfunc="first",
@@ -633,15 +649,28 @@ def run_consistency_extended(df: pd.DataFrame) -> pd.DataFrame:
                            .astype("category"))
             codes = value_codes.apply(lambda col: col.cat.codes).to_numpy()
             n_distinct = pd.unique(value_codes.values.ravel()).size
-            fk_values = (fleiss_kappa(codes.astype(float))
-                         if 2 <= n_distinct <= 50 else float("nan"))
+            values_skip = not (2 <= n_distinct <= 50)
         except Exception:
-            fk_values = float("nan")
+            codes = np.empty((0, 0), dtype=float)
+            values_skip = True
 
-        try:
-            fk_corr = fleiss_kappa(pivot_corr.to_numpy(dtype=float))
-        except Exception:
-            fk_corr = float("nan")
+        fields_iter.append((field, sub, pivot_corr, pivot_attempted,
+                            codes, values_skip))
+        matrices.append(pivot_corr.to_numpy(dtype=float))
+        matrices.append(np.full((1, 1), np.nan, dtype=float)
+                        if values_skip else codes.astype(float))
+
+    if not fields_iter:
+        return pd.DataFrame()
+
+    kappa_batch = ci_gpu.fleiss_kappa_batch(matrices)
+    # Indices: field i contributes (2*i) for correctness, (2*i + 1) for values.
+
+    for i, (field, sub, pivot_corr, pivot_attempted, codes, values_skip) \
+            in enumerate(fields_iter):
+        fk_corr = float(kappa_batch[2 * i])
+        fk_values = (float("nan") if values_skip
+                     else float(kappa_batch[2 * i + 1]))
 
         # Flip rate on correctness
         m = pivot_corr.to_numpy(dtype=float)
@@ -743,6 +772,7 @@ def section_rollup(
     *,
     section_of_field: dict[str, str],
     n_boot: int, alpha: float, seed: int,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """Mean attempted_accuracy across fields in each section, with
     bootstrap CI over fields.
@@ -760,19 +790,20 @@ def section_rollup(
         per_field = per_field[~np.isnan(per_field)]
         if per_field.size == 0:
             continue
-        # Bootstrap over fields.
-        rng = np.random.default_rng(seed)
-        boot = np.array([
-            float(rng.choice(per_field, size=per_field.size, replace=True).mean())
-            for _ in range(n_boot)
-        ])
-        lo = float(np.quantile(boot, alpha / 2))
-        hi = float(np.quantile(boot, 1 - alpha / 2))
+        # Bootstrap over fields. Percentile CI matches the original;
+        # ci_gpu.bootstrap_mean_ci with method="percentile" reproduces the
+        # same bootstrap distribution byte-for-byte on a CPU device, since
+        # rng.choice(arr, size=k, replace=True) reduces to
+        # arr[rng.integers(0, n, size=k)] in numpy.
+        boot_result = ci_gpu.bootstrap_mean_ci(
+            per_field, n_boot=n_boot, alpha=alpha,
+            method="percentile", random_state=seed, device=device,
+        )
         rows.append({
             "section": section,
             "n_fields": int(per_field.size),
             "mean_field_accuracy": float(per_field.mean()),
-            "ci_lo": lo, "ci_hi": hi,
+            "ci_lo": boot_result.lo, "ci_hi": boot_result.hi,
         })
     return pd.DataFrame(rows)
 

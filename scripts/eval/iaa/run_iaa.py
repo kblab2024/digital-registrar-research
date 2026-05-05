@@ -68,6 +68,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 def _main(args: argparse.Namespace) -> int:
     setup_logging(args.verbose)
+    from digital_registrar_research.benchmarks.eval.ci_gpu import pick_device
+    requested_device = getattr(args, "device", "cpu")
+    resolved_device = pick_device(requested_device)
+    logger.info("device: requested=%s resolved=%s",
+                requested_device, resolved_device)
+    args.resolved_device = resolved_device
+
     paths = from_args(args.root, args.dataset)
     paths.assert_exists()
     organs = parse_organs(args)
@@ -91,7 +98,8 @@ def _main(args: argparse.Namespace) -> int:
     for ann_a, ann_b in pair_specs:
         logger.info("scoring IAA: %s vs %s", ann_a, ann_b)
         df = pairwise_iaa(cases, ann_a=ann_a, ann_b=ann_b,
-                          n_boot=args.n_boot, random_state=args.seed)
+                          n_boot=args.n_boot, random_state=args.seed,
+                          device=resolved_device)
         write_csv(df, args.out / f"pair_{ann_a}_vs_{ann_b}.csv")
 
     # --- Whole-report headline -------------------------------------------
@@ -145,6 +153,7 @@ def _main(args: argparse.Namespace) -> int:
                     for r in sub.to_dict(orient="records")]
             dk = preann_effect.delta_kappa_table(
                 recs, n_boot=args.n_boot, seed=args.seed,
+                device=resolved_device,
             )
             if not dk.empty:
                 dk.insert(0, "annotator", annotator)
@@ -174,6 +183,7 @@ def _main(args: argparse.Namespace) -> int:
         )
         dr = preann_effect.disagreement_reduction_table(
             dual, n_boot=args.n_boot, seed=args.seed,
+            device=resolved_device,
         )
         if not dr.empty:
             write_csv(dr, preann_dir / "disagreement_reduction.csv")

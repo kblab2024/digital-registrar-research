@@ -32,6 +32,7 @@ from typing import Iterable
 
 import pandas as pd
 
+from digital_registrar_research.benchmarks.eval.ci_gpu import pick_device
 from digital_registrar_research.benchmarks.eval.completeness import (
     aggregate_missingness, refusal_calibration,
 )
@@ -87,6 +88,21 @@ def _main(args: argparse.Namespace) -> int:
     setup_logging(args.verbose)
     require_model(args)
 
+    # Resolve --device once. For 'cpu' (the default), this is a no-op
+    # round-trip — the bootstrap path inside metrics_non_nested still
+    # routes through ci_gpu, but its CPU branch is the vectorized-numpy
+    # implementation that matches ci.bootstrap_ci's bootstrap distribution
+    # bit-for-bit on the simple-mean statistic. 'auto'/'cuda'/'mps' route
+    # the per-row reduction onto the resolved device.
+    requested_device = getattr(args, "device", "cpu")
+    resolved_device = pick_device(requested_device)
+    if requested_device != resolved_device:
+        logger.info("device: requested=%s resolved=%s",
+                    requested_device, resolved_device)
+    else:
+        logger.info("device: %s", resolved_device)
+    args.resolved_device = resolved_device
+
     paths = from_args(args.root, args.dataset)
     paths.assert_exists()
     organs = parse_organs(args)
@@ -126,22 +142,26 @@ def _main(args: argparse.Namespace) -> int:
 
     per_field_overall = M.per_field_summary(
         atomic, n_boot=args.n_boot, alpha=args.alpha, seed=args.seed,
+        device=resolved_device,
     )
     write_csv(per_field_overall, args.out / "per_field_overall.csv")
 
     per_field_by_organ = M.per_field_by_organ_summary(
         atomic, n_boot=args.n_boot, alpha=args.alpha, seed=args.seed,
+        device=resolved_device,
     )
     write_csv(per_field_by_organ, args.out / "per_field_by_organ.csv")
 
     per_field_by_subgroup = M.per_field_subgroup_summary(
         atomic, n_boot=args.n_boot, alpha=args.alpha, seed=args.seed,
+        device=resolved_device,
     )
     write_csv(per_field_by_subgroup, args.out / "per_field_by_subgroup.csv")
 
     # Per-organ aggregate (across all that organ's fields) + cross-organ ALL row.
     per_organ_overall = M.per_organ_overall_summary(
         atomic, n_boot=args.n_boot, alpha=args.alpha, seed=args.seed,
+        device=resolved_device,
     )
     write_csv(per_organ_overall, args.out / "per_organ_overall.csv")
 
@@ -239,7 +259,7 @@ def _main(args: argparse.Namespace) -> int:
     # --- Multi-run consistency ---------------------------------------------
 
     if atomic["run_id"].nunique() > 1:
-        cons = M.run_consistency_extended(atomic)
+        cons = M.run_consistency_extended(atomic, device=resolved_device)
         write_csv(cons, args.out / "run_consistency.csv")
 
     # --- Section / fieldtype rollup ----------------------------------------
@@ -249,6 +269,7 @@ def _main(args: argparse.Namespace) -> int:
         M.section_rollup(
             atomic, section_of_field=section_of_field,
             n_boot=args.n_boot, alpha=args.alpha, seed=args.seed,
+            device=resolved_device,
         ),
         args.out / "section_rollup.csv",
     )
@@ -271,6 +292,8 @@ def _main(args: argparse.Namespace) -> int:
             "n_atomic_rows": int(len(atomic)),
             "n_unique_cases": int(atomic["case_id"].nunique()),
             "n_unique_fields": int(atomic["field"].nunique()),
+            "device_requested": requested_device,
+            "device_resolved": resolved_device,
         },
     )
     logger.info("done. outputs in %s", args.out)

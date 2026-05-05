@@ -167,7 +167,8 @@ def _accuracy_pair(df_method: pd.DataFrame) -> tuple[int, int, int, int]:
 # Headline
 # ---------------------------------------------------------------------------
 
-def _headline(atomic: pd.DataFrame, modular_method: str) -> pd.DataFrame:
+def _headline(atomic: pd.DataFrame, modular_method: str,
+              *, device: str = "cpu") -> pd.DataFrame:
     """Per-method headline: rates, deltas vs modular, McNemar, OR.
 
     One row per ``method``. Rates: Wilson CIs. Deltas: paired-bootstrap.
@@ -229,7 +230,12 @@ def _headline(atomic: pd.DataFrame, modular_method: str) -> pd.DataFrame:
                 a_v = a[mask]
                 b_v = b[mask]
                 if a_v.size:
-                    pb = paired_bootstrap_diff(a_v, b_v)
+                    from digital_registrar_research.benchmarks.eval import (
+                        ci_gpu,
+                    )
+                    pb = ci_gpu.paired_bootstrap_diff(
+                        a_v, b_v, device=device,
+                    )
                     delta, delta_lo, delta_hi = (pb.point, pb.lo,
                                                  pb.hi)
                     # McNemar: b = method=1 & modular=0; c = inverse
@@ -326,7 +332,8 @@ def _failure_modes(atomic: pd.DataFrame) -> pd.DataFrame:
 # Per-field
 # ---------------------------------------------------------------------------
 
-def _per_field(atomic: pd.DataFrame, modular_method: str) -> pd.DataFrame:
+def _per_field(atomic: pd.DataFrame, modular_method: str,
+               *, device: str = "cpu") -> pd.DataFrame:
     """Per-(method, field) accuracy and Δ vs modular.
 
     Filters out STATS_EXCLUDED_FIELDS before any test runs. Holm
@@ -377,7 +384,11 @@ def _per_field(atomic: pd.DataFrame, modular_method: str) -> pd.DataFrame:
                         a_v = a[mask]
                         b_v = b[mask]
                         if a_v.size:
-                            pb = paired_bootstrap_diff(a_v, b_v)
+                            from digital_registrar_research.benchmarks.eval \
+                                import ci_gpu
+                            pb = ci_gpu.paired_bootstrap_diff(
+                                a_v, b_v, device=device,
+                            )
                             delta, delta_lo, delta_hi = (pb.point,
                                                          pb.lo, pb.hi)
                             bb = int(((a_v >= 1.0) & (b_v < 1.0)).sum())
@@ -413,7 +424,8 @@ def _per_field(atomic: pd.DataFrame, modular_method: str) -> pd.DataFrame:
 # Per-organ
 # ---------------------------------------------------------------------------
 
-def _per_organ(atomic: pd.DataFrame, modular_method: str) -> pd.DataFrame:
+def _per_organ(atomic: pd.DataFrame, modular_method: str,
+               *, device: str = "cpu") -> pd.DataFrame:
     """Per-(method, organ) accuracy plus per-method Cochran's Q.
 
     Cochran's Q tests heterogeneity of accuracy across organs for a
@@ -565,7 +577,8 @@ def _fleiss_kappa_per_field(sub: pd.DataFrame) -> float:
 # ---------------------------------------------------------------------------
 
 def _modularity_advantage(atomic: pd.DataFrame,
-                          modular_method: str) -> pd.DataFrame:
+                          modular_method: str,
+                          *, device: str = "cpu") -> pd.DataFrame:
     """Modular accuracy vs best-alternative accuracy, per field plus ALL.
 
     For each field, identifies the highest-accuracy non-modular method
@@ -628,7 +641,12 @@ def _modularity_advantage(atomic: pd.DataFrame,
                 a_v = a[mask]
                 b_v = b[mask]
                 if a_v.size:
-                    pb = paired_bootstrap_diff(a_v, b_v)
+                    from digital_registrar_research.benchmarks.eval import (
+                        ci_gpu,
+                    )
+                    pb = ci_gpu.paired_bootstrap_diff(
+                        a_v, b_v, device=device,
+                    )
                     delta, delta_lo, delta_hi = (pb.point, pb.lo,
                                                  pb.hi)
                     bb = int(((a_v >= 1.0) & (b_v < 1.0)).sum())
@@ -952,28 +970,35 @@ def _write_run_report(out_dir: Path,
 
 def run_canonical_stats(atomic: pd.DataFrame, modular_method: str,
                         out_dir: Path,
-                        command_line: str | None = None) -> dict[str, Path]:
+                        command_line: str | None = None,
+                        device: str = "cpu") -> dict[str, Path]:
     """Compute the canonical eight-table statistics suite from an atomic
     long-form table and write CSVs + run report to ``out_dir``.
 
     Method-agnostic — accepts the ablation grid (``method`` column built
     as ``f"{cell}_{model}"``) or any unified atomic. ``modular_method``
     is the comparator. Returns a dict of csv_name → output path.
+
+    ``device`` (``"cpu" | "cuda" | "mps" | "auto"``) routes the paired-
+    bootstrap and McNemar primitives through :mod:`ci_gpu`. Default is
+    ``"cpu"`` (the safety-net path through :mod:`ci`); explicit GPU
+    backends accelerate the per-(method, field) bootstrap loops in
+    ``_per_field`` and ``_modularity_advantage``.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     csvs: dict[str, pd.DataFrame] = {}
-    csvs["headline.csv"] = _headline(atomic, modular_method)
+    csvs["headline.csv"] = _headline(atomic, modular_method, device=device)
     csvs["failure_modes.csv"] = _failure_modes(atomic)
-    csvs["per_field.csv"] = _per_field(atomic, modular_method)
-    csvs["per_organ.csv"] = _per_organ(atomic, modular_method)
+    csvs["per_field.csv"] = _per_field(atomic, modular_method, device=device)
+    csvs["per_organ.csv"] = _per_organ(atomic, modular_method, device=device)
     if "run" in atomic.columns and (
             atomic.groupby("method")["run"].nunique().max() > 1
             if not atomic.empty and "method" in atomic.columns else False):
         csvs["seed_consistency.csv"] = _seed_consistency(atomic)
     csvs["modularity_advantage.csv"] = _modularity_advantage(
-        atomic, modular_method)
+        atomic, modular_method, device=device)
     csvs["low_performer_diagnostics.csv"] = _low_performer_diagnostics(
         atomic, modular_method)
 

@@ -91,6 +91,8 @@ python -m scripts.eval.cli headline      --non-nested-out <...> --iaa-out <...> 
 
 All eval subcommands also accept `--obfustrated` as an alternative to `--root` — points reads/writes at the schema-conformant synthetic copy `workspace_obfustrated/` produced by `python scripts/obfuscate_workspace.py`. Useful for debugging eval logic without touching PHI; see [docs/obfuscation.md](docs/obfuscation.md). The existing `--root dummy` / `--root workspace` invocations are unchanged.
 
+Every subcommand also accepts `--device {auto,cpu,cuda,mps}` (default `cpu`) to route the bootstrap-CI / McNemar / Cohen's-κ / Fleiss-κ machinery onto a GPU. Use `--device mps` on Apple Silicon, `--device cuda` on a CUDA workstation, or `--device auto` for cross-machine scripts. The original CPU implementation in `ci.py` is preserved as the safety net (default behavior). See [docs/eval/gpu_acceleration.md](docs/eval/gpu_acceleration.md) for the full guide, expected speedups, and per-primitive coverage.
+
 See [docs/eval/recipes.md](docs/eval/recipes.md) for the full recipe book and [docs/eval/methods_citations.md](docs/eval/methods_citations.md) for paper-ready statistical-method citations. Legacy scripts are archived under `scripts/legacy/` for one transition release.
 
 ## Citation

@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from digital_registrar_research.benchmarks.eval import ci_gpu
 from digital_registrar_research.benchmarks.eval.ci import paired_bootstrap_diff
 
 from .._common.reporting import setup_logging, write_csv, write_manifest
@@ -54,6 +55,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--seed", type=int, default=0,
     )
     parser.add_argument(
+        "--device", choices=("auto", "cpu", "cuda", "mps"), default="cpu",
+        help="Device for the per-field-Δ bootstrap. Default: cpu.",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true",
     )
     parser.set_defaults(_handler=_main)
@@ -62,6 +67,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 def _main(args: argparse.Namespace) -> int:
     setup_logging(args.verbose)
     args.out.mkdir(parents=True, exist_ok=True)
+
+    requested_device = getattr(args, "device", "cpu")
+    resolved_device = ci_gpu.pick_device(requested_device)
+    logger.info("device: requested=%s resolved=%s",
+                requested_device, resolved_device)
 
     left_atomic = pd.read_parquet(args.left / "correctness_table.parquet")
     right_atomic = pd.read_parquet(args.right / "correctness_table.parquet")
@@ -73,6 +83,7 @@ def _main(args: argparse.Namespace) -> int:
         left_atomic, right_atomic,
         left_label=left_label, right_label=right_label,
         n_boot=args.n_boot, seed=args.seed,
+        device=resolved_device,
     )
     write_csv(per_field_delta, args.out / "per_field_delta.csv")
 
@@ -92,6 +103,8 @@ def _main(args: argparse.Namespace) -> int:
             "left_label": left_label, "right_label": right_label,
             "n_left_rows": int(len(left_atomic)),
             "n_right_rows": int(len(right_atomic)),
+            "device_requested": requested_device,
+            "device_resolved": resolved_device,
         },
     )
     logger.info("done. outputs in %s", args.out)
@@ -116,12 +129,18 @@ def _per_field_delta(
     left: pd.DataFrame, right: pd.DataFrame,
     *, left_label: str, right_label: str,
     n_boot: int, seed: int,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """Per (organ, field) Δ-accuracy with bootstrap CI on the difference.
 
     Note: cases are NOT paired across datasets (different patients), so
     we use independent bootstrap on each side and report the Δ of means
     with the unpaired-bootstrap CI on the difference.
+
+    The bootstrap is routed through :func:`ci_gpu.independent_bootstrap_diff`
+    which preserves the original draw stream on a CPU device (so output
+    matches pre-change byte-for-byte at the same seed) and offloads the
+    gather + reduction onto cuda/mps when requested.
     """
     rows: list[dict] = []
     fields = sorted(set(left["field"].dropna()) & set(right["field"].dropna()))
@@ -135,16 +154,10 @@ def _per_field_delta(
             mean_l = float(l.mean())
             mean_r = float(r.mean())
             delta = mean_l - mean_r
-            # Bootstrap with independent resamples of equal size.
-            rng = np.random.default_rng(seed)
-            min_n = min(l.size, r.size)
-            boot = np.empty(n_boot, dtype=float)
-            for i in range(n_boot):
-                idx_l = rng.integers(0, l.size, size=min_n)
-                idx_r = rng.integers(0, r.size, size=min_n)
-                boot[i] = float(l[idx_l].mean() - r[idx_r].mean())
-            lo = float(np.quantile(boot, 0.025))
-            hi = float(np.quantile(boot, 0.975))
+            boot_result = ci_gpu.independent_bootstrap_diff(
+                l, r, n_boot=n_boot, alpha=0.05,
+                random_state=seed, device=device,
+            )
             rows.append({
                 "organ": organ, "field": field,
                 "left_label": left_label, "right_label": right_label,
@@ -152,7 +165,7 @@ def _per_field_delta(
                 "left_accuracy": mean_l,
                 "right_accuracy": mean_r,
                 "delta": delta,
-                "delta_ci_lo": lo, "delta_ci_hi": hi,
+                "delta_ci_lo": boot_result.lo, "delta_ci_hi": boot_result.hi,
             })
     return pd.DataFrame(rows)
 
