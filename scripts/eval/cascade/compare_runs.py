@@ -158,6 +158,15 @@ def main(argv: list[str] | None = None) -> int:
     funnel.to_csv(fn_path, index=False)
     logger.info("wrote %s (%d rows)", fn_path, len(funnel))
 
+    # --- Verdict (pooled paired test per stage) -----------------------
+    verdict = _build_verdict(
+        atomics, n_boot=args.n_boot, alpha=args.alpha,
+        random_state=args.seed,
+    )
+    vd_path = args.out / "verdict.csv"
+    verdict.to_csv(vd_path, index=False)
+    logger.info("wrote %s (%d rows)", vd_path, len(verdict))
+
     # --- Others ledger compare ----------------------------------------
     others = _build_others_compare(runs)
     if not others.empty:
@@ -169,13 +178,18 @@ def main(argv: list[str] | None = None) -> int:
     report = _render_report(
         headline=headline, per_field_wide=per_field_wide,
         per_organ_wide=per_organ_wide, pairwise=pairwise,
-        funnel=funnel, others=others, runs=runs, top_k=args.top_k,
+        funnel=funnel, others=others, verdict=verdict,
+        runs=runs, top_k=args.top_k, alpha=args.alpha,
     )
     report_path = args.out / "summary.md"
     report_path.write_text(report, encoding="utf-8")
     logger.info("wrote %s", report_path)
 
-    print(f"\nReport: {report_path}")
+    # Also print the verdict directly to stdout so the user gets the
+    # answer without opening a file.
+    print()
+    print(_render_verdict_one_liner(verdict, runs, alpha=args.alpha))
+    print(f"\nFull report: {report_path}")
     return 0
 
 
@@ -378,6 +392,152 @@ def _build_funnel_compare(atomics: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _build_verdict(
+    atomics: dict[str, pd.DataFrame],
+    *, n_boot: int, alpha: float, random_state: int,
+) -> pd.DataFrame:
+    """Pooled paired comparison per (run_A, run_B) at each cascade stage.
+
+    For each stage, every paired (case_id[, field]) correctness datum
+    contributes to a single accuracy delta with paired-bootstrap CI and
+    McNemar p-value. This is the *headline* answer to "which run is
+    better?" — Stage C pools across all fields × cases.
+
+    Stages:
+        A: paired by case_id, field=cancer_excision_report.
+        B: paired by case_id, field=cancer_category, only on cases that
+           passed A in BOTH runs.
+        C: paired by (case_id, field) across all Stage-C scalar fields,
+           only on case-field cells where both runs scored.
+    """
+    rows: list[dict] = []
+    labels = list(atomics.keys())
+
+    def _pivot_stage(df: pd.DataFrame, stage: str) -> pd.Series:
+        sub = df[df["cascade_stage"] == stage].copy()
+        if sub.empty:
+            return pd.Series(dtype=float)
+        sub["correct_num"] = pd.to_numeric(sub["correct"], errors="coerce")
+        return sub.set_index(["case_id", "field"])["correct_num"]
+
+    for i in range(len(labels)):
+        for j in range(i + 1, len(labels)):
+            a_label, b_label = labels[i], labels[j]
+            a_df, b_df = atomics[a_label], atomics[b_label]
+
+            for stage in ("A", "B", "C"):
+                a_ser = _pivot_stage(a_df, stage)
+                b_ser = _pivot_stage(b_df, stage)
+                if a_ser.empty or b_ser.empty:
+                    continue
+                pair = pd.concat([a_ser, b_ser], axis=1, keys=["a", "b"]).dropna()
+                if pair.empty:
+                    continue
+                a_vals = pair["a"].astype(float).tolist()
+                b_vals = pair["b"].astype(float).tolist()
+                mc = mcnemar(a_vals, b_vals)
+                # paired_bootstrap_delta(x, y) gives mean(x) - mean(y).
+                # We want delta = b - a, so pass (b, a).
+                boot = paired_bootstrap_delta(
+                    b_vals, a_vals,
+                    n_boot=n_boot, alpha=alpha, random_state=random_state,
+                )
+                acc_a = float(np.mean(a_vals))
+                acc_b = float(np.mean(b_vals))
+                # Conclusion logic:
+                #   - If McNemar p < alpha, the run with the larger pooled
+                #     accuracy is *significantly* better.
+                #   - Else, no significant difference.
+                if np.isnan(mc.p_raw):
+                    verdict = "undetermined"
+                elif mc.p_raw < alpha:
+                    verdict = (f"{b_label} better"
+                               if acc_b > acc_a else f"{a_label} better")
+                else:
+                    verdict = "tie"
+                rows.append({
+                    "stage": stage,
+                    "run_a": a_label, "run_b": b_label,
+                    "n_pairs": mc.n,
+                    "acc_a": acc_a, "acc_b": acc_b,
+                    "delta_acc_b_minus_a": acc_b - acc_a,
+                    "delta_ci_lo": boot.effect_ci_lo,
+                    "delta_ci_hi": boot.effect_ci_hi,
+                    "mcnemar_p": mc.p_raw,
+                    "alpha": alpha,
+                    "verdict": verdict,
+                    "notes": mc.notes,
+                })
+    return pd.DataFrame(rows)
+
+
+def _render_verdict_one_liner(
+    verdict: pd.DataFrame,
+    runs: dict[str, Path],
+    *, alpha: float,
+) -> str:
+    """One-paragraph plain-language verdict for stdout + summary.md header."""
+    if verdict.empty:
+        return "VERDICT: undetermined (no overlapping cases between runs)."
+
+    labels = list(runs.keys())
+    if len(labels) == 2:
+        a, b = labels
+        # Use Stage C as the headline; fall back to B then A if absent.
+        for stage in ("C", "B", "A"):
+            row = verdict[(verdict["stage"] == stage)
+                          & (verdict["run_a"] == a)
+                          & (verdict["run_b"] == b)]
+            if row.empty:
+                continue
+            r = row.iloc[0]
+            acc_a = r["acc_a"]
+            acc_b = r["acc_b"]
+            delta = r["delta_acc_b_minus_a"]
+            p = r["mcnemar_p"]
+            n = int(r["n_pairs"])
+            lo = r["delta_ci_lo"]
+            hi = r["delta_ci_hi"]
+            v = r["verdict"]
+            label = {"A": "Stage A (eligibility)",
+                     "B": "Stage B (organ classification)",
+                     "C": "Stage C (field extraction)"}[stage]
+            if v == "tie":
+                conclusion = (
+                    f"VERDICT — {label}: NO SIGNIFICANT DIFFERENCE. "
+                    f"{a} = {acc_a:.3f}, {b} = {acc_b:.3f} "
+                    f"(Δ = {delta:+.3f}, 95% CI [{lo:+.3f}, {hi:+.3f}], "
+                    f"McNemar p = {p:.3f}, n = {n})."
+                )
+            elif "better" in v:
+                winner, loser = (b, a) if v.startswith(b) else (a, b)
+                w_acc, l_acc = (acc_b, acc_a) if winner == b else (acc_a, acc_b)
+                conclusion = (
+                    f"VERDICT — {label}: **{winner.upper()} IS BETTER** "
+                    f"({winner}={w_acc:.3f} vs {loser}={l_acc:.3f}, "
+                    f"Δ = {delta:+.3f}, 95% CI [{lo:+.3f}, {hi:+.3f}], "
+                    f"McNemar p = {p:.4f}, n = {n})."
+                )
+            else:
+                conclusion = (
+                    f"VERDICT — {label}: undetermined ({v})."
+                )
+            return conclusion
+        return "VERDICT: no Stage A/B/C overlap between runs."
+
+    # >2 runs: list all pairwise verdicts at Stage C.
+    lines = ["VERDICT (Stage C, pairwise):"]
+    stage_c = verdict[verdict["stage"] == "C"]
+    for _, r in stage_c.iterrows():
+        lines.append(
+            f"  {r['run_a']} vs {r['run_b']}: "
+            f"{r['acc_a']:.3f} / {r['acc_b']:.3f}, "
+            f"Δ = {r['delta_acc_b_minus_a']:+.3f}, "
+            f"p = {r['mcnemar_p']:.3f} → {r['verdict']}"
+        )
+    return "\n".join(lines)
+
+
 def _build_others_compare(runs: dict[str, Path]) -> pd.DataFrame:
     """Sum the others ledger from each run, if present."""
     rows: list[dict] = []
@@ -442,8 +602,10 @@ def _render_report(
     pairwise: pd.DataFrame,
     funnel: pd.DataFrame,
     others: pd.DataFrame,
+    verdict: pd.DataFrame,
     runs: dict[str, Path],
     top_k: int,
+    alpha: float,
 ) -> str:
     parts: list[str] = []
     parts.append("# Cascade run comparison\n")
@@ -452,6 +614,26 @@ def _render_report(
     for label, path in runs.items():
         parts.append(f"- **{label}** — `{path}`")
     parts.append("\nFull tables in supporting CSVs in this directory.\n")
+
+    # --- Verdict (lead with the answer) -------------------------------
+    parts.append("\n## Verdict\n")
+    parts.append(_render_verdict_one_liner(verdict, runs, alpha=alpha))
+    parts.append("")
+    if not verdict.empty:
+        parts.append("\nFull pairwise pooled-paired tests at every stage:\n")
+        parts.append(_md_table(
+            verdict,
+            columns=["stage", "run_a", "run_b", "n_pairs",
+                     "acc_a", "acc_b", "delta_acc_b_minus_a",
+                     "delta_ci_lo", "delta_ci_hi",
+                     "mcnemar_p", "verdict"],
+            col_labels={
+                "n_pairs": "n",
+                "delta_acc_b_minus_a": "Δ (b−a)",
+                "delta_ci_lo": "Δ lo", "delta_ci_hi": "Δ hi",
+                "mcnemar_p": "McNemar p",
+            },
+        ))
 
     # --- Headline -----------------------------------------------------
     parts.append("\n## Headline (Stage A / B / C)\n")
