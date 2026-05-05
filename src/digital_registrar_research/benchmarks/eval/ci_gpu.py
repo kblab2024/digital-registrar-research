@@ -342,10 +342,27 @@ def _resample_mean_cpu(
 
 
 def _torch_float_dtype(device: str):
-    """MPS doesn't support float64; use float32 there. CPU/CUDA stay
-    at float64 for full precision."""
+    """Choose tensor float dtype per device.
+
+    GPU paths (cuda + mps) use **float32** by default because consumer /
+    workstation GPUs (RTX 6000 Ada, RTX 30/40-series, A6000, Apple
+    Silicon, …) have heavily throttled float64 throughput — typically
+    1:32 to 1:64 of float32. Sticking with float64 there would erase
+    the speedup we came here for. Data-center cards (A100, H100) do
+    full-rate float64 but they're not the target environment for this
+    codebase.
+
+    Float32 precision (~7 decimal digits) is well above the natural
+    Monte-Carlo noise floor of bootstrap CIs at typical ``n_boot=2000``
+    (~2/sqrt(B) ≈ 4%); the bootstrap distribution is cast back to
+    float64 on CPU before quantile / BCa so endpoint arithmetic
+    remains full-precision.
+
+    CPU stays at float64 for maximum precision and bit-equivalence
+    with the safety-net :mod:`ci` path.
+    """
     import torch
-    return torch.float32 if device == "mps" else torch.float64
+    return torch.float64 if device == "cpu" else torch.float32
 
 
 def _resample_mean_torch(

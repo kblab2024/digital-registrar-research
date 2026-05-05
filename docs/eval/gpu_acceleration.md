@@ -138,12 +138,21 @@ historical run), call the underlying functions directly without a
 - **MPS lacks an op** — set `PYTORCH_ENABLE_MPS_FALLBACK=1` so unsupported
   ops fall back to CPU instead of erroring. The bootstrap primitives
   here use only `gather`, `mean`, `scatter_add_`, and basic arithmetic.
-- **MPS does not support float64** — the Metal framework is float32-only
-  for floating-point compute. `ci_gpu` automatically casts to float32
-  on `--device mps` for the per-row reductions, then casts the
-  bootstrap distribution back to float64 on CPU before quantile / BCa.
-  The accuracy hit is far below the natural Monte-Carlo noise floor of
-  `n_boot=2000`. CPU and CUDA paths stay at float64.
+- **GPU dtype is float32 (not float64)** — the per-row reductions on
+  any GPU (`--device cuda` or `--device mps`) run in float32. Reasons:
+  - MPS (Metal) is float32-only for floating-point compute.
+  - Consumer / workstation CUDA cards — RTX 6000 Ada, RTX 30/40-series,
+    A6000 — have heavily throttled float64 throughput (~1:32 to 1:64
+    of float32). Using float64 there would defeat the GPU speedup.
+  - Data-center cards (A100, H100) do full-rate float64, but they're
+    not the target environment for this codebase.
+
+  Float32 precision (~7 decimal digits) is well above the natural
+  Monte-Carlo noise floor of bootstrap CIs at typical `n_boot=2000`
+  (~2/√B ≈ 4%). The bootstrap distribution is cast back to float64
+  on CPU before quantile / BCa, so endpoint arithmetic remains
+  full-precision. The CPU path stays at float64 for bit-equivalence
+  with the safety-net `ci.py`.
 - **CUDA OOM** — unlikely at typical `n_boot=2000` and `n ≤ a few
   thousand`, but if you scale `n_boot` to 100k+ you may need to chunk
   the index matrix. File an issue if this comes up in practice.
