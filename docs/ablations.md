@@ -1,5 +1,7 @@
 # Ablation studies
 
+> **Cascade-redesign note (2026-05).** The ablation harness now grades predictions through the cascade-aware `score_case`. Cases that fail the upstream gates (Stage A `cancer_excision_report` or Stage B `cancer_category`) contribute fewer field-level rows to `ablation_grid.csv`; per-cell accuracy denominators reflect the cohort that reached each stage. Per-cell accuracy may rise vs the pre-cascade tables because the cohort is honestly restricted. Field exclusions (`ajcc_version`, `treatment_effect`, margin `description`, lymph-node `station_name`) and the per-organ biomarker whitelist (`{er, pr, her2, ki67}` for breast; `{msh2, msh6, pms2, mlh1}` for colorectal) apply uniformly across all cells, so modular-vs-monolithic comparisons remain apples-to-apples. See [eval/CHANGELOG.md](eval/CHANGELOG.md) and [stat_methods.md](stat_methods.md).
+
 The Digital Registrar pipeline makes joint design choices — DSPy as the
 LM-calling framework, schema constraints realised through DSPy `Literal`
 type hints, and a per-organ modular decomposition into 5–7 sub-signatures

@@ -76,15 +76,16 @@ Default rates (configurable in `obfuscator/src/obfuscator/profiles.yaml`):
 
 All scripts that take `--folder` or `--root` accept an `--obfustrated` shortcut alongside the existing `dummy` and `workspace` options. **Existing flags are unchanged** — this is purely additive.
 
-### Eval subcommands (all 7)
+### Eval subcommands
+
+> Cascade redesign (2026-05): the `non_nested` and `nested` subcommands have been replaced by the unified `cascade` subcommand. Examples below have been updated.
 
 ```bash
-# Existing — unchanged:
-python -m scripts.eval.cli non_nested --root dummy   --dataset cmuh --model gpt_oss_20b --annotator gold
-python -m scripts.eval.cli non_nested --root workspace --dataset tcga --model gpt_oss_20b --annotator gold
+python -m scripts.eval.cli cascade --root dummy     --dataset cmuh --model gpt_oss_20b --annotator gold
+python -m scripts.eval.cli cascade --root workspace --dataset tcga --model gpt_oss_20b --annotator gold
 
-# New (additive):
-python -m scripts.eval.cli non_nested --obfustrated --dataset tcga --model gpt_oss_20b --annotator gold
+# With --obfustrated shortcut:
+python -m scripts.eval.cli cascade --obfustrated --dataset tcga --model gpt_oss_20b --annotator gold
 python -m scripts.eval.cli iaa --obfustrated --dataset cmuh
 python -m scripts.eval.cli completeness --obfustrated --dataset tcga --model gpt_oss_20b
 ```

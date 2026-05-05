@@ -2,6 +2,16 @@
 
 How to interpret column names, CI bands, and the long-form vs wide-form conventions used across `scripts/eval/`.
 
+> **Cascade-redesign note (2026-05).** The output tree changed top-to-bottom. The legacy `non_nested/` and `nested/` directories were replaced by:
+>
+> - `cascade_atomic.parquet` — long-form atomic table with new columns `cascade_stage` (A/B/C), `gate_pass` (bool), `others_disposition` (none / gold_others / pred_others / both_others).
+> - `chapter1_eligibility/` — Stage-A `cancer_excision_report` metrics: overall.csv, confusion.csv, multirun_consistency.csv (when ≥ 2 runs).
+> - `chapter2_organ_classification/` — Stage-B organ-classification metrics: overall.csv (with macro-F1 and Cohen's κ), confusion_per_class.csv, plus `others/` subdir holding `others_ledger.csv`, `others_subtype_breakdown.csv`, `others_confusion.csv`, `others_eligibility_audit.csv`.
+> - `chapter3_field_extraction/` — Stage-C field accuracy: per_field_overall.csv, per_field_by_organ.csv, per_organ_overall.csv, plus the cascade-specific `cascade_funnel.csv` and `conditional_accuracy_grid.csv`.
+> - `model_pair_tests/` — only when scoring multiple models in one run; pairwise McNemar / Cochran-Q / Stuart-Maxwell with Holm + BH adjustments.
+>
+> See [CHANGELOG.md](CHANGELOG.md) and [../stat_methods.md](../stat_methods.md).
+
 ## Output structure
 
 Every subcommand writes to `--out <dir>` and stamps a `manifest.json` capturing:

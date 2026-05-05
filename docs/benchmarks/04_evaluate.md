@@ -1,17 +1,19 @@
 # Per-method evaluation
 
-The eval pipeline lives at `scripts/eval/cli.py` with subcommand dispatch. For benchmark-style accuracy / coverage on scalar fields, use the `non_nested` subcommand. Other subcommands (`nested`, `iaa`, `completeness`, `diagnostics`, `cross_dataset`, `headline`) are documented separately under [`docs/eval/`](../eval/).
+The eval pipeline lives at `scripts/eval/cli.py` with subcommand dispatch. For benchmark-style accuracy / coverage on scalar **and** nested-list fields, use the `cascade` subcommand. Other subcommands (`iaa`, `completeness`, `diagnostics`, `cross_dataset`, `headline`) are documented separately under [`docs/eval/`](../eval/).
 
 The whole eval surface is **method-agnostic** — pass `--method {rule_based|clinicalbert|llm}` and it consumes the canonical predictions tree. So the rule, BERT, and LLM baselines all produce comparable metrics CSVs out of the box.
 
-## Per-method `non_nested`
+> **Cascade-redesign note (2026-05).** This page is being rewritten incrementally. The legacy `non_nested` and `nested` subcommands are gone — `cascade` produces strictly more output (three chapter folders, an others ledger, multirun reliability, paired-test CSVs) and applies cascade gating so that field-level accuracy is reported on the cohort that legitimately reached Stage C. See [eval/CHANGELOG.md](../eval/CHANGELOG.md) for the migration map and [stat_methods.md](../stat_methods.md) for the new statistical-methods inventory.
+
+## Per-method `cascade`
 
 ```bash
-python -m scripts.eval.cli non_nested \
+python -m scripts.eval.cli cascade \
     --root workspace --dataset tcga \
     --method clinicalbert --model merged \
     --annotator gold \
-    --out workspace/results/eval/non_nested_bert_merged_tcga
+    --out workspace/results/eval/cascade_bert_merged_tcga
 ```
 
 | Flag | Required | Notes |
@@ -24,7 +26,7 @@ python -m scripts.eval.cli non_nested \
 | `--annotator` | default `gold` | Annotator subdir to score against. |
 | `--organs` | default all | Restrict to organ indices (1..10) or names. |
 | `--cases` | optional | Allowlist of case IDs (inline or `@path/to/list.txt`). |
-| `--out` | default `workspace/results/eval/non_nested` | Output directory. |
+| `--out` | default `workspace/results/eval/cascade` | Output directory. |
 | `--n-boot` | 2000 | Bootstrap replicates for CIs. |
 | `--alpha` | 0.05 | CI coverage. |
 

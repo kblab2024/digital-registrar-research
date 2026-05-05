@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare rule_based vs ClinicalBERT vs LLM predictions side-by-side.
 
-Runs ``scripts.eval.cli non_nested`` for all three methods, then joins
+Runs ``scripts.eval.cli cascade`` for all three methods, then joins
 the outputs with ``scripts.eval.compare.run_compare`` into a wide-form
 CSV + pairwise paired-bootstrap deltas across every method pair.
 

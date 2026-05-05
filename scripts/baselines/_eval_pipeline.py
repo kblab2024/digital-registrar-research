@@ -1,11 +1,14 @@
 """Shared helpers for the eval_*_vs_*.py convenience wrappers.
 
 Each wrapper script (eval_rule_vs_llm, eval_bert_vs_llm,
-eval_rule_bert_llm) runs ``scripts.eval.cli non_nested`` for each
+eval_rule_bert_llm) runs ``scripts.eval.cli cascade`` for each
 (method, dataset) pair, then concatenates the per-dataset
-``correctness_table.parquet`` outputs into a single per-method parquet
+``cascade_atomic.parquet`` outputs into a single per-method parquet
 (with a ``dataset`` column added), then calls
-``scripts.eval.compare.run_compare`` to join across methods.
+``scripts.eval.compare.run_compare`` to join across methods. The output
+parquet name is preserved as ``correctness_table.parquet`` for
+backwards compat with run_compare; content is the cascade atomic
+table.
 
 Defaults (cross-corpus baseline contract)
 ------------------------------------------
@@ -45,10 +48,10 @@ class MethodSpec:
         self.model = model
         self.run_ids = run_ids or []
 
-    def non_nested_args(self, root: str, dataset: str, out: Path,
-                         organs: list[str] | None) -> list[str]:
+    def cascade_args(self, root: str, dataset: str, out: Path,
+                      organs: list[str] | None) -> list[str]:
         cmd = [
-            sys.executable, "-m", "scripts.eval.cli", "non_nested",
+            sys.executable, "-m", "scripts.eval.cli", "cascade",
             "--root", root, "--dataset", dataset,
             "--method", self.method,
             "--annotator", "gold",
@@ -63,19 +66,27 @@ class MethodSpec:
         return cmd
 
 
-def run_non_nested(spec: MethodSpec, *, root: str, dataset: str, out_dir: Path,
-                    organs: list[str] | None) -> Path:
-    """Invoke non_nested for one (method, dataset). Returns the parquet path."""
+def run_cascade(spec: MethodSpec, *, root: str, dataset: str, out_dir: Path,
+                 organs: list[str] | None) -> Path:
+    """Invoke cascade for one (method, dataset). Returns the atomic-table path.
+
+    Replaces the legacy ``run_non_nested`` helper. Output filename is
+    ``cascade_atomic.parquet`` instead of ``correctness_table.parquet``;
+    schema is a strict superset (adds cascade_stage, gate_pass,
+    others_disposition columns), so downstream wide-form joiners that
+    only consume ``method, dataset, organ, case_id, field, correct,
+    attempted`` columns keep working unchanged.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = spec.non_nested_args(
+    cmd = spec.cascade_args(
         root=root, dataset=dataset, out=out_dir, organs=organs,
     )
     logger.info("[%s/%s] %s", spec.label, dataset, " ".join(cmd))
     subprocess.run(cmd, check=True)
-    parquet = out_dir / "correctness_table.parquet"
+    parquet = out_dir / "cascade_atomic.parquet"
     if not parquet.is_file():
         raise SystemExit(
-            f"non_nested for {spec.label}/{dataset} produced no parquet at {parquet}"
+            f"cascade for {spec.label}/{dataset} produced no parquet at {parquet}"
         )
     return parquet
 
@@ -99,11 +110,11 @@ def concat_per_dataset_parquets(
     return combined_path
 
 
-def run_compare(specs: list[MethodSpec], non_nested_dirs: dict[str, Path],
+def run_compare(specs: list[MethodSpec], cascade_dirs: dict[str, Path],
                 out_dir: Path, n_boot: int, seed: int) -> None:
     """Invoke scripts.eval.compare.run_compare with the joined inputs."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    inputs = [f"{s.label}:{non_nested_dirs[s.label]}" for s in specs]
+    inputs = [f"{s.label}:{cascade_dirs[s.label]}" for s in specs]
     cmd = [
         sys.executable, "-m", "scripts.eval.compare.run_compare",
         "--inputs", *inputs,
@@ -118,7 +129,7 @@ def run_compare(specs: list[MethodSpec], non_nested_dirs: dict[str, Path],
 def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--folder", default="workspace",
                     help="Experiment root (default: workspace; dummy / abs path "
-                         "also accepted). Passed to scripts.eval.cli non_nested as --root.")
+                         "also accepted). Passed to scripts.eval.cli cascade as --root.")
     ap.add_argument("--datasets", nargs="+", default=list(DEFAULT_DATASETS),
                     choices=ALL_DATASETS,
                     help="Dataset(s) to evaluate on (default: tcga — the LLM-"
@@ -126,7 +137,7 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--organs", nargs="*", default=None,
                     help="Restrict to organ indices (1..10) or names.")
     ap.add_argument("--out", type=Path, required=True,
-                    help="Output root. Subdirs non_nested_<label>/ and compare/ "
+                    help="Output root. Subdirs cascade_<label>/ and compare/ "
                          "are created under it.")
     ap.add_argument("--n-boot", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
@@ -140,21 +151,23 @@ def run_pipeline(specs: list[MethodSpec], args: argparse.Namespace) -> int:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # Per method × dataset: run non_nested into a per-dataset subdir.
+    # Per method × dataset: run cascade into a per-dataset subdir.
     # Then concatenate per-dataset parquets per method into a single combined
     # parquet (with a `dataset` column) that run_compare consumes.
     method_combined: dict[str, Path] = {}
     for spec in specs:
-        method_root = args.out / f"non_nested_{spec.label}"
+        method_root = args.out / f"cascade_{spec.label}"
         per_ds_parquets: dict[str, Path] = {}
         for ds in args.datasets:
             ds_out = method_root / ds
-            parquet = run_non_nested(
+            parquet = run_cascade(
                 spec, root=args.folder, dataset=ds, out_dir=ds_out,
                 organs=args.organs,
             )
             per_ds_parquets[ds] = parquet
         # Combined parquet at the method root (sibling of <dataset>/ subdirs).
+        # Filename retained for backwards compat with run_compare; content is
+        # the cascade atomic table with cascade_stage / gate_pass columns.
         combined = method_root / "correctness_table.parquet"
         concat_per_dataset_parquets(per_ds_parquets, combined)
         logger.info(

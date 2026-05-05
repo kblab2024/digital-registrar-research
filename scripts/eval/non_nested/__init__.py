@@ -1,10 +1,10 @@
-"""Non-nested (scalar) field evaluation subcommand.
+"""Legacy non-nested utility modules (post-cascade-redesign).
 
-Scores categorical, boolean, ordinal, and continuous single-value
-fields. Three-way outcome classification (correct / wrong / missing)
-with Wilson CI on every rate, Cohen's κ + MCC + per-class P/R/F1,
-schema-conformance, refusal calibration, and multi-primary
-stratification.
-
-Entry point: ``python -m scripts.eval.cli non_nested ...``
+The ``non_nested`` subcommand has been removed in favor of ``cascade``.
+The ``metrics_non_nested.py`` module is retained as a utility surface
+because :mod:`scripts.eval.completeness` and other reductions still
+import its helpers (e.g. ``schema_conformance``). New code should
+import the cascade reductions in :mod:`scripts.eval.cascade.reductions`
+or the canonical stat primitives in
+:mod:`digital_registrar_research.benchmarks.eval.stats`.
 """

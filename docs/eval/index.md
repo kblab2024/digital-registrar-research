@@ -2,6 +2,8 @@
 
 ELI5-style explanations of every metric the `scripts/eval/` pipeline produces, plus paper-ready citations.
 
+> **Cascade redesign (2026-05).** The `non_nested` and `nested` subcommands have been replaced by a single `cascade` subcommand that gates evaluation as three sequential stages. Output paths have moved into `chapter1_eligibility/`, `chapter2_organ_classification/`, `chapter3_field_extraction/`. See [CHANGELOG.md](CHANGELOG.md) for the migration map and [../stat_methods.md](../stat_methods.md) for the new statistical-methods inventory.
+
 ## Decision tree — which doc do I read?
 
 | Question | File |
@@ -27,16 +29,21 @@ ELI5-style explanations of every metric the `scripts/eval/` pipeline produces, p
 
 ## CSV → metric crosswalk
 
-| Output file | Headline metric | Doc |
+| Output file (cascade layout) | Headline metric | Doc |
 |---|---|---|
-| `non_nested/per_field_overall.csv` | attempted_accuracy, effective_accuracy, completeness penalty | [non_nested_metrics.md](non_nested_metrics.md), [completeness.md](completeness.md) |
-| `non_nested/headline_classification.csv` | Cohen's κ (unweighted, quadratic), MCC, balanced accuracy | [non_nested_metrics.md](non_nested_metrics.md) |
-| `non_nested/missingness_summary.csv` | parse_error_rate, field_missing_rate, attempted_rate | [completeness.md](completeness.md) |
-| `non_nested/schema_conformance.csv` | out_of_vocab_rate (modularity-advantage signal) | [completeness.md](completeness.md) |
-| `non_nested/run_consistency.csv` | Fleiss κ, flip rate, missing-flip rate, stability accuracy | [multirun.md](multirun.md) |
-| `non_nested/confusion_pairs.csv` + `accuracy_collapsing_neighbors.csv` | top confusion pairs + curated neighbor analysis | [confusion_pairs.md](confusion_pairs.md) |
-| `nested/per_field_per_organ.csv` | bipartite F1, hallucination/miss rate, count MAE | [nested_metrics.md](nested_metrics.md) |
-| `nested/nested_missingness.csv` | parse_error / field_key_absent / empty_list / attempted | [completeness.md](completeness.md) |
+| `cascade_atomic.parquet` | every (run, case, field) row with `cascade_stage`, `gate_pass`, `others_disposition` | [reading_outputs.md](reading_outputs.md) |
+| `chapter1_eligibility/overall.csv` | sensitivity, specificity, MCC, Cohen's κ for `cancer_excision_report` | [non_nested_metrics.md](non_nested_metrics.md) |
+| `chapter1_eligibility/confusion.csv` | TP/FP/FN/TN for the eligibility decision | [confusion_pairs.md](confusion_pairs.md) |
+| `chapter2_organ_classification/overall.csv` | per-organ accuracy, macro-F1, Cohen's κ | [non_nested_metrics.md](non_nested_metrics.md) |
+| `chapter2_organ_classification/confusion_per_class.csv` | per-class P/R/F1/support over the 11-class organ classifier | [confusion_pairs.md](confusion_pairs.md) |
+| `chapter2_organ_classification/others/others_ledger.csv` | per-case dual-primary / out-of-scope ledger | [reading_outputs.md](reading_outputs.md) |
+| `chapter3_field_extraction/per_field_overall.csv` | accuracy, coverage, Cohen's κ per Stage-C field | [non_nested_metrics.md](non_nested_metrics.md) |
+| `chapter3_field_extraction/per_field_by_organ.csv` | same, stratified by organ | [non_nested_metrics.md](non_nested_metrics.md) |
+| `chapter3_field_extraction/per_organ_overall.csv` | mean accuracy across fields per organ | [non_nested_metrics.md](non_nested_metrics.md) |
+| `chapter3_field_extraction/cascade_funnel.csv` | n_total / n_passed / n_dropped per stage | [diagnostics.md](diagnostics.md) |
+| `chapter3_field_extraction/conditional_accuracy_grid.csv` | `P(field_correct \| stage_b ∧ stage_a)` per field | [diagnostics.md](diagnostics.md) |
+| `chapter*/multirun_consistency.csv` | ICC(2,1), ICC(3,k), Cronbach α, accuracy-flip-rate | [multirun.md](multirun.md) |
+| `model_pair_tests/*.csv` | McNemar / Cochran-Q / Stuart-Maxwell + Holm/BH adjusted p | [multiple_comparisons.md](multiple_comparisons.md), [../stat_methods.md](../stat_methods.md) §2.2 |
 | `iaa/pair_*.csv` | Cohen's κ (un/weighted), CCC, ICC, BA LoA, F1, Krippendorff α | [iaa_basics.md](iaa_basics.md) |
 | `iaa/preann/delta_kappa_per_field__*.csv` | Δκ with vs without preann + paired bootstrap CI | [preann_effect.md](preann_effect.md) |
 | `iaa/preann/anchoring_index__*.csv` | AI = P(human=preann \| with) − P(human=preann \| without) | [preann_effect.md](preann_effect.md) |

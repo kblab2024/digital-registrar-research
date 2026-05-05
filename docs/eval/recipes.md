@@ -2,6 +2,18 @@
 
 Copy-paste examples for every common evaluation task. All examples assume you're at the repo root.
 
+> **Cascade-redesign note (2026-05).** Recipes that reference `cli non_nested` or `cli nested` should be replaced with `cli cascade` — the cascade subcommand is the unified replacement. See [CHANGELOG.md](CHANGELOG.md) for the migration map. New canonical recipe:
+>
+> ```bash
+> # Cascade run on cmuh, single model, two runs.
+> python -m scripts.eval.cli cascade \
+>     --root workspace --dataset cmuh --annotator gold \
+>     --method llm --model gpt_oss_20b --run-ids run01 run02 \
+>     --out workspace/results/eval/cascade/cmuh_gpt_oss_20b
+> ```
+>
+> Output: `chapter1_eligibility/`, `chapter2_organ_classification/` (with `others/` ledger), `chapter3_field_extraction/` (with `cascade_funnel.csv`), and `cascade_atomic.parquet` at the root.
+
 ## Score one model on /dummy
 
 ```

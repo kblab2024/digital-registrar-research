@@ -1,7 +1,7 @@
-"""Nested-list field evaluation: lymph nodes, margins, biomarkers.
+"""Legacy nested-list utility modules (post-cascade-redesign).
 
-Bipartite F1 with case-stratified bootstrap CI, item-level
-hallucination/miss rates, count MAE, per-attribute conditional accuracy
-on matched pairs, four-level field-missingness decomposition
-(parse_error / field_key_absent / empty_list / partial_list).
+The ``nested`` subcommand has been removed in favor of ``cascade``.
+The ``biomarkers.py`` per-case scorer is retained because the cascade
+imports it through :mod:`scripts.eval.cascade.biomarkers`. New code
+should depend on the cascade surface, not import directly here.
 """

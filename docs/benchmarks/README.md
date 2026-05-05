@@ -78,7 +78,7 @@ Intra-corpus evaluation (e.g. CMUH-train / CMUH-test) is no longer supported in-
 1. [01_data_layout.md](01_data_layout.md) — canonical input + output paths
 2. [02_train_bert.md](02_train_bert.md) — training the ClinicalBERT heads (CMUH-only by default)
 3. [03_run_baselines.md](03_run_baselines.md) — predicting with rule, BERT, LLM
-4. [04_evaluate.md](04_evaluate.md) — per-method `non_nested` evaluation
+4. [04_evaluate.md](04_evaluate.md) — per-method evaluation via the `cascade` subcommand (replaces the legacy `non_nested` + `nested`)
 5. [05_compare.md](05_compare.md) — side-by-side comparison via `run_compare` and convenience wrappers
 6. [06_methods.md](06_methods.md) — descriptions, scope, and limitations of each method
 

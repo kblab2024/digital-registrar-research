@@ -1,5 +1,7 @@
 # Side-by-side comparison
 
+> **Cascade-redesign note (2026-05).** Output paths in this doc that mention `non_nested_<label>/` should be read as `cascade_<label>/`; the parquet retains the filename `correctness_table.parquet` for backwards compatibility with `run_compare`, but its content is the cascade atomic table. See [eval/CHANGELOG.md](../eval/CHANGELOG.md).
+
 ## Defaults (cross-corpus baseline)
 
 The convenience wrappers (`eval_rule_vs_llm`, `eval_bert_vs_llm`, `eval_rule_bert_llm`) default to:

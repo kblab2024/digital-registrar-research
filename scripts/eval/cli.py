@@ -4,14 +4,20 @@ Usage:
     python -m scripts.eval.cli <subcommand> [options]
 
 Subcommands:
-    non_nested   — accuracy + missingness for scalar (non-nested) fields
-    nested       — bipartite F1 + missingness for nested-list fields
-                   (lymph nodes, margins, biomarkers)
+    cascade      — cascade-gated three-chapter evaluation (Stage A:
+                   eligibility triage, Stage B: organ classification,
+                   Stage C: field extraction). The primary subcommand.
     iaa          — inter-annotator agreement + preann effect
     completeness — detailed missingness analysis across methods
     diagnostics  — source-of-error decomposition, difficulty tiers, worst cases
     cross_dataset — per-field Δ between datasets + distribution shift
     headline     — joint forest-plot CSV combining IAA + accuracy
+
+The legacy ``non_nested`` and ``nested`` subcommands have been removed
+in favor of ``cascade``. The cascade emits per-field accuracy
+(formerly ``non_nested``) and bipartite-F1 nested fields (formerly
+``nested``) under the same gating, with the gate cohorts honestly
+applied to denominators.
 
 All subcommands share a common argument schema (see _common/args.py).
 """
@@ -31,13 +37,8 @@ logger = logging.getLogger("scripts.eval.cli")
 SubcommandBuilder = Callable[[argparse._SubParsersAction], None]
 
 
-def _register_non_nested(sub: argparse._SubParsersAction) -> None:
-    from scripts.eval.non_nested.run_non_nested import register
-    register(sub)
-
-
-def _register_nested(sub: argparse._SubParsersAction) -> None:
-    from scripts.eval.nested.run_nested import register
+def _register_cascade(sub: argparse._SubParsersAction) -> None:
+    from scripts.eval.cascade.run_cascade import register
     register(sub)
 
 
@@ -67,8 +68,7 @@ def _register_headline(sub: argparse._SubParsersAction) -> None:
 
 
 REGISTRARS: dict[str, SubcommandBuilder] = {
-    "non_nested": _register_non_nested,
-    "nested": _register_nested,
+    "cascade": _register_cascade,
     "iaa": _register_iaa,
     "completeness": _register_completeness,
     "diagnostics": _register_diagnostics,

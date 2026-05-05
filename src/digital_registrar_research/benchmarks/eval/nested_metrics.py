@@ -222,62 +222,106 @@ def _per_category_status(g_list: list[dict],
     return out
 
 
-def score_lymph_nodes(gold: dict, pred: dict) -> dict:
-    """Returns a flat dict of per-case metrics for `regional_lymph_node`.
+def _aggregate_ln_by_group(items: list[dict]) -> dict[tuple, dict]:
+    """Aggregate lymph-node items by (side, category), summing counts.
 
-    Keys are suitable for aggregation:
-      ln_examined_total_{gold,pred,abs_err,correct_tol}
-      ln_involved_total_{gold,pred,abs_err,correct_tol}
-      ln_any_positive_{gold,pred,correct}
-      ln_station_{tp,fp,fn,matched,
-                  involved_correct, examined_correct,
-                  category_correct, side_correct}
+    Returns ``{(side, category): {"examined": int, "involved": int,
+    "n_items": int}}``. ``side`` and ``category`` are normalised
+    (lowercased / stripped). ``station_name`` is intentionally NOT in
+    the key — that's the whole point of the redesign: station_name is
+    an unstable free-text identifier that should not influence matching
+    or scoring.
+    """
+    groups: dict[tuple, dict] = {}
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        side = normalize(it.get("lymph_node_side"))
+        category = normalize(it.get("lymph_node_category"))
+        key = (side, category)
+        slot = groups.setdefault(
+            key, {"examined": 0, "involved": 0, "n_items": 0},
+        )
+        e_v, i_v = it.get("examined"), it.get("involved")
+        if isinstance(e_v, (int, float)):
+            slot["examined"] += int(e_v)
+        if isinstance(i_v, (int, float)):
+            slot["involved"] += int(i_v)
+        slot["n_items"] += 1
+    return groups
+
+
+def score_lymph_nodes(gold: dict, pred: dict) -> dict:
+    """Per-case lymph-node metrics — category-aggregation scoring.
+
+    The redesigned scorer sums ``examined`` and ``involved`` per
+    ``(lymph_node_side, lymph_node_category)`` group on each side of
+    the comparison, then matches groups by key. ``station_name`` is no
+    longer used — the gold annotators' free-text station labels are
+    unstable across cases and inflate disagreements that are textual
+    rather than clinical (e.g. gold splits "nonsentinel" into two
+    rows of 2 examined each, the model emits one row of 4).
+
+    Return-dict keys preserve the legacy contract so the cascade
+    reductions in :mod:`scripts.eval.cascade.reductions` and the
+    legacy ``run_nested.py`` (until deletion) consume the same shape.
+    Crucial difference: ``ln_station_*`` keys now refer to GROUPS,
+    not per-list-item rows. ``ln_station_matched`` is the count of
+    (side, category) groups present on both sides.
+
+    New keys
+    --------
+        ln_group_recall            fraction of gold groups also produced
+                                   by the model
+        ln_group_precision         fraction of pred groups also in gold
+        ln_n_groups_gold           number of distinct (side, category) groups
+                                   on the gold side
+        ln_n_groups_pred           same for pred
     """
     g_list = _safe_list(get_field_value(gold, "regional_lymph_node"))
     p_list = _safe_list(get_field_value(pred, "regional_lymph_node"))
 
-    def _sum(items, key):
-        total = 0
-        for x in items:
-            v = x.get(key)
-            if isinstance(v, (int, float)):
-                total += int(v)
-        return total
+    g_groups = _aggregate_ln_by_group(g_list)
+    p_groups = _aggregate_ln_by_group(p_list)
 
-    g_exam, p_exam = _sum(g_list, "examined"), _sum(p_list, "examined")
-    g_inv, p_inv = _sum(g_list, "involved"), _sum(p_list, "involved")
+    g_exam = sum(v["examined"] for v in g_groups.values())
+    p_exam = sum(v["examined"] for v in p_groups.values())
+    g_inv = sum(v["involved"] for v in g_groups.values())
+    p_inv = sum(v["involved"] for v in p_groups.values())
     g_any = g_inv > 0
     p_any = p_inv > 0
 
-    matched, unm_g, unm_p = _greedy_match(g_list, p_list, _ln_similarity)
-    tp = len(matched)
-    fp = len(unm_p)
-    fn = len(unm_g)
+    # Group-level matching: both sides must have the same (side, category).
+    # No bipartite scoring — group keys are deterministic.
+    common_keys = set(g_groups) & set(p_groups)
+    only_gold = set(g_groups) - set(p_groups)
+    only_pred = set(p_groups) - set(g_groups)
+    tp = len(common_keys)
+    fn = len(only_gold)
+    fp = len(only_pred)
 
-    involved_ok = examined_ok = category_ok = side_ok = 0
-    for gi, pi in matched:
-        g, p = g_list[gi], p_list[pi]
-        gi_v, pi_v = g.get("involved"), p.get("involved")
-        if isinstance(gi_v, (int, float)) and isinstance(pi_v, (int, float)) \
-                and abs(gi_v - pi_v) <= LN_COUNT_TOLERANCE:
-            involved_ok += 1
-        ge_v, pe_v = g.get("examined"), p.get("examined")
-        if isinstance(ge_v, (int, float)) and isinstance(pe_v, (int, float)) \
-                and abs(ge_v - pe_v) <= LN_COUNT_TOLERANCE:
+    n_g_groups = len(g_groups)
+    n_p_groups = len(p_groups)
+
+    examined_ok = involved_ok = category_ok = side_ok = 0
+    for key in common_keys:
+        g, p = g_groups[key], p_groups[key]
+        # Examined / involved tolerance match.
+        if abs(g["examined"] - p["examined"]) <= LN_COUNT_TOLERANCE:
             examined_ok += 1
-        if normalize(g.get("lymph_node_category")) == normalize(p.get("lymph_node_category")):
-            category_ok += 1
-        if normalize(g.get("lymph_node_side")) == normalize(p.get("lymph_node_side")):
-            side_ok += 1
+        if abs(g["involved"] - p["involved"]) <= LN_COUNT_TOLERANCE:
+            involved_ok += 1
+        # By construction the side and category match — record as 1.0
+        # so the downstream per-attribute reductions report this
+        # explicitly rather than silently dropping the columns.
+        category_ok += 1
+        side_ok += 1
 
-    # Total-stations: count of distinct station entries in the list.
-    # Distinct from ``ln_examined_total`` (which sums per-station node
-    # counts) — answers "did the model identify the right number of
-    # station-level entries", regardless of node counts inside each.
-    g_total_stations = len(g_list)
-    p_total_stations = len(p_list)
+    group_recall = tp / n_g_groups if n_g_groups else float("nan")
+    group_precision = tp / n_p_groups if n_p_groups else float("nan")
 
     return {
+        # Case-level totals (clinically actionable headlines).
         "ln_examined_total_gold": g_exam,
         "ln_examined_total_pred": p_exam,
         "ln_examined_total_abs_err": abs(g_exam - p_exam),
@@ -289,11 +333,12 @@ def score_lymph_nodes(gold: dict, pred: dict) -> dict:
         "ln_any_positive_gold": int(g_any),
         "ln_any_positive_pred": int(p_any),
         "ln_any_positive_correct": int(g_any == p_any),
-        "ln_total_stations_gold": g_total_stations,
-        "ln_total_stations_pred": p_total_stations,
-        "ln_total_stations_abs_err": abs(g_total_stations - p_total_stations),
+        # Legacy-named "stations" keys now refer to GROUPS (side, category).
+        "ln_total_stations_gold": n_g_groups,
+        "ln_total_stations_pred": n_p_groups,
+        "ln_total_stations_abs_err": abs(n_g_groups - n_p_groups),
         "ln_total_stations_correct_tol": int(
-            abs(g_total_stations - p_total_stations) <= LN_COUNT_TOLERANCE),
+            abs(n_g_groups - n_p_groups) <= LN_COUNT_TOLERANCE),
         "ln_per_station": _per_station_counts(g_list, p_list),
         "ln_station_tp": tp,
         "ln_station_fp": fp,
@@ -303,6 +348,11 @@ def score_lymph_nodes(gold: dict, pred: dict) -> dict:
         "ln_station_examined_correct": examined_ok,
         "ln_station_category_correct": category_ok,
         "ln_station_side_correct": side_ok,
+        # New cascade-redesign keys.
+        "ln_group_recall": group_recall,
+        "ln_group_precision": group_precision,
+        "ln_n_groups_gold": n_g_groups,
+        "ln_n_groups_pred": n_p_groups,
     }
 
 

@@ -1,5 +1,7 @@
 # Design rationale
 
+> **Cascade-redesign note (2026-05).** The "how we measure success" question is now answered by the cascade chapter outputs (Stage A eligibility, Stage B organ classification, Stage C field extraction) rather than by a single flat correctness vector. Per-cell modular-vs-monolithic deltas in `cell_deltas.csv` are computed from the same restricted Stage-C cohort across all cells, so comparisons remain apples-to-apples. Cross-cell paired tests live in `model_pair_tests/` (McNemar + Cochran-Q + paired-bootstrap deltas). See [eval/CHANGELOG.md](eval/CHANGELOG.md) and [stat_methods.md](stat_methods.md) for details.
+
 This document records the reasoning behind each ablation cell and how
 the results should be read. Decisions here should carry forward if the
 ablation grid is extended.
