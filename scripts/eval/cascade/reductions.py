@@ -47,6 +47,22 @@ def _wilson(k: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
     return wilson_ci(k, n, alpha)
 
 
+def _stage_c_scalar(atomic: pd.DataFrame) -> pd.DataFrame:
+    """Stage-C rows minus nested_list rows.
+
+    The chapter-3 per-field accuracy tables score scalar fields under
+    binary (correct / wrong) semantics. Nested fields (margins,
+    regional_lymph_node, biomarkers) live in atomic with ``correct = f1``
+    (a float) and are summarised separately by the nested reducers.
+    """
+    if atomic.empty:
+        return atomic
+    stage_c = atomic[atomic["cascade_stage"] == "C"]
+    if "field_kind" in stage_c.columns:
+        stage_c = stage_c[stage_c["field_kind"] != "nested_list"]
+    return stage_c
+
+
 # --- Chapter 1: eligibility triage ----------------------------------------
 
 def chapter1_overall(
@@ -220,9 +236,11 @@ def chapter3_per_field_overall(
 ) -> pd.DataFrame:
     """Stage-C scalar field accuracy with Wilson CI and Cohen's kappa.
 
-    One row per (model, dataset, field).
+    One row per (model, dataset, field). Excludes ``nested_list`` rows
+    — those carry an F1 in ``correct`` (not a bool) and are summarised
+    in ``nested_per_field_per_organ.csv``.
     """
-    stage_c = atomic[atomic["cascade_stage"] == "C"]
+    stage_c = _stage_c_scalar(atomic)
     if stage_c.empty:
         return pd.DataFrame()
     rows: list[dict] = []
@@ -264,8 +282,11 @@ def chapter3_per_field_by_organ(
     *,
     alpha: float = 0.05,
 ) -> pd.DataFrame:
-    """Stage-C per-field accuracy stratified by organ."""
-    stage_c = atomic[atomic["cascade_stage"] == "C"]
+    """Stage-C per-field accuracy stratified by organ.
+
+    Excludes ``nested_list`` rows — see ``chapter3_per_field_overall``.
+    """
+    stage_c = _stage_c_scalar(atomic)
     if stage_c.empty:
         return pd.DataFrame()
     rows: list[dict] = []
@@ -293,8 +314,11 @@ def chapter3_per_organ_overall(
     *,
     alpha: float = 0.05,
 ) -> pd.DataFrame:
-    """Mean accuracy across all fields per organ (Stage C only)."""
-    stage_c = atomic[atomic["cascade_stage"] == "C"]
+    """Mean accuracy across all fields per organ (Stage C only).
+
+    Excludes ``nested_list`` rows — see ``chapter3_per_field_overall``.
+    """
+    stage_c = _stage_c_scalar(atomic)
     if stage_c.empty:
         return pd.DataFrame()
     rows: list[dict] = []
@@ -310,6 +334,200 @@ def chapter3_per_organ_overall(
             "model": model, "dataset": dataset, "organ": organ,
             "n_attempted": n_attempted, "n_correct": n_correct,
             "accuracy": acc, "ci_lo": lo, "ci_hi": hi,
+        })
+    return pd.DataFrame(rows)
+
+
+# --- Chapter 3: nested-field summaries ------------------------------------
+
+# Matched-pair attribute columns expected on the nested sidecar. Per
+# field, the LN scorer ships counts of matched pairs where each inner
+# attribute agrees; the margin scorer ships an analogous bundle. We
+# flatten these into one row per (organ, field, attribute) for the
+# per-attribute CSV.
+_NESTED_ATTRIBUTE_COLS: dict[str, dict[str, str]] = {
+    "regional_lymph_node": {
+        "examined_correct": "ln_station_examined_correct",
+        "involved_correct": "ln_station_involved_correct",
+        "category_correct": "ln_station_category_correct",
+        "side_correct":     "ln_station_side_correct",
+    },
+    "margins": {
+        "status_correct":   "margin_status_correct",
+        "distance_correct": "margin_distance_correct",
+        "category_correct": "margin_category_correct",
+    },
+}
+
+_NESTED_MATCHED_COL = {
+    "regional_lymph_node": "ln_station_matched",
+    "margins":             "margin_matched",
+}
+
+
+def chapter3_nested_per_field_per_organ(
+    nested: pd.DataFrame,
+    *,
+    alpha: float = 0.05,
+) -> pd.DataFrame:
+    """Per (model, dataset, organ, field) headline for nested fields.
+
+    Columns: model, dataset, organ, field, n_attempted, attempted_f1,
+    plus field-specific headlines pulled straight from the per-case
+    scorer dicts (group_recall / group_precision / examined_mae /
+    involved_mae / any_positive_acc for LN; any_involved_acc /
+    closest_dist_mae for margins; tp/fp/fn micro for biomarkers).
+    """
+    if nested is None or nested.empty:
+        return pd.DataFrame()
+
+    rows: list[dict] = []
+    by = ["model", "dataset", "organ", "field"]
+    for keys, sub in nested.groupby(by, dropna=False):
+        n_attempted = int(sub["attempted"].sum()) if "attempted" in sub else len(sub)
+        f1_vals = pd.to_numeric(sub.get("f1"), errors="coerce").dropna()
+        attempted_f1 = float(f1_vals.mean()) if not f1_vals.empty else float("nan")
+        row = dict(zip(by, keys))
+        row.update({
+            "n_cases": len(sub),
+            "n_attempted": n_attempted,
+            "attempted_f1": attempted_f1,
+        })
+        field = keys[3]
+        if field == "regional_lymph_node":
+            row.update(_ln_headline_block(sub))
+        elif field == "margins":
+            row.update(_margin_headline_block(sub))
+        elif field == "biomarkers":
+            row.update(_biomarker_headline_block(sub))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _ln_headline_block(sub: pd.DataFrame) -> dict:
+    out = {}
+    for col, label in [
+        ("ln_group_recall", "group_recall"),
+        ("ln_group_precision", "group_precision"),
+        ("ln_examined_total_abs_err", "examined_mae"),
+        ("ln_examined_total_correct_tol", "examined_acc_tol1"),
+        ("ln_involved_total_abs_err", "involved_mae"),
+        ("ln_involved_total_correct_tol", "involved_acc_tol1"),
+        ("ln_any_positive_correct", "any_positive_acc"),
+    ]:
+        out[label] = (
+            float(pd.to_numeric(sub.get(col), errors="coerce").mean())
+            if col in sub.columns else float("nan")
+        )
+    return out
+
+
+def _margin_headline_block(sub: pd.DataFrame) -> dict:
+    out = {}
+    for col, label in [
+        ("margin_any_involved_correct", "any_involved_acc"),
+        ("margin_closest_distance_abs_err", "closest_dist_mae"),
+        ("margin_closest_distance_correct_tol", "closest_dist_acc_tol2"),
+        ("margin_closest_distance_has_both", "closest_dist_both_rate"),
+    ]:
+        out[label] = (
+            float(pd.to_numeric(sub.get(col), errors="coerce").mean())
+            if col in sub.columns else float("nan")
+        )
+    return out
+
+
+def _biomarker_headline_block(sub: pd.DataFrame) -> dict:
+    tp = int(pd.to_numeric(sub.get("tp"), errors="coerce").fillna(0).sum())
+    fp = int(pd.to_numeric(sub.get("fp"), errors="coerce").fillna(0).sum())
+    fn = int(pd.to_numeric(sub.get("fn"), errors="coerce").fillna(0).sum())
+    if tp + fp == 0 or tp + fn == 0:
+        prec = rec = micro_f1 = float("nan")
+    else:
+        prec = tp / (tp + fp)
+        rec = tp / (tp + fn)
+        micro_f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+    return {"tp": tp, "fp": fp, "fn": fn,
+            "micro_precision": prec, "micro_recall": rec, "micro_f1": micro_f1}
+
+
+def chapter3_nested_per_attribute_per_organ(
+    nested: pd.DataFrame,
+    *,
+    alpha: float = 0.05,
+) -> pd.DataFrame:
+    """Matched-pair attribute accuracy for LN and margins.
+
+    One row per (model, dataset, organ, field, attribute). For matched
+    pairs, what fraction got each inner attribute right (Wilson CI
+    on the matched-pair denominator)?
+    """
+    if nested is None or nested.empty:
+        return pd.DataFrame()
+
+    rows: list[dict] = []
+    for (model, dataset, organ, field), sub in nested.groupby(
+        ["model", "dataset", "organ", "field"], dropna=False,
+    ):
+        if field not in _NESTED_ATTRIBUTE_COLS:
+            continue
+        matched_col = _NESTED_MATCHED_COL[field]
+        if matched_col not in sub.columns:
+            continue
+        n_matched = int(pd.to_numeric(sub[matched_col], errors="coerce").fillna(0).sum())
+        for attr_label, attr_col in _NESTED_ATTRIBUTE_COLS[field].items():
+            if attr_col not in sub.columns:
+                continue
+            n_correct = int(
+                pd.to_numeric(sub[attr_col], errors="coerce").fillna(0).sum()
+            )
+            acc = _safe_proportion(n_correct, n_matched)
+            lo, hi = _wilson(n_correct, n_matched, alpha)
+            rows.append({
+                "model": model, "dataset": dataset, "organ": organ,
+                "field": field, "attribute": attr_label,
+                "n_matched_pairs": n_matched,
+                "n_attribute_correct": n_correct,
+                "accuracy": acc, "ci_lo": lo, "ci_hi": hi,
+            })
+    return pd.DataFrame(rows)
+
+
+def chapter3_biomarker_per_category(
+    atomic: pd.DataFrame,
+    *,
+    alpha: float = 0.05,
+) -> pd.DataFrame:
+    """Per-category biomarker accuracy.
+
+    The cascade scorer emits one row per ``biomarker_<cat>`` field in
+    atomic (er/pr/her2/ki67 for breast, msh2/msh6/pms2/mlh1 for
+    colorectal). One row per (model, dataset, organ, category) with
+    attempted accuracy + Wilson CI.
+    """
+    if atomic is None or atomic.empty:
+        return pd.DataFrame()
+
+    bm = atomic[atomic["field"].astype(str).str.startswith("biomarker_")]
+    if bm.empty:
+        return pd.DataFrame()
+    bm = bm.copy()
+    bm["category"] = bm["field"].str[len("biomarker_"):]
+    rows: list[dict] = []
+    for (model, dataset, organ, category), sub in bm.groupby(
+        ["model", "dataset", "organ", "category"], dropna=False,
+    ):
+        attempted = sub[sub["attempted"] == True]  # noqa: E712
+        n_attempted = len(attempted)
+        n_correct = int(attempted["correct"].fillna(False).astype(bool).sum())
+        acc = _safe_proportion(n_correct, n_attempted)
+        lo, hi = _wilson(n_correct, n_attempted, alpha)
+        rows.append({
+            "model": model, "dataset": dataset, "organ": organ,
+            "category": category,
+            "n_total": len(sub), "n_attempted": n_attempted,
+            "n_correct": n_correct,
+            "accuracy_attempted": acc, "ci_lo": lo, "ci_hi": hi,
         })
     return pd.DataFrame(rows)
 
@@ -388,5 +606,8 @@ __all__ = [
     "chapter3_per_field_overall",
     "chapter3_per_field_by_organ",
     "chapter3_per_organ_overall",
+    "chapter3_nested_per_field_per_organ",
+    "chapter3_nested_per_attribute_per_organ",
+    "chapter3_biomarker_per_category",
     "chapter_multirun_reliability",
 ]

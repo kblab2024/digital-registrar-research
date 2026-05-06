@@ -37,6 +37,21 @@ Output tree under ``--out``:
         multirun_consistency.csv          (when n_runs > 1)
         cascade_funnel.csv
         conditional_accuracy_grid.csv
+    chapter4_margins/
+        overall.csv
+        per_attribute.csv
+        per_category.csv
+        confusion_matrices.csv
+        missingness.csv
+        multirun_consistency.csv          (when n_runs > 1)
+    chapter5_lymph_nodes/
+        overall.csv
+        per_attribute.csv
+        per_category.csv
+        per_station.csv
+        confusion_matrices.csv
+        missingness.csv
+        multirun_consistency.csv          (when n_runs > 1)
     model_pair_tests/                     (multi-model runs only)
         chapter1_eligibility.csv
         chapter2_organ_classification.csv
@@ -54,6 +69,7 @@ import numpy as np
 import pandas as pd
 
 from digital_registrar_research.benchmarks.eval.metrics import (
+    is_attempted,
     match_nested_list_filtered,
     normalize,
     score_case,
@@ -95,9 +111,27 @@ from .others import (
 from .paired_tests import (
     cochran_q_per_field, pairwise_mcnemar_grid, stuart_maxwell_per_organ,
 )
+from .nested_reductions import (
+    chapter4_margins_confusion,
+    chapter4_margins_missingness,
+    chapter4_margins_multirun,
+    chapter4_margins_overall,
+    chapter4_margins_per_attribute,
+    chapter4_margins_per_category,
+    chapter5_lymph_nodes_confusion,
+    chapter5_lymph_nodes_missingness,
+    chapter5_lymph_nodes_multirun,
+    chapter5_lymph_nodes_overall,
+    chapter5_lymph_nodes_per_attribute,
+    chapter5_lymph_nodes_per_category,
+    chapter5_lymph_nodes_per_station,
+)
 from .reductions import (
     chapter1_confusion, chapter1_overall,
     chapter2_confusion_per_class, chapter2_overall,
+    chapter3_biomarker_per_category,
+    chapter3_nested_per_attribute_per_organ,
+    chapter3_nested_per_field_per_organ,
     chapter3_per_field_by_organ, chapter3_per_field_overall,
     chapter3_per_organ_overall,
     chapter_multirun_reliability,
@@ -149,18 +183,22 @@ def _main(args: argparse.Namespace) -> int:
         args.method, args.model, len(effective_runs), len(organs),
     )
 
-    atomic, ledger, n_per_organ = _build_atomic_and_ledger(
+    atomic, ledger, nested, n_per_organ = _build_atomic_and_ledger(
         paths=paths, args=args, run_ids=effective_runs,
         organs=organs, case_filter=case_filter,
     )
     if atomic.empty:
         logger.error("cascade atomic table empty — check inputs.")
         return 1
-    logger.info("cascade atomic: %d rows | others ledger: %d rows",
-                len(atomic), len(ledger))
+    logger.info(
+        "cascade atomic: %d rows | nested: %d rows | others ledger: %d rows",
+        len(atomic), len(nested), len(ledger),
+    )
 
     args.out.mkdir(parents=True, exist_ok=True)
     write_parquet(atomic, args.out / "cascade_atomic.parquet")
+    if not nested.empty:
+        write_parquet(nested, args.out / "cascade_nested.parquet")
 
     # --- Chapter 1: eligibility -----------------------------------------
     ch1_dir = args.out / "chapter1_eligibility"
@@ -206,10 +244,55 @@ def _main(args: argparse.Namespace) -> int:
     write_csv(chapter3_per_organ_overall(atomic, alpha=args.alpha),
               ch3_dir / "per_organ_overall.csv")
 
+    # Nested fields (margins / regional_lymph_node / biomarkers).
+    if not nested.empty:
+        write_csv(chapter3_nested_per_field_per_organ(nested),
+                  ch3_dir / "nested_per_field_per_organ.csv")
+        write_csv(chapter3_nested_per_attribute_per_organ(nested),
+                  ch3_dir / "nested_per_attribute_per_organ.csv")
+    write_csv(chapter3_biomarker_per_category(atomic),
+              ch3_dir / "biomarker_per_category.csv")
+
     # Cascade-specific diagnostics.
     write_csv(cascade_funnel(atomic), ch3_dir / "cascade_funnel.csv")
     write_csv(conditional_accuracy_grid(atomic),
               ch3_dir / "conditional_accuracy_grid.csv")
+
+    # --- Chapter 4: margins ---------------------------------------------
+    ch4_dir = args.out / "chapter4_margins"
+    ch4_dir.mkdir(parents=True, exist_ok=True)
+    write_csv(chapter4_margins_overall(nested, atomic, alpha=args.alpha),
+              ch4_dir / "overall.csv")
+    write_csv(chapter4_margins_per_attribute(nested, alpha=args.alpha),
+              ch4_dir / "per_attribute.csv")
+    write_csv(chapter4_margins_per_category(nested, alpha=args.alpha),
+              ch4_dir / "per_category.csv")
+    write_csv(chapter4_margins_confusion(nested),
+              ch4_dir / "confusion_matrices.csv")
+    write_csv(chapter4_margins_missingness(atomic, alpha=args.alpha),
+              ch4_dir / "missingness.csv")
+    if atomic["run_id"].nunique() > 1:
+        write_csv(chapter4_margins_multirun(atomic),
+                  ch4_dir / "multirun_consistency.csv")
+
+    # --- Chapter 5: lymph nodes -----------------------------------------
+    ch5_dir = args.out / "chapter5_lymph_nodes"
+    ch5_dir.mkdir(parents=True, exist_ok=True)
+    write_csv(chapter5_lymph_nodes_overall(nested, atomic, alpha=args.alpha),
+              ch5_dir / "overall.csv")
+    write_csv(chapter5_lymph_nodes_per_attribute(nested, alpha=args.alpha),
+              ch5_dir / "per_attribute.csv")
+    write_csv(chapter5_lymph_nodes_per_category(nested, alpha=args.alpha),
+              ch5_dir / "per_category.csv")
+    write_csv(chapter5_lymph_nodes_per_station(nested, alpha=args.alpha),
+              ch5_dir / "per_station.csv")
+    write_csv(chapter5_lymph_nodes_confusion(nested),
+              ch5_dir / "confusion_matrices.csv")
+    write_csv(chapter5_lymph_nodes_missingness(atomic, alpha=args.alpha),
+              ch5_dir / "missingness.csv")
+    if atomic["run_id"].nunique() > 1:
+        write_csv(chapter5_lymph_nodes_multirun(atomic),
+                  ch5_dir / "multirun_consistency.csv")
 
     # --- Manifest -------------------------------------------------------
     cascade_funnel_df = cascade_funnel(atomic)
@@ -228,6 +311,7 @@ def _main(args: argparse.Namespace) -> int:
             "n_runs": len(effective_runs),
             "run_ids": effective_runs,
             "n_atomic_rows": int(len(atomic)),
+            "n_nested_rows": int(len(nested)),
             "n_unique_cases": int(atomic["case_id"].nunique()),
             "n_others_ledger_rows": int(len(ledger)),
             "cascade_funnel": funnel_record,
@@ -247,10 +331,19 @@ def _build_atomic_and_ledger(
     run_ids: Iterable[str],
     organs: Iterable[int],
     case_filter: set[str] | None,
-) -> tuple[pd.DataFrame, pd.DataFrame, dict[int, int]]:
-    """Walk every (run, case) and emit cascade rows."""
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[int, int]]:
+    """Walk every (run, case) and emit cascade rows.
+
+    Returns ``(atomic, ledger, nested, n_per_organ)``. ``nested`` is the
+    sidecar table with one row per ``(run, case, nested_field)`` carrying
+    the rich per-case dicts from ``score_lymph_nodes`` / ``score_margins``
+    / ``match_nested_list_filtered``. The atomic table also gains one
+    headline row per nested field with ``field_kind == "nested_list"``
+    and ``correct = f1`` so paired tests / multirun reductions see them.
+    """
     n_per_organ: dict[int, int] = {}
     rows: list[dict] = []
+    nested_rows: list[dict] = []
     others_rows: list[dict] = []
 
     case_index: list[tuple[int, str]] = []
@@ -366,10 +459,18 @@ def _build_atomic_and_ledger(
                     case_load=case_load,
                     others_disposition=others_disposition,
                 ))
+                nested_atomic, nested_sidecar = _emit_nested_rows(
+                    base=base, gold=gold, pred=pred,
+                    case_load=case_load,
+                    others_disposition=others_disposition,
+                )
+                rows.extend(nested_atomic)
+                nested_rows.extend(nested_sidecar)
 
     atomic = pd.DataFrame(rows)
     ledger = pd.DataFrame(others_rows)
-    return atomic, ledger, n_per_organ
+    nested = pd.DataFrame(nested_rows)
+    return atomic, ledger, nested, n_per_organ
 
 
 def _emit_stage_c_rows(
@@ -424,6 +525,190 @@ def _emit_stage_c_rows(
             "pred_value": p_val,
         })
     return rows
+
+
+# Inner-key columns we flatten from the nested per-case dicts onto the
+# atomic headline row for paired tests / compare_runs. Dict-typed values
+# (`ln_per_station`, `margin_per_category`) stay only in the sidecar.
+_NESTED_HEADLINE_FIELDS = ("regional_lymph_node", "margins", "biomarkers")
+
+
+def _nested_headline_f1(scorer_out: dict, field: str) -> float | None:
+    """Pull the headline F1 from a per-case nested scorer output.
+
+    LN uses the redesigned group-aggregation precision/recall under the
+    legacy ``ln_station_*`` keys; margins / biomarkers expose the
+    bipartite TP/FP/FN. Returns ``None`` when both gold and pred are
+    empty (no F1 defined).
+    """
+    if field == "regional_lymph_node":
+        tp = int(scorer_out.get("ln_station_tp", 0) or 0)
+        fp = int(scorer_out.get("ln_station_fp", 0) or 0)
+        fn = int(scorer_out.get("ln_station_fn", 0) or 0)
+    elif field == "margins":
+        tp = int(scorer_out.get("margin_tp", 0) or 0)
+        fp = int(scorer_out.get("margin_fp", 0) or 0)
+        fn = int(scorer_out.get("margin_fn", 0) or 0)
+    else:  # biomarkers — match_nested_list_filtered shape
+        tp = int(scorer_out.get("tp", 0) or 0)
+        fp = int(scorer_out.get("fp", 0) or 0)
+        fn = int(scorer_out.get("fn", 0) or 0)
+    if tp + fp + fn == 0:
+        return None
+    if tp + fp == 0 or tp + fn == 0:
+        return 0.0
+    prec = tp / (tp + fp)
+    rec = tp / (tp + fn)
+    return 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+
+
+def _classify_nested_missingness(
+    *,
+    case_load: CaseLoad,
+    pred: dict,
+    field: str,
+    f1: float | None,
+) -> str:
+    """Four-level nested-field missingness classification.
+
+    Levels match :doc:`docs/eval/nested_metrics.md` §"Four-level
+    field missingness":
+
+      * ``parse_error``      — whole-case load failed.
+      * ``field_key_absent`` — case loaded, field key absent in pred.
+      * ``empty_list``       — field key present but ``[]`` (or null).
+      * ``partial_list``     — field key present with items.
+    """
+    if not case_load.ok:
+        return "parse_error"
+    if not is_attempted(pred, field):
+        return "field_key_absent"
+    pred_val = get_field_value(pred, field)
+    if pred_val is None or (isinstance(pred_val, list) and len(pred_val) == 0):
+        return "empty_list"
+    return "partial_list"
+
+
+def _emit_nested_rows(
+    *,
+    base: dict,
+    gold: dict,
+    pred: dict,
+    case_load: CaseLoad,
+    others_disposition: str,
+) -> tuple[list[dict], list[dict]]:
+    """Compute per-case nested-field metrics and emit two row sets.
+
+    Returns ``(atomic_rows, sidecar_rows)``:
+      * ``atomic_rows`` — one headline row per nested field with
+        ``field_kind="nested_list"`` and ``correct = f1`` (float).
+        Lets paired-tests / multirun consumers treat nested fields as
+        first-class without bespoke plumbing. Carries
+        ``nested_missingness_level`` for chapter-4/5 missingness CSVs.
+      * ``sidecar_rows`` — full ``score_*`` payload per case for the
+        ``cascade_nested.parquet`` sidecar consumed by the per-attribute,
+        per-category, and confusion-matrix reducers.
+    """
+    atomic_rows: list[dict] = []
+    sidecar_rows: list[dict] = []
+    organ = base["organ"]
+
+    if not case_load.ok:
+        # Parse-error cases still get atomic placeholder rows so coverage
+        # accounting is honest. No sidecar entry — there's nothing to score.
+        for field in _NESTED_HEADLINE_FIELDS:
+            atomic_rows.append({
+                **base,
+                "cascade_stage": "C",
+                "gate_pass": True,
+                "others_disposition": others_disposition,
+                "field": field,
+                "field_kind": "nested_list",
+                "gold_present": get_field_value(gold, field) is not None,
+                "attempted": False,
+                "correct": None,
+                "wrong": None,
+                "field_missing": False,
+                "parse_error": True,
+                "error_mode": case_load.error_mode,
+                "gold_value": None,
+                "pred_value": None,
+                "nested_missingness_level": "parse_error",
+            })
+        return atomic_rows, sidecar_rows
+
+    scorers = {
+        "regional_lymph_node": lambda: score_lymph_nodes(gold, pred),
+        "margins": lambda: score_margins(gold, pred),
+        "biomarkers": lambda: match_nested_list_filtered(
+            gold, pred, "biomarkers", organ=organ,
+        ),
+    }
+    for field, scorer in scorers.items():
+        attempted = is_attempted(pred, field)
+        gold_val = get_field_value(gold, field)
+        pred_val = get_field_value(pred, field) if case_load.ok else None
+        gold_present = gold_val is not None
+        if not attempted:
+            level = _classify_nested_missingness(
+                case_load=case_load, pred=pred, field=field, f1=None,
+            )
+            atomic_rows.append({
+                **base,
+                "cascade_stage": "C",
+                "gate_pass": True,
+                "others_disposition": others_disposition,
+                "field": field,
+                "field_kind": "nested_list",
+                "gold_present": gold_present,
+                "attempted": False,
+                "correct": None,
+                "wrong": None,
+                "field_missing": True,
+                "parse_error": False,
+                "error_mode": None,
+                "gold_value": None,
+                "pred_value": None,
+                "nested_missingness_level": level,
+            })
+            continue
+
+        scorer_out = scorer()
+        f1 = _nested_headline_f1(scorer_out, field)
+        level = _classify_nested_missingness(
+            case_load=case_load, pred=pred, field=field, f1=f1,
+        )
+        # ``correct`` is a float in [0,1] for nested rows. Reductions
+        # filter on field_kind=="nested_list" to avoid bool-coercing F1.
+        atomic_rows.append({
+            **base,
+            "cascade_stage": "C",
+            "gate_pass": True,
+            "others_disposition": others_disposition,
+            "field": field,
+            "field_kind": "nested_list",
+            "gold_present": gold_present,
+            "attempted": True,
+            "correct": f1,
+            "wrong": (None if f1 is None else (1.0 - f1)),
+            "field_missing": False,
+            "parse_error": False,
+            "error_mode": None,
+            "gold_value": None,
+            "pred_value": None,
+            "nested_missingness_level": level,
+        })
+        sidecar_rows.append({
+            **base,
+            "field": field,
+            "f1": f1,
+            "gold_present": gold_present,
+            "attempted": True,
+            "nested_missingness_level": level,
+            **scorer_out,
+        })
+
+    return atomic_rows, sidecar_rows
 
 
 # --- Helpers --------------------------------------------------------------

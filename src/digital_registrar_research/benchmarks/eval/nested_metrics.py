@@ -320,6 +320,49 @@ def score_lymph_nodes(gold: dict, pred: dict) -> dict:
     group_recall = tp / n_g_groups if n_g_groups else float("nan")
     group_precision = tp / n_p_groups if n_p_groups else float("nan")
 
+    # Per-group ledger for chapter-5 per-category reducers and the
+    # single-group confusion view. Entries: list of dicts with side,
+    # category, presence flags, and the matched counts when both sides
+    # have the group.
+    per_group_ledger: list[dict] = []
+    for key in set(g_groups) | set(p_groups):
+        side, category = key
+        g_present = key in g_groups
+        p_present = key in p_groups
+        g = g_groups.get(key, {})
+        p = p_groups.get(key, {})
+        per_group_ledger.append({
+            "side": side, "category": category,
+            "gold_present": int(g_present),
+            "pred_present": int(p_present),
+            "gold_examined": int(g.get("examined", 0)),
+            "pred_examined": int(p.get("examined", 0)),
+            "gold_involved": int(g.get("involved", 0)),
+            "pred_involved": int(p.get("involved", 0)),
+            "examined_correct_tol": int(
+                g_present and p_present
+                and abs(g.get("examined", 0) - p.get("examined", 0))
+                    <= LN_COUNT_TOLERANCE,
+            ),
+            "involved_correct_tol": int(
+                g_present and p_present
+                and abs(g.get("involved", 0) - p.get("involved", 0))
+                    <= LN_COUNT_TOLERANCE,
+            ),
+        })
+
+    # Single-group cases support a clean (gold_side, pred_side) and
+    # (gold_cat, pred_cat) confusion observation. Multi-group cases are
+    # ambiguous — we record them as None for downstream filtering.
+    if n_g_groups == 1 and n_p_groups == 1:
+        gk = next(iter(g_groups.keys()))
+        pk = next(iter(p_groups.keys()))
+        single_group_pair_side = (gk[0], pk[0])
+        single_group_pair_category = (gk[1], pk[1])
+    else:
+        single_group_pair_side = None
+        single_group_pair_category = None
+
     return {
         # Case-level totals (clinically actionable headlines).
         "ln_examined_total_gold": g_exam,
@@ -353,6 +396,10 @@ def score_lymph_nodes(gold: dict, pred: dict) -> dict:
         "ln_group_precision": group_precision,
         "ln_n_groups_gold": n_g_groups,
         "ln_n_groups_pred": n_p_groups,
+        # Chapter-5 feeders.
+        "ln_per_group": per_group_ledger,
+        "ln_single_group_pair_side": single_group_pair_side,
+        "ln_single_group_pair_category": single_group_pair_category,
     }
 
 
@@ -396,6 +443,12 @@ def score_margins(gold: dict, pred: dict) -> dict:
     fp = len(unm_p)
     fn = len(unm_g)
 
+    # Matched-pair attribute tuples — feed the chapter-4 confusion
+    # matrices and per-attribute reducers without re-running the
+    # bipartite match downstream.
+    matched_pair_categories: list[tuple] = []
+    matched_pair_status: list[tuple] = []
+
     status_ok = distance_ok = category_ok = 0
     for gi, pi in matched:
         g, p = g_list[gi], p_list[pi]
@@ -409,6 +462,14 @@ def score_margins(gold: dict, pred: dict) -> dict:
             distance_ok += 1
         if normalize(g.get("margin_category")) == normalize(p.get("margin_category")):
             category_ok += 1
+        matched_pair_categories.append(
+            (normalize(g.get("margin_category")),
+             normalize(p.get("margin_category"))),
+        )
+        matched_pair_status.append(
+            (bool(g.get("margin_involved")) if g.get("margin_involved") is not None else None,
+             bool(p.get("margin_involved")) if p.get("margin_involved") is not None else None),
+        )
 
     return {
         "margin_any_involved_gold": int(g_any),
@@ -427,6 +488,9 @@ def score_margins(gold: dict, pred: dict) -> dict:
         "margin_status_correct": status_ok,
         "margin_distance_correct": distance_ok,
         "margin_category_correct": category_ok,
+        # Confusion-matrix feeders (long-form on demand by reducers).
+        "margin_matched_pair_categories": matched_pair_categories,
+        "margin_matched_pair_status": matched_pair_status,
     }
 
 
