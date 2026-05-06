@@ -401,7 +401,12 @@ def _build_pairwise(
     """
     rows: list[dict] = []
     labels = list(atomics.keys())
-    # Pre-pivot each run to (case_id, field) -> correct (numeric, scalar Stage C only).
+    # Pre-pivot each method to (case_id, field) -> mean correctness over
+    # whatever runs the atomic table carries. For single-run methods this
+    # is identity. For multi-run methods (K=10 BERT, K=5 LLM, ...) this
+    # collapses to a per-case expected-accuracy in [0, 1] so the same
+    # pairing logic works regardless of K_a vs K_b. McNemar still works
+    # because we binarize via >= 0.5 below before calling it.
     pivots: dict[str, pd.DataFrame] = {}
     for label, df in atomics.items():
         stage_c = _stage_c_scalar(df)
@@ -411,7 +416,7 @@ def _build_pairwise(
         sc["correct_num"] = pd.to_numeric(sc["correct"], errors="coerce")
         pivots[label] = sc.pivot_table(
             index="case_id", columns="field",
-            values="correct_num", aggfunc="first",
+            values="correct_num", aggfunc="mean",
         )
 
     for i in range(len(labels)):
@@ -429,7 +434,11 @@ def _build_pairwise(
                     continue
                 a_vals = pair["a"].astype(float).tolist()
                 b_vals = pair["b"].astype(float).tolist()
-                mc = mcnemar(a_vals, b_vals)
+                # McNemar needs binary outcomes. Binarize by majority vote
+                # across runs (a value already in {0, 1} is a no-op).
+                a_bin = [1 if v >= 0.5 else 0 for v in a_vals]
+                b_bin = [1 if v >= 0.5 else 0 for v in b_vals]
+                mc = mcnemar(a_bin, b_bin)
                 boot = paired_bootstrap_delta(
                     a_vals, b_vals,
                     n_boot=n_boot, alpha=alpha, random_state=random_state,
@@ -511,7 +520,11 @@ def _build_verdict(
         if sub.empty:
             return pd.Series(dtype=float)
         sub["correct_num"] = pd.to_numeric(sub["correct"], errors="coerce")
-        return sub.set_index(["case_id", "field"])["correct_num"]
+        # Mean-aggregate over runs so multi-run methods (K=10 BERT,
+        # K=5 LLM, ...) yield a unique per-(case_id, field) expected
+        # accuracy in [0, 1]. Single-run methods are unchanged.
+        return (sub.groupby(["case_id", "field"])["correct_num"]
+                  .mean(numeric_only=False))
 
     for i in range(len(labels)):
         for j in range(i + 1, len(labels)):
@@ -528,9 +541,13 @@ def _build_verdict(
                     continue
                 a_vals = pair["a"].astype(float).tolist()
                 b_vals = pair["b"].astype(float).tolist()
-                mc = mcnemar(a_vals, b_vals)
+                # McNemar needs binary; binarize via >=0.5 majority vote.
+                a_bin = [1 if v >= 0.5 else 0 for v in a_vals]
+                b_bin = [1 if v >= 0.5 else 0 for v in b_vals]
+                mc = mcnemar(a_bin, b_bin)
                 # paired_bootstrap_delta(x, y) gives mean(x) - mean(y).
-                # We want delta = b - a, so pass (b, a).
+                # We want delta = b - a, so pass (b, a). Continuous values
+                # are fine; bootstrap CI on per-case expected accuracies.
                 boot = paired_bootstrap_delta(
                     b_vals, a_vals,
                     n_boot=n_boot, alpha=alpha, random_state=random_state,
@@ -683,8 +700,10 @@ def _build_stage_pairwise(
         if sub.empty:
             continue
         sub["correct_num"] = pd.to_numeric(sub["correct"], errors="coerce")
-        # One row per case at this stage.
-        pivots[label] = sub.set_index("case_id")["correct_num"]
+        # Mean over runs so multi-run methods yield one expected-accuracy
+        # per case; single-run is identity.
+        pivots[label] = (sub.groupby("case_id")["correct_num"]
+                           .mean(numeric_only=False))
 
     for i in range(len(labels)):
         for j in range(i + 1, len(labels)):
@@ -699,7 +718,9 @@ def _build_stage_pairwise(
                 continue
             a_vals = pair["a"].astype(float).tolist()
             b_vals = pair["b"].astype(float).tolist()
-            mc = mcnemar(a_vals, b_vals)
+            a_bin = [1 if v >= 0.5 else 0 for v in a_vals]
+            b_bin = [1 if v >= 0.5 else 0 for v in b_vals]
+            mc = mcnemar(a_bin, b_bin)
             boot = paired_bootstrap_delta(
                 b_vals, a_vals,
                 n_boot=n_boot, alpha=alpha, random_state=random_state,
@@ -859,7 +880,8 @@ def _build_nested_pairwise(
         if sub.empty:
             continue
         sub["f1_num"] = pd.to_numeric(sub["correct"], errors="coerce")
-        pivots[label] = sub.set_index("case_id")["f1_num"]
+        pivots[label] = (sub.groupby("case_id")["f1_num"]
+                           .mean(numeric_only=False))
 
     for i in range(len(labels)):
         for j in range(i + 1, len(labels)):

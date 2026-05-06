@@ -52,7 +52,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer, set_seed
 
 from ...paths import BENCHMARKS_RESULTS
 from .. import organs as _organs
@@ -160,6 +160,8 @@ def parse_csv(s: str) -> list[str]:
 # --- Train / predict ----------------------------------------------------------
 
 def train(args) -> None:
+    seed = int(getattr(args, "seed", 42))
+    set_seed(seed)  # random / numpy / torch (CPU + all CUDA devices) before head init
     field_to_idx, card = build_field_vocab()
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
     model = MultiHeadClassifier(card).to(DEVICE)
@@ -183,9 +185,11 @@ def train(args) -> None:
     if not cases:
         raise SystemExit("no training cases — check --data-root, --datasets, --organs")
 
+    g = torch.Generator(); g.manual_seed(seed)
     train_loader = DataLoader(
         PathologyCases(cases, tok, field_to_idx),
         batch_size=4, shuffle=True, collate_fn=collate,
+        generator=g, num_workers=0,
     )
 
     model.train()
@@ -214,7 +218,8 @@ def train(args) -> None:
                 "organs": sorted(organs),
                 "datasets": datasets,
                 "n_train_cases": len(cases),
-                "per_dataset_counts": counts}, ckpt_path)
+                "per_dataset_counts": counts,
+                "seed": seed}, ckpt_path)
     print(f"Saved checkpoint to {ckpt_path}")
 
 
@@ -318,6 +323,8 @@ def main() -> None:
         help="Drop cases where cancer_excision_report is False (no organ-specific "
              "fields to learn from).",
     )
+    ap.add_argument("--seed", type=int, default=42,
+                    help="Random seed for head init + data-shuffle order.")
     args = ap.parse_args()
 
     if args.phase == "train":

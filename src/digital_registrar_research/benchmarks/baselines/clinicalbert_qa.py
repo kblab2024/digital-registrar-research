@@ -50,6 +50,7 @@ from transformers import (
     AutoModelForQuestionAnswering,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
+    set_seed,
 )
 
 from ...paths import BENCHMARKS_RESULTS
@@ -189,6 +190,8 @@ def parse_csv(s: str) -> list[str]:
 
 
 def train(args) -> None:
+    seed = int(getattr(args, "seed", 42))
+    set_seed(seed)  # random / numpy / torch (CPU + all CUDA devices) before head init
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
     model = AutoModelForQuestionAnswering.from_pretrained(MODEL_ID).to(DEVICE)
 
@@ -210,7 +213,8 @@ def train(args) -> None:
     if len(ds) == 0:
         raise SystemExit("no silver-aligned training examples — every gold value was "
                          "missing from its report. Check --data-root or the question bank.")
-    loader = DataLoader(ds, batch_size=8, shuffle=True)
+    g = torch.Generator(); g.manual_seed(seed)
+    loader = DataLoader(ds, batch_size=8, shuffle=True, generator=g, num_workers=0)
 
     opt = torch.optim.AdamW(model.parameters(), lr=3e-5)
     scheduler = get_linear_schedule_with_warmup(
@@ -242,6 +246,7 @@ def train(args) -> None:
         "organs": sorted(organs),
         "n_train_cases": len(cases),
         "per_dataset_counts": counts,
+        "seed": seed,
     }
     (Path(args.ckpt) / "_train_meta.json").write_text(
         json.dumps(train_meta, indent=2), encoding="utf-8",
@@ -350,6 +355,8 @@ def main() -> None:
     ap.add_argument("--dataset", default="both",
                     choices=["cmuh", "tcga", "both"],
                     help="Predict-time dataset selector. 'both' uses --datasets.")
+    ap.add_argument("--seed", type=int, default=42,
+                    help="Random seed for head init + data-shuffle order.")
     args = ap.parse_args()
 
     if args.phase == "train":

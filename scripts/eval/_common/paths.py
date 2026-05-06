@@ -131,8 +131,10 @@ class Paths:
         if method == "clinicalbert":
             if not model:
                 raise ValueError("clinicalbert predictions require model")
-            return (self.predictions_dir / "clinicalbert" / model
-                    / str(organ_idx) / f"{case_id}.json")
+            base = self.predictions_dir / "clinicalbert" / model
+            if run_id:
+                base = base / run_id
+            return base / str(organ_idx) / f"{case_id}.json"
         if method == "rule_based":
             return self.predictions_dir / "rule_based" / str(organ_idx) / f"{case_id}.json"
         if method == "ablation":
@@ -174,13 +176,19 @@ class Paths:
         """List ``(run_id, run_dir)`` for every ``run*`` subfolder of the
         model's prediction tree.
 
-        Only meaningful for ``method="llm"``. Returns ``[]`` for methods
-        that don't have run subdirs (clinicalbert, rule_based). For
-        ablation runs, use :func:`discover_ablation_runs` instead.
+        Supports ``method="llm"`` (under ``predictions/{dataset}/llm/{model}/``)
+        and ``method="clinicalbert"`` (under
+        ``predictions/{dataset}/clinicalbert/{model}/`` where ``model`` is the
+        head — typically ``merged`` for the headline comparison).
+        Returns ``[]`` for ``rule_based`` (no run dimension) and for
+        ablation runs (use :func:`discover_ablation_runs` instead).
         """
-        if method != "llm":
+        if method == "llm":
+            base = self.predictions_dir / "llm" / model
+        elif method == "clinicalbert":
+            base = self.predictions_dir / "clinicalbert" / model
+        else:
             return []
-        base = self.predictions_dir / "llm" / model
         if not base.is_dir():
             return []
         runs: list[tuple[str, Path]] = []
