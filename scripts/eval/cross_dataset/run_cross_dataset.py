@@ -1,12 +1,18 @@
 """Cross-dataset comparison.
 
-Takes two ``--non-nested-out`` directories and emits per-field Δ +
-distribution-shift indicators.
+Takes two ``--cascade-out`` directories (each containing
+``cascade_atomic.parquet``) and emits per-field Δ + distribution-shift
+indicators.
+
+Operates on **Stage-C scalar** rows for the per-field accuracy delta.
+The distribution-shift table considers gold values across all stages so
+eligibility / organ shift is also surfaced (each row carries its
+``cascade_stage``).
 
 Output tree:
     manifest.json
-    per_field_delta.csv
-    distribution_shift.csv
+    per_field_delta.csv         (Stage-C scalar)
+    distribution_shift.csv      (per-field gold-distribution shift, all stages)
     transferability.csv
 """
 from __future__ import annotations
@@ -21,6 +27,9 @@ import pandas as pd
 from digital_registrar_research.benchmarks.eval import ci_gpu
 from digital_registrar_research.benchmarks.eval.ci import paired_bootstrap_diff
 
+from .._common.loaders import (
+    cascade_scalar_only, coerce_cascade_bool, coerce_cascade_correct,
+)
 from .._common.reporting import setup_logging, write_csv, write_manifest
 from .._common.stats_extra import (
     jensen_shannon, kl_divergence, wasserstein,
@@ -37,11 +46,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     parser.add_argument(
         "--left", type=Path, required=True,
-        help="Left non_nested output directory (typically CMUH).",
+        help="Left cascade output directory containing cascade_atomic.parquet "
+             "(typically CMUH).",
     )
     parser.add_argument(
         "--right", type=Path, required=True,
-        help="Right non_nested output directory (typically TCGA).",
+        help="Right cascade output directory containing cascade_atomic.parquet "
+             "(typically TCGA).",
     )
     parser.add_argument(
         "--out", type=Path,
@@ -73,10 +84,18 @@ def _main(args: argparse.Namespace) -> int:
     logger.info("device: requested=%s resolved=%s",
                 requested_device, resolved_device)
 
-    left_atomic = pd.read_parquet(args.left / "correctness_table.parquet")
-    right_atomic = pd.read_parquet(args.right / "correctness_table.parquet")
+    left_full = _read_cascade_atomic(args.left)
+    right_full = _read_cascade_atomic(args.right)
+    left_atomic = cascade_scalar_only(left_full)
+    right_atomic = cascade_scalar_only(right_full)
     left_label = _label(args.left)
     right_label = _label(args.right)
+    logger.info(
+        "loaded cascade atomic: left=%d full / %d Stage-C scalar; "
+        "right=%d full / %d Stage-C scalar",
+        len(left_full), len(left_atomic),
+        len(right_full), len(right_atomic),
+    )
 
     # --- Per-field Δ ---------------------------------------------------
     per_field_delta = _per_field_delta(
@@ -92,7 +111,9 @@ def _main(args: argparse.Namespace) -> int:
     write_csv(trans, args.out / "transferability.csv")
 
     # --- Distribution shift --------------------------------------------
-    shift = _distribution_shift(left_atomic, right_atomic,
+    # Use the FULL atomic so eligibility (Stage A) + organ (Stage B) shift
+    # are surfaced too. The function stamps `cascade_stage` per row.
+    shift = _distribution_shift(left_full, right_full,
                                 left_label=left_label, right_label=right_label)
     write_csv(shift, args.out / "distribution_shift.csv")
 
@@ -101,14 +122,36 @@ def _main(args: argparse.Namespace) -> int:
         extra={
             "left": str(args.left), "right": str(args.right),
             "left_label": left_label, "right_label": right_label,
-            "n_left_rows": int(len(left_atomic)),
-            "n_right_rows": int(len(right_atomic)),
+            "n_left_rows_total": int(len(left_full)),
+            "n_right_rows_total": int(len(right_full)),
+            "n_left_rows_stage_c_scalar": int(len(left_atomic)),
+            "n_right_rows_stage_c_scalar": int(len(right_atomic)),
             "device_requested": requested_device,
             "device_resolved": resolved_device,
         },
     )
     logger.info("done. outputs in %s", args.out)
     return 0
+
+
+def _read_cascade_atomic(path: Path) -> pd.DataFrame:
+    """Read ``cascade_atomic.parquet`` from a cascade output directory.
+
+    Coerces JSON-stringified ``correct`` / boolean columns back to native
+    types — see :func:`scripts.eval._common.loaders.coerce_cascade_correct`.
+    """
+    parquet = path / "cascade_atomic.parquet"
+    if not parquet.is_file():
+        raise SystemExit(
+            f"missing {parquet}; run `python -m scripts.eval.cli cascade` first.",
+        )
+    df = pd.read_parquet(parquet)
+    if "correct" in df.columns:
+        df["correct"] = coerce_cascade_correct(df["correct"])
+    for col in ("attempted", "gold_present", "field_missing", "parse_error"):
+        if col in df.columns:
+            df[col] = coerce_cascade_bool(df[col])
+    return df
 
 
 def _label(path: Path) -> str:
@@ -197,57 +240,85 @@ def _distribution_shift(
     left: pd.DataFrame, right: pd.DataFrame,
     *, left_label: str, right_label: str,
 ) -> pd.DataFrame:
-    """Per-field gold-class distribution shift indicators.
+    """Per-(stage, field) gold-class distribution shift indicators.
 
     For categorical fields: Jensen-Shannon distance, KL divergence,
     chi-square p-value. For continuous fields: Wasserstein-1 distance.
+    Each output row carries its ``cascade_stage`` so a reader can
+    subset to eligibility (A), organ (B), or field-extraction (C) shift.
+    Stage-C nested-list rows are excluded — their gold side is a list of
+    dicts, not a scalar enum/number.
     """
     rows: list[dict] = []
-    fields = sorted(set(left["field"].dropna()) & set(right["field"].dropna()))
-    for field in fields:
-        l = left[(left["field"] == field) & left["gold_present"]]["gold_value"].astype(str)
-        r = right[(right["field"] == field) & right["gold_present"]]["gold_value"].astype(str)
-        if l.empty or r.empty:
-            continue
-        # Try numeric first.
-        try:
-            l_num = l.astype(float).to_numpy()
-            r_num = r.astype(float).to_numpy()
-            wd = wasserstein(l_num, r_num)
+    # Bucket each side by (cascade_stage, field). For Stage C, drop
+    # nested-list rows so we don't choke on list/dict gold values.
+    def _stages_present(df: pd.DataFrame) -> list[str]:
+        if "cascade_stage" not in df.columns:
+            return [""]
+        return sorted(df["cascade_stage"].dropna().unique().tolist())
+
+    stages = sorted(set(_stages_present(left)) & set(_stages_present(right)))
+    for stage in stages:
+        l_stage = left if not stage else left[left["cascade_stage"] == stage]
+        r_stage = right if not stage else right[right["cascade_stage"] == stage]
+        if stage == "C" and "field_kind" in l_stage.columns:
+            l_stage = l_stage[l_stage["field_kind"] != "nested_list"]
+        if stage == "C" and "field_kind" in r_stage.columns:
+            r_stage = r_stage[r_stage["field_kind"] != "nested_list"]
+        fields = sorted(
+            set(l_stage["field"].dropna())
+            & set(r_stage["field"].dropna()),
+        )
+        for field in fields:
+            l = l_stage[
+                (l_stage["field"] == field) & l_stage["gold_present"].fillna(False)
+            ]["gold_value"].astype(str)
+            r = r_stage[
+                (r_stage["field"] == field) & r_stage["gold_present"].fillna(False)
+            ]["gold_value"].astype(str)
+            if l.empty or r.empty:
+                continue
+            # Try numeric first.
+            try:
+                l_num = l.astype(float).to_numpy()
+                r_num = r.astype(float).to_numpy()
+                wd = wasserstein(l_num, r_num)
+                rows.append({
+                    "cascade_stage": stage,
+                    "field": field, "kind": "continuous",
+                    "left_label": left_label, "right_label": right_label,
+                    "n_left": int(l.size), "n_right": int(r.size),
+                    "wasserstein": wd,
+                    "js_distance": float("nan"), "kl": float("nan"),
+                    "chi2_p": float("nan"),
+                })
+                continue
+            except (ValueError, TypeError):
+                pass
+            # Categorical
+            cats = sorted(set(l) | set(r))
+            l_counts = np.array([float((l == c).sum()) for c in cats])
+            r_counts = np.array([float((r == c).sum()) for c in cats])
+            l_p = l_counts / l_counts.sum()
+            r_p = r_counts / r_counts.sum()
+            # Avoid zeros for KL.
+            eps = 1e-9
+            kl = float(kl_divergence(l_p + eps, r_p + eps))
+            js = jensen_shannon(l_p, r_p)
+            from scipy.stats import chi2_contingency
+            try:
+                _, p_chi, _, _ = chi2_contingency([l_counts, r_counts])
+                p_val = float(p_chi)
+            except Exception:
+                p_val = float("nan")
             rows.append({
-                "field": field, "kind": "continuous",
+                "cascade_stage": stage,
+                "field": field, "kind": "categorical",
                 "left_label": left_label, "right_label": right_label,
                 "n_left": int(l.size), "n_right": int(r.size),
-                "wasserstein": wd,
-                "js_distance": float("nan"), "kl": float("nan"),
-                "chi2_p": float("nan"),
+                "js_distance": js, "kl": kl, "chi2_p": p_val,
+                "wasserstein": float("nan"),
             })
-            continue
-        except (ValueError, TypeError):
-            pass
-        # Categorical
-        cats = sorted(set(l) | set(r))
-        l_counts = np.array([float((l == c).sum()) for c in cats])
-        r_counts = np.array([float((r == c).sum()) for c in cats])
-        l_p = l_counts / l_counts.sum()
-        r_p = r_counts / r_counts.sum()
-        # Avoid zeros for KL.
-        eps = 1e-9
-        kl = float(kl_divergence(l_p + eps, r_p + eps))
-        js = jensen_shannon(l_p, r_p)
-        from scipy.stats import chi2_contingency
-        try:
-            _, p_chi, _, _ = chi2_contingency([l_counts, r_counts])
-            p_val = float(p_chi)
-        except Exception:
-            p_val = float("nan")
-        rows.append({
-            "field": field, "kind": "categorical",
-            "left_label": left_label, "right_label": right_label,
-            "n_left": int(l.size), "n_right": int(r.size),
-            "js_distance": js, "kl": kl, "chi2_p": p_val,
-            "wasserstein": float("nan"),
-        })
     return pd.DataFrame(rows)
 
 
