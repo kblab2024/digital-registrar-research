@@ -22,13 +22,3 @@ To restrict to a subset: `--organs breast,colorectal,esophagus,stomach,liver`
 CMUH reports are clean key-value text. TCGA reports are chaotic
 (dictation-style, abbreviations, shuffled sections) so the two datasets
 exercise different parser robustness.
-
-## See also
-
-For a full-scale, **real-shape** synthetic workspace (so Claude can debug
-eval/ablation/inference paths without touching PHI), see
-[`docs/obfuscation.md`](../docs/obfuscation.md) and run
-`python scripts/obfuscate_workspace.py`. `dummy/` and `workspace_obfustrated/`
-serve different purposes: `dummy/` is the small synthetic-from-nothing fixture
-for unit tests; `workspace_obfustrated/` is real-scale synthetic-from-real
-content for end-to-end debugging.
