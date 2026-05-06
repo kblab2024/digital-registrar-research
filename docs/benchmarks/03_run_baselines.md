@@ -72,6 +72,36 @@ Output: `{folder}/results/predictions/{dataset}/llm/{model_slug}/{run_id}/{organ
 
 **Multi-run pattern:** LLMs are stochastic, so the canon is to run 3-10 seeded runs per model. The aggregated `_manifest.yaml` at `{folder}/results/predictions/{dataset}/llm/{model_slug}/_manifest.yaml` lists every run and its parse-error rate.
 
+## LLM (DSPy + OpenAI hosted)
+
+OpenAI counterpart of the Ollama runner — drives the same loose-JSON `pipeline.py` through `dspy.LM(model="openai/...")`. Used to add a "yet another top-class model" comparator (e.g. `gpt-5.4-mini`) on the public TCGA corpus alongside the local Ollama LLM baselines (`gpt_oss_20b`, `qwen3`, ...) in the **full cascade** comparison. Note that the rule-based and ClinicalBERT baselines do not produce the nested margins / lymph-node / biomarker fields, so they belong to a separate scope-restricted comparison (`scripts/baselines/eval_rule_bert_llm.py`), not to the full cascade.
+
+**Set up the API key (out of repo).** Create `~/.config/digital-registrar/.env` (Unix / `%USERPROFILE%\.config\digital-registrar\.env` on Windows) with one line:
+
+```
+OPENAI_API_KEY=sk-...
+```
+
+The loader at [`util.secrets.load_openai_key`](../../src/digital_registrar_research/util/secrets.py) reads from this path (or from `$OPENAI_API_KEY` if already exported). Both locations are outside the repository tree, so the key cannot be committed or shipped in a tarball.
+
+```bash
+# Single run (one seed, full TCGA)
+python scripts/pipeline/run_pipeline_openai_single.py \
+    --model gpt5_4_mini --folder workspace --dataset tcga \
+    [--run run01] [--organs 1 2] [--limit N] [--overwrite] [-v]
+
+# K-seed multirun for statistical comparison (paired bootstrap, ICC, flip rate)
+python scripts/pipeline/run_pipeline_openai_multirun.py \
+    --model gpt5_4_mini --folder workspace --dataset tcga \
+    --n 10 --master-seed 42
+```
+
+`--model` aliases live in `models.common.model_list` and must resolve to `openai/...`. Add a new alias + `MODEL_PROFILES[...]` entry there to onboard another OpenAI model.
+
+Output: same canonical layout as the Ollama runner — `{folder}/results/predictions/{dataset}/llm/{model_slug}/{run_id}/{organ_n}/{case_id}.json`. `openai/gpt-5.4-mini` → slug `gpt_5_4_mini` (no `_dspy_strict` suffix; the loose-pipeline runner is the only OpenAI driver).
+
+The runner writes one extra side file per run: `_cost_ledger.json` (per-case wall-time as a proxy for spend; pricing is not queried).
+
 ## Caching and resume
 
 All three runners check for valid existing outputs before re-running a case. To force a fresh run, pass `--overwrite`. Partial / errored outputs (those with `_pipeline_error: true` in the JSON) are NOT considered valid and will be retried automatically.
