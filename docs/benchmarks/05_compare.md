@@ -91,17 +91,25 @@ python scripts/baselines/eval_bert_vs_llm.py \
 
 `--bert-head` accepts `cls`, `qa`, or `merged`. `merged` is the default — it's what the eval contract assumes.
 
-### Rule + BERT + LLM (three-way)
+### Rule + BERT + LLM (three- or four-way)
 
 ```bash
+# Three-way (one LLM)
 python scripts/baselines/eval_rule_bert_llm.py \
     --folder workspace --dataset tcga \
     --bert-head merged \
-    --llm-model gpt_oss_20b --llm-runs run01 run02 run03 \
+    --llm-models gpt_oss_20b --llm-runs run01 run02 run03 \
     --out workspace/results/eval/rule_bert_llm_tcga
+
+# Four-way (rule + bert + local LLM + hosted LLM)
+python scripts/baselines/eval_rule_bert_llm.py \
+    --folder workspace --dataset tcga \
+    --bert-head merged \
+    --llm-models gpt_oss_20b gpt_5_4_mini \
+    --out workspace/results/eval/rule_bert_locallm_apillm
 ```
 
-Same flags as the two-way wrappers.
+`--llm-models` accepts one or more LLM slugs; the rest of the flags match the two-way wrappers.
 
 ## Output layout (any of the above)
 
