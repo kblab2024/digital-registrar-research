@@ -197,15 +197,30 @@ def _main(args: argparse.Namespace) -> int:
     run_ids = parse_run_ids(args) or _autodiscover_runs(paths, args)
     case_filter = parse_cases(args)
 
-    if args.method in ("llm", "ablation") and not run_ids:
+    multi_run_methods = ("llm", "ablation", "clinicalbert")
+    if args.method in multi_run_methods and not run_ids:
         if args.method == "llm":
             search_dir = paths.predictions_dir / "llm" / args.model
+        elif args.method == "clinicalbert":
+            # Single-run clinicalbert (no runNN subdirs) is the legacy
+            # layout; treat that as a one-shot pseudo-run rather than
+            # erroring, so old checkpoints keep working.
+            legacy_dir = paths.predictions_dir / "clinicalbert" / args.model
+            if legacy_dir.is_dir() and not any(
+                p.is_dir() and p.name.startswith("run")
+                for p in legacy_dir.iterdir()
+            ):
+                run_ids = [""]
+                search_dir = None
+            else:
+                search_dir = legacy_dir
         else:
             search_dir = paths.ablations_dir / args.cell / args.cell_model
-        raise SystemExit(
-            f"no runs found under {search_dir} and --run-ids not given."
-        )
-    effective_runs = run_ids if args.method in ("llm", "ablation") else [""]
+        if search_dir is not None:
+            raise SystemExit(
+                f"no runs found under {search_dir} and --run-ids not given."
+            )
+    effective_runs = run_ids if args.method in multi_run_methods else [""]
 
     logger.info(
         "cascade scoring: method=%s model=%s runs=%d organs=%d%s",
@@ -287,6 +302,21 @@ def _main(args: argparse.Namespace) -> int:
     write_csv(cascade_funnel(atomic), ch3_dir / "cascade_funnel.csv")
     write_csv(conditional_accuracy_grid(atomic),
               ch3_dir / "conditional_accuracy_grid.csv")
+
+    # Multi-run reliability (case + run variance, ICC, Cronbach α, flip rate)
+    # per Stage-C field. Auto-engages whenever there is >1 run_id; for
+    # single-run runs the inner call returns empty and we skip the write.
+    if atomic["run_id"].nunique() > 1:
+        c_sub = atomic[atomic["cascade_stage"] == "C"]
+        c_fields = sorted(c_sub["field"].dropna().unique().tolist())
+        c_frames = [
+            chapter_multirun_reliability(atomic, stage="C", field=f)
+            for f in c_fields
+        ]
+        c_frames = [df for df in c_frames if not df.empty]
+        if c_frames:
+            write_csv(pd.concat(c_frames, ignore_index=True),
+                      ch3_dir / "multirun_consistency.csv")
 
     # --- Chapter 4: margins ---------------------------------------------
     ch4_dir = args.out / "chapter4_margins"
@@ -764,6 +794,10 @@ def _emit_nested_rows(
 def _autodiscover_runs(paths: Paths, args: argparse.Namespace) -> list[str]:
     if args.method == "llm" and args.model:
         return [rid for rid, _ in paths.discover_runs(args.model, method="llm")]
+    if args.method == "clinicalbert" and args.model:
+        return [
+            rid for rid, _ in paths.discover_runs(args.model, method="clinicalbert")
+        ]
     if args.method == "ablation" and args.cell and args.cell_model:
         return [
             rid for rid, _ in paths.discover_ablation_runs(args.cell, args.cell_model)
