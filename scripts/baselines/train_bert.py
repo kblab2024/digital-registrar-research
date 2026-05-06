@@ -13,9 +13,9 @@ points. The predict step (``run_bert.py``) loads from these paths.
 
 Usage
 -----
-    # Default canonical training: every CMUH gold case.
+    # Default canonical training: every CMUH gold case (15 epochs each head).
     python scripts/baselines/train_bert.py \\
-        --heads cls qa --epochs-cls 5 --epochs-qa 3
+        --heads cls qa --seed 42
 
     # Pooled training (ablation only — destroys TCGA's held-out status):
     python scripts/baselines/train_bert.py \\
@@ -86,6 +86,7 @@ def train_cls(args: argparse.Namespace, logger: logging.Logger) -> None:
         datasets=",".join(args.datasets),
         data_root=str(args.experiment_root),
         included_only=args.included_only,
+        seed=args.seed,
     )
     clinicalbert_cls.train(train_args)
 
@@ -104,6 +105,7 @@ def train_qa(args: argparse.Namespace, logger: logging.Logger) -> None:
         organs=",".join(args.organs),
         datasets=",".join(args.datasets),
         data_root=str(args.experiment_root),
+        seed=args.seed,
     )
     clinicalbert_qa.train(train_args)
 
@@ -131,8 +133,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="Output path for the CLS checkpoint.")
     ap.add_argument("--ckpt-qa", default="ckpts/clinicalbert_qa",
                     help="Output dir for the QA checkpoint.")
-    ap.add_argument("--epochs-cls", type=int, default=5)
-    ap.add_argument("--epochs-qa", type=int, default=3)
+    ap.add_argument("--epochs-cls", type=int, default=15)
+    ap.add_argument("--epochs-qa", type=int, default=15)
+    ap.add_argument("--seed", type=int, default=42,
+                    help="Random seed for head init + data-shuffle order. "
+                         "Drives BERT training-noise multirun: each seed produces "
+                         "a different checkpoint. See train_bert_multirun.py.")
     ap.add_argument("--included-only", action="store_true",
                     help="CLS only: drop cases where cancer_excision_report=False.")
     ap.add_argument("-v", "--verbose", action="store_true")
