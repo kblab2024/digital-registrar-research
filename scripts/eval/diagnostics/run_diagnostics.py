@@ -1,15 +1,19 @@
 """Diagnostics subcommand orchestrator.
 
-Joins non_nested + nested correctness tables with IAA outputs to
-classify each model error into ``model_error`` / ``report_ambiguity`` /
+Joins a cascade ``cascade_atomic.parquet`` with IAA outputs to classify
+each model error into ``model_error`` / ``report_ambiguity`` /
 ``report_silent``, stratifies model accuracy by IAA-derived field
 difficulty, and writes a worst-cases catalog.
+
+Operates on **Stage-C scalar** rows only (Stage A/B are summarised in
+their own chapter outputs and the nested fields use a continuous F1
+that doesn't fit the binary error-decomposition taxonomy).
 
 Output tree:
     manifest.json
     error_source_decomposition.csv
     accuracy_by_difficulty_tier.csv
-    worst_cases__<field>.csv (one per top-N field)
+    worst_cases.csv
 """
 from __future__ import annotations
 
@@ -20,6 +24,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .._common.loaders import (
+    cascade_scalar_only, coerce_cascade_bool, coerce_cascade_correct,
+)
 from .._common.reporting import setup_logging, write_csv, write_manifest
 
 logger = logging.getLogger("scripts.eval.diagnostics")
@@ -32,8 +39,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         description=__doc__,
     )
     parser.add_argument(
-        "--non-nested-out", type=Path, required=True,
-        help="Path to non_nested output directory.",
+        "--cascade-out", type=Path, required=True,
+        help="Path to cascade output directory containing cascade_atomic.parquet.",
     )
     parser.add_argument(
         "--iaa-out", type=Path, required=True,
@@ -63,12 +70,30 @@ def _main(args: argparse.Namespace) -> int:
     setup_logging(args.verbose)
     args.out.mkdir(parents=True, exist_ok=True)
 
-    # 1. Load atomic correctness table from non_nested.
-    correctness_path = args.non_nested_out / "correctness_table.parquet"
-    if not correctness_path.exists():
-        raise SystemExit(f"missing {correctness_path}; run non_nested first.")
-    atomic = pd.read_parquet(correctness_path)
-    logger.info("loaded non_nested atomic: %d rows", len(atomic))
+    # 1. Load cascade atomic and restrict to Stage-C scalar rows.
+    cascade_path = args.cascade_out / "cascade_atomic.parquet"
+    if not cascade_path.exists():
+        raise SystemExit(
+            f"missing {cascade_path}; run `python -m scripts.eval.cli cascade` first.",
+        )
+    full = pd.read_parquet(cascade_path)
+    atomic = cascade_scalar_only(full).copy()
+    # cascade_atomic stores correct as object (bool|float|None) and may
+    # be JSON-stringified by write_parquet when bool/float coexist
+    # (Stage C scalar + Stage C nested). Coerce explicitly so downstream
+    # boolean aggregations don't silently turn "false" strings into True.
+    if "correct" in atomic.columns:
+        atomic["correct"] = (
+            coerce_cascade_correct(atomic["correct"]).fillna(0.0).astype(bool)
+        )
+    for col in ("wrong", "field_missing", "parse_error",
+                "attempted", "gold_present"):
+        if col in atomic.columns:
+            atomic[col] = coerce_cascade_bool(atomic[col])
+    logger.info(
+        "loaded cascade atomic: %d total rows, %d Stage-C scalar rows",
+        len(full), len(atomic),
+    )
 
     # 2. Load IAA per-field κ — try the cross-human pair first, fall back
     # to gold-vs-human pair if cross-human is unavailable.

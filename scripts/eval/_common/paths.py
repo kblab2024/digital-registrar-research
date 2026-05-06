@@ -17,10 +17,13 @@ Layout (canonical example: ``/dummy``, real data: ``/workspace``):
     │   │   ├── kpc_with_preann/{organ_idx}/{case_id}.json
     │   │   └── kpc_without_preann/{organ_idx}/{case_id}.json
     │   └── preannotation/{model}/{organ_idx}/{case_id}.json
-    └── results/predictions/{dataset}/
-        ├── llm/{model}/{run_id}/{organ_idx}/{case_id}.json
-        ├── clinicalbert/{model}/{organ_idx}/{case_id}.json
-        └── rule_based/{organ_idx}/{case_id}.json
+    ├── results/predictions/{dataset}/
+    │   ├── llm/{model}/{run_id}/{organ_idx}/{case_id}.json
+    │   ├── clinicalbert/{model}/{organ_idx}/{case_id}.json
+    │   └── rule_based/{organ_idx}/{case_id}.json
+    └── results/ablations/{dataset}/{cell}/{model_slug}/{run_id}/{organ_idx}/{case_id}.json
+        — for ``method="ablation"``. Cascade scoring of ablation cells
+          uses this layout instead of the predictions tree.
 """
 from __future__ import annotations
 
@@ -33,8 +36,8 @@ from .stratify import all_organ_indices, parse_case_id
 
 _RUN_ID_RE = re.compile(r"^run(\d+)(?:-([a-z0-9][a-z0-9-]*))?$")
 
-Method = Literal["llm", "clinicalbert", "rule_based"]
-KNOWN_METHODS: tuple[Method, ...] = ("llm", "clinicalbert", "rule_based")
+Method = Literal["llm", "clinicalbert", "rule_based", "ablation"]
+KNOWN_METHODS: tuple[Method, ...] = ("llm", "clinicalbert", "rule_based", "ablation")
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,18 @@ class Paths:
     def predictions_dir(self) -> Path:
         return self.root / "results" / "predictions" / self.dataset
 
+    @property
+    def ablations_dir(self) -> Path:
+        """Per-dataset ablations root.
+
+        Cascade scoring of ablation cells reads predictions from
+        ``{root}/results/ablations/{dataset}/{cell}/{model_slug}/{run_id}/...``
+        rather than from ``predictions/llm/...``. The two trees are
+        kept disjoint so re-running ablations doesn't overwrite the
+        canonical LLM predictions used by the standard pipeline.
+        """
+        return self.root / "results" / "ablations" / self.dataset
+
     # --- Per-file accessors ---------------------------------------------------
 
     def report(self, organ_idx: int, case_id: str) -> Path:
@@ -97,12 +112,16 @@ class Paths:
         run_id: str | None,
         organ_idx: int,
         case_id: str,
+        *,
+        cell: str | None = None,
     ) -> Path:
         """Path to a model prediction file.
 
-        ``method`` ∈ {"llm", "clinicalbert", "rule_based"}. ``model`` and
-        ``run_id`` are required for ``llm``; ``model`` only for
-        ``clinicalbert``; both ignored for ``rule_based``.
+        ``method`` ∈ {"llm", "clinicalbert", "rule_based", "ablation"}.
+        ``model`` and ``run_id`` are required for ``llm`` and
+        ``ablation``; ``model`` only for ``clinicalbert``; both ignored
+        for ``rule_based``. ``cell`` is required for ``ablation`` and
+        identifies the cell directory under ``results/ablations/``.
         """
         if method == "llm":
             if not model or not run_id:
@@ -116,6 +135,13 @@ class Paths:
                     / str(organ_idx) / f"{case_id}.json")
         if method == "rule_based":
             return self.predictions_dir / "rule_based" / str(organ_idx) / f"{case_id}.json"
+        if method == "ablation":
+            if not cell or not model or not run_id:
+                raise ValueError(
+                    "ablation predictions require cell, model, and run_id",
+                )
+            return (self.ablations_dir / cell / model / run_id
+                    / str(organ_idx) / f"{case_id}.json")
         raise ValueError(f"unknown method: {method!r}")
 
     # --- Discovery ------------------------------------------------------------
@@ -149,11 +175,32 @@ class Paths:
         model's prediction tree.
 
         Only meaningful for ``method="llm"``. Returns ``[]`` for methods
-        that don't have run subdirs (clinicalbert, rule_based).
+        that don't have run subdirs (clinicalbert, rule_based). For
+        ablation runs, use :func:`discover_ablation_runs` instead.
         """
         if method != "llm":
             return []
         base = self.predictions_dir / "llm" / model
+        if not base.is_dir():
+            return []
+        runs: list[tuple[str, Path]] = []
+        for p in sorted(base.iterdir()):
+            if p.is_dir() and _RUN_ID_RE.fullmatch(p.name):
+                runs.append((p.name, p))
+        return runs
+
+    def discover_ablation_runs(
+        self, cell: str, model: str,
+    ) -> list[tuple[str, Path]]:
+        """List ``(run_id, run_dir)`` for every ``run*`` subfolder under
+        ``results/ablations/{dataset}/{cell}/{model}/``.
+
+        Returns ``[]`` if the cell or model dir doesn't exist. Cell-only
+        directories with a single run write to ``runNN`` subfolders by
+        convention; cells without a runNN tier are not supported by the
+        cascade-scoring pipeline (use a sentinel ``run01`` if needed).
+        """
+        base = self.ablations_dir / cell / model
         if not base.is_dir():
             return []
         runs: list[tuple[str, Path]] = []

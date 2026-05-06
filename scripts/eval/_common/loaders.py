@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+import pandas as pd
+
 ErrorMode = Literal[
     "json_parse",
     "schema_invalid",
@@ -188,6 +190,88 @@ def classify_log_error(log_entry: dict[str, Any] | None) -> ErrorMode | None:
     return None
 
 
+def cascade_scalar_only(df: pd.DataFrame) -> pd.DataFrame:
+    """Subset a ``cascade_atomic`` frame to Stage-C scalar rows.
+
+    Cascade emits one row per ``(run, case, cascade_stage, field)``. Stage-C
+    rows for nested fields (``margins``, ``regional_lymph_node``,
+    ``biomarkers``) carry a float F1 in the ``correct`` column instead of a
+    bool — averaging or summing them alongside binary-correct scalar rows
+    silently corrupts means. Every consumer that reduces ``correct`` over
+    Stage-C should apply this helper first.
+
+    Returns a view (not a copy) restricted to ``cascade_stage == "C"`` AND
+    (when the column exists) ``field_kind != "nested_list"``. Tolerant of
+    older atomic frames missing ``field_kind`` — those frames are returned
+    as-is after the stage filter.
+    """
+    sub = df[df["cascade_stage"] == "C"]
+    if "field_kind" in sub.columns:
+        sub = sub[sub["field_kind"] != "nested_list"]
+    return sub
+
+
+def coerce_cascade_correct(s: pd.Series) -> pd.Series:
+    """Map a possibly-JSON-stringified ``correct`` column back to floats.
+
+    When :func:`scripts.eval._common.reporting.write_parquet` serialises a
+    cascade_atomic frame whose ``correct`` column mixes scalar booleans
+    (Stage A/B/C scalar) with nested floats (Stage C nested-list F1),
+    the helper coerces the entire column to JSON strings ("true",
+    "false", "0.5") so pyarrow can serialise it. Reading consumers that
+    reduce on numeric correctness must coerce back, otherwise
+    ``pd.to_numeric(..., errors="coerce")`` returns NaN for the
+    stringified booleans and silently zeros every group reduction.
+
+    Returns a Series of floats:
+      - bool ``True`` / "true" / 1 → 1.0
+      - bool ``False`` / "false" / 0 → 0.0
+      - native floats / numeric strings → float(value)
+      - None / "" / unrecognised → NaN
+    """
+    def _one(v):
+        if v is None:
+            return float("nan")
+        if isinstance(v, bool):
+            return 1.0 if v else 0.0
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            lv = v.strip().lower()
+            if lv == "true":
+                return 1.0
+            if lv == "false":
+                return 0.0
+            if lv in ("", "none", "null"):
+                return float("nan")
+            try:
+                return float(lv)
+            except ValueError:
+                return float("nan")
+        return float("nan")
+    return s.apply(_one)
+
+
+def coerce_cascade_bool(s: pd.Series) -> pd.Series:
+    """Map a possibly-JSON-stringified bool column back to native bools.
+
+    Companion to :func:`coerce_cascade_correct` for the
+    ``attempted`` / ``gold_present`` / ``field_missing`` / ``parse_error``
+    columns, which can also be stringified when their dtype crosses
+    pyarrow's mixed-type threshold (rare, but harmless to coerce
+    defensively).
+    """
+    def _one(v):
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)):
+            return bool(v) if not pd.isna(v) else False
+        if isinstance(v, str):
+            return v.strip().lower() == "true"
+        return False
+    return s.apply(_one).astype(bool)
+
+
 __all__ = [
     "ParseError",
     "LoadOutcome",
@@ -197,4 +281,7 @@ __all__ = [
     "extract_meta",
     "index_runs",
     "classify_log_error",
+    "cascade_scalar_only",
+    "coerce_cascade_correct",
+    "coerce_cascade_bool",
 ]

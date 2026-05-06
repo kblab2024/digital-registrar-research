@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Build the canonical statistics suite over a unified atomic table.
+"""Build the canonical statistics suite over one or more cascade atomic
+parquets.
 
-Reads the existing non-ablation ``correctness_table.parquet`` (modular
-pipeline + baselines, produced by ``scripts/eval/non_nested/run_non_nested.py``)
-and the ablation ``atomic.parquet`` (produced by
-``digital_registrar_research.ablations.eval.run_ablations``), unions
-them under one canonical schema, and runs
+Reads ``cascade_atomic.parquet`` from each ``--cascade-out LABEL=PATH``
+entry, stamps ``method = LABEL``, concatenates, and runs
 ``ablations.eval.canonical_stats.run_canonical_stats`` to emit eight
 canonical CSVs plus a markdown run report.
 
-Both inputs are optional: pass either or both. When only one is
-present, the suite still runs against that subset.
+Each label becomes the row's ``method`` value. The ``--modular-method``
+argument names the label to compare against (Δ / McNemar / OR
+baseline). Multiple labels are supported, including a mix of LLM
+runs and ablation cells — both produce the same cascade_atomic schema
+so unification is mechanical.
 
 Output layout::
 
@@ -30,12 +31,17 @@ Usage::
     python scripts/eval/canonical/make_paper_tables.py \\
         --folder workspace --dataset cmuh \\
         --modular-method dspy_modular_gpt_oss_20b \\
-        [--nonablation-parquet PATH] \\
-        [--ablation-parquet PATH] \\
+        --cascade-out dspy_modular_gpt_oss_20b=workspace/results/eval/cascade/cmuh_modular \\
+        --cascade-out dspy_monolithic_gpt_oss_20b=workspace/results/eval/cascade/cmuh_monolithic \\
         [--out-dir PATH]
 
-The ``--modular-method`` value is the row in ``method`` column to use as
-the comparator for delta / McNemar / OR computations.
+NOTE: the canonical 8-status schema (``null_value`` vs ``missing_key``,
+``wrong_type`` vs ``wrong_value``) is finer-grained than what
+cascade_atomic preserves. The adapter maps cascade rows to the closest
+canonical status (``missing_key`` for ``field_missing``, ``wrong_value``
+for ``correct=False``); rows that would be ``null_value`` or
+``wrong_type`` under the old per-(cell, model) ablation aggregator
+appear here as their coarser equivalents.
 """
 from __future__ import annotations
 
@@ -63,80 +69,83 @@ _CANONICAL_COLUMNS = [
 ]
 
 
-def _remap_nonablation(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert a non-ablation correctness table into the canonical schema.
+def _remap_cascade_atomic(df: pd.DataFrame, *, method_label: str) -> pd.DataFrame:
+    """Convert a ``cascade_atomic.parquet`` frame into the canonical schema.
 
-    The non-ablation atomic carries Boolean flags ``parse_error,
-    field_missing, attempted, correct, wrong``. We map each row to a
-    single ``case_status`` and ``field_status`` consistent with the
-    ablation atomic.
+    Stage A/B and Stage-C nested-list rows are dropped — the canonical
+    suite reduces on Stage-C scalar correctness only. Stage-A/B
+    accuracy is reported by the cascade chapter1/chapter2 outputs and
+    by the ``compare`` subcommand; folding them in here would
+    double-count cases.
+
+    All retained rows are stamped with ``method = method_label``.
+
+    Mapping:
+      - ``parse_error == True``      → ``case_status="parse_error"``,
+                                       ``field_status="unscoreable_due_to_case_error"``
+      - ``gold_present == False``    → ``field_status="gold_missing"``
+      - ``field_missing == True``    → ``field_status="missing_key"``
+        (cascade can't distinguish ``missing_key`` from ``null_value``;
+        the coarser bucket is used.)
+      - ``correct == True``          → ``field_status="correct"``
+      - ``correct == False``         → ``field_status="wrong_value"`` +
+                                       ``gold=… pred=…`` detail
     """
+    from scripts.eval._common.loaders import (
+        coerce_cascade_bool, coerce_cascade_correct,
+    )
+
     if df.empty:
         return pd.DataFrame(columns=_CANONICAL_COLUMNS)
-    out = df.copy()
-    if "run_id" in out.columns and "run" not in out.columns:
-        out = out.rename(columns={"run_id": "run"})
-    if "run" not in out.columns:
-        out["run"] = ""
-    if "method" not in out.columns:
-        out["method"] = "unknown"
-    if "gold_present" not in out.columns:
-        out["gold_present"] = True
+    sub = df.copy()
+    if "cascade_stage" in sub.columns:
+        sub = sub[sub["cascade_stage"] == "C"]
+    if "field_kind" in sub.columns:
+        sub = sub[sub["field_kind"] != "nested_list"]
+    if sub.empty:
+        return pd.DataFrame(columns=_CANONICAL_COLUMNS)
 
-    def _row_status(r: pd.Series) -> tuple[str, str, str]:
-        """(case_status, field_status, field_error_detail)"""
+    sub["correct"] = coerce_cascade_correct(sub["correct"])
+    for col in ("attempted", "gold_present", "field_missing", "parse_error"):
+        if col in sub.columns:
+            sub[col] = coerce_cascade_bool(sub[col])
+
+    sub["method"] = method_label
+    if "run_id" in sub.columns and "run" not in sub.columns:
+        sub = sub.rename(columns={"run_id": "run"})
+    if "run" not in sub.columns:
+        sub["run"] = ""
+
+    def _row_status(r: pd.Series) -> tuple[str, str, str, str]:
+        """(case_status, case_flags, field_status, field_error_detail)"""
         if bool(r.get("parse_error")):
-            return ("parse_error", "unscoreable_due_to_case_error", "")
+            return ("parse_error", "parse_error",
+                    "unscoreable_due_to_case_error", "")
         if not bool(r.get("gold_present", True)):
-            return ("ok", "gold_missing", "")
+            return ("ok", "ok", "gold_missing", "")
         if bool(r.get("field_missing")):
-            # No pred dict here — can't distinguish missing_key vs
-            # null_value. Default to missing_key.
-            return ("ok", "missing_key", "")
-        if bool(r.get("correct")):
-            return ("ok", "correct", "")
-        if bool(r.get("wrong")):
-            return ("ok", "wrong_value",
-                    f"gold={r.get('gold_value')!r} "
-                    f"pred={r.get('pred_value')!r}"[:120])
-        # Fallback: row carries no informative flag.
-        return ("ok", "wrong_value", "")
+            return ("ok", "ok", "missing_key", "")
+        c = r.get("correct")
+        if c == 1.0 or c is True:
+            return ("ok", "ok", "correct", "")
+        if c == 0.0 or c is False:
+            detail = (
+                f"gold={r.get('gold_value')!r} "
+                f"pred={r.get('pred_value')!r}"
+            )[:120]
+            return ("ok", "ok", "wrong_value", detail)
+        # Float in (0, 1) — should not appear after nested filter, but
+        # be defensive.
+        return ("ok", "ok", "wrong_value", "")
 
-    statuses = out.apply(_row_status, axis=1)
-    out["case_status"] = [s[0] for s in statuses]
-    out["field_status"] = [s[1] for s in statuses]
-    out["field_error_detail"] = [s[2] for s in statuses]
-    out["case_flags"] = out["case_status"]
+    statuses = sub.apply(_row_status, axis=1)
+    sub["case_status"] = [s[0] for s in statuses]
+    sub["case_flags"] = [s[1] for s in statuses]
+    sub["field_status"] = [s[2] for s in statuses]
+    sub["field_error_detail"] = [s[3] for s in statuses]
 
-    # Keep only the canonical columns that exist.
-    keep = [c for c in _CANONICAL_COLUMNS if c in out.columns]
-    return out[keep].copy()
-
-
-def _remap_ablation(df: pd.DataFrame) -> pd.DataFrame:
-    """Pass through the ablation grid, ensuring canonical column names.
-
-    The ablation aggregator already emits ``case_status / case_flags /
-    field_status / field_error_detail``; we just normalise column
-    names. ``method`` is built as ``f"{cell}_{model}"`` upstream.
-    """
-    if df.empty:
-        return pd.DataFrame(columns=_CANONICAL_COLUMNS)
-    out = df.copy()
-    if "method" not in out.columns:
-        if "cell" in out.columns and "model" in out.columns:
-            out["method"] = (out["cell"].astype(str) + "_"
-                             + out["model"].astype(str))
-        else:
-            out["method"] = "ablation"
-    for col in ("case_status", "case_flags", "field_status",
-                "field_error_detail"):
-        if col not in out.columns:
-            out[col] = ""
-    if "gold_present" not in out.columns:
-        out["gold_present"] = out.get("attempted", False)
-    keep = [c for c in _CANONICAL_COLUMNS if c in out.columns]
-    return out[keep].copy()
+    keep = [c for c in _CANONICAL_COLUMNS if c in sub.columns]
+    return sub[keep].copy()
 
 
 # ---------------------------------------------------------------------------
@@ -154,28 +163,43 @@ def _resolve_folder(folder: str | Path) -> Path:
         return Path(folder).resolve()
 
 
-def _default_paths(args: argparse.Namespace) -> dict[str, Path | None]:
-    """Resolve default input / output paths from --folder/--dataset.
-
-    Looked-for inputs:
-        {folder}/results/non_nested/{method}_{model}/{dataset}/correctness_table.parquet
-        {folder}/results/ablations/{dataset}/atomic.parquet
-
-    Output: {folder}/results/canonical/{dataset}/
-    """
+def _resolve_out_dir(args: argparse.Namespace) -> Path:
+    """Resolve the output directory from --out-dir or --folder/--dataset."""
+    if args.out_dir is not None:
+        return Path(args.out_dir)
     folder = _resolve_folder(args.folder) if args.folder else None
-    out_dir = (args.out_dir if args.out_dir is not None else
-               (folder / "results" / "canonical" / args.dataset
-                if folder and args.dataset else None))
-    if out_dir is None:
-        raise SystemExit(
-            "Must supply --out-dir or both --folder and --dataset.")
-    abl = (args.ablation_parquet if args.ablation_parquet is not None else
-           (folder / "results" / "ablations" / args.dataset
-            / "atomic.parquet"
-            if folder and args.dataset else None))
-    nonabl = args.nonablation_parquet
-    return {"out": Path(out_dir), "ablation": abl, "nonablation": nonabl}
+    if folder and args.dataset:
+        return folder / "results" / "canonical" / args.dataset
+    raise SystemExit(
+        "Must supply --out-dir or both --folder and --dataset.")
+
+
+def _parse_cascade_out_specs(
+    raw: list[str] | None,
+) -> dict[str, Path]:
+    """Parse a list of ``LABEL=PATH`` entries.
+
+    Each PATH is a cascade output directory containing
+    ``cascade_atomic.parquet``. Labels are arbitrary strings — they
+    become the row's ``method`` value in the unified canonical
+    atomic, and the user's ``--modular-method`` argument must match
+    one of them to enable Δ / McNemar / OR computation.
+    """
+    out: dict[str, Path] = {}
+    for spec in raw or []:
+        if "=" not in spec:
+            raise SystemExit(
+                f"--cascade-out entry must be LABEL=PATH (got {spec!r}); "
+                f"PATH should contain cascade_atomic.parquet."
+            )
+        label, raw_path = spec.split("=", 1)
+        label = label.strip()
+        if not label:
+            raise SystemExit(f"empty label in --cascade-out {spec!r}")
+        if label in out:
+            raise SystemExit(f"duplicate label {label!r} in --cascade-out")
+        out[label] = Path(raw_path.strip())
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -228,17 +252,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="Dataset name under data/ (e.g. cmuh, tcga). "
                          "Used to locate default inputs.")
     ap.add_argument("--modular-method", required=True,
-                    help="The 'method' value to use as the comparator "
-                         "for Δ / McNemar / OR computations "
-                         "(e.g. 'dspy_modular_gpt_oss_20b').")
-    ap.add_argument("--nonablation-parquet", type=Path, default=None,
-                    help="Override path to non-ablation correctness "
-                         "table. Default: search under "
-                         "{folder}/results/non_nested/.")
-    ap.add_argument("--ablation-parquet", type=Path, default=None,
-                    help="Override path to ablation atomic.parquet. "
-                         "Default: {folder}/results/ablations/{dataset}/"
-                         "atomic.parquet.")
+                    help="The 'method' label to use as the comparator "
+                         "for Δ / McNemar / OR computations. Must match "
+                         "one of the LABEL values supplied via "
+                         "--cascade-out (e.g. 'dspy_modular_gpt_oss_20b').")
+    ap.add_argument("--cascade-out", dest="cascade_outs", action="append",
+                    metavar="LABEL=PATH", default=None,
+                    help="Cascade output directory to include. Each "
+                         "entry contributes its cascade_atomic.parquet "
+                         "to the master atomic, stamped with method=LABEL. "
+                         "Repeat to include multiple methods / cells. "
+                         "At least one --cascade-out is required.")
     ap.add_argument("--out-dir", type=Path, default=None,
                     help="Output directory. Default: "
                          "{folder}/results/canonical/{dataset}/.")
@@ -251,28 +275,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    paths = _default_paths(args)
-    out_dir: Path = paths["out"]
+    out_dir = _resolve_out_dir(args)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    frames: list[pd.DataFrame] = []
-    if paths["nonablation"] is not None and Path(paths["nonablation"]).is_file():
-        nonabl = pd.read_parquet(paths["nonablation"])
-        frames.append(_remap_nonablation(nonabl))
-        print(f"Loaded non-ablation atomic: {paths['nonablation']} "
-              f"({len(nonabl)} rows)")
-    else:
-        print(f"[info] non-ablation atomic not found at "
-              f"{paths['nonablation']}; proceeding without it.")
+    cascade_outs = _parse_cascade_out_specs(args.cascade_outs)
+    if not cascade_outs:
+        raise SystemExit(
+            "no --cascade-out entries supplied; pass at least one "
+            "LABEL=PATH (PATH = cascade output directory containing "
+            "cascade_atomic.parquet).",
+        )
 
-    if paths["ablation"] is not None and Path(paths["ablation"]).is_file():
-        abl = pd.read_parquet(paths["ablation"])
-        frames.append(_remap_ablation(abl))
-        print(f"Loaded ablation atomic: {paths['ablation']} "
-              f"({len(abl)} rows)")
-    else:
-        print(f"[info] ablation atomic not found at "
-              f"{paths['ablation']}; proceeding without it.")
+    frames: list[pd.DataFrame] = []
+    for label, path in cascade_outs.items():
+        atomic_path = path / "cascade_atomic.parquet"
+        if not atomic_path.is_file():
+            print(
+                f"[warn] {atomic_path} missing for label={label!r}; skipping.",
+                file=sys.stderr,
+            )
+            continue
+        df = pd.read_parquet(atomic_path)
+        adapted = _remap_cascade_atomic(df, method_label=label)
+        frames.append(adapted)
+        print(f"Loaded {label}: {atomic_path} ({len(df)} rows total, "
+              f"{len(adapted)} Stage-C scalar rows kept)")
 
     if not frames:
         print("[warn] No input atomics found. Writing empty scaffolding.",
