@@ -2,8 +2,8 @@
 """Compare ClinicalBERT vs LLM predictions side-by-side.
 
 Runs ``scripts.eval.cli cascade`` for both methods (BERT defaults to
-the merged head), then joins the outputs with
-``scripts.eval.compare.run_compare`` into a wide-form CSV + pairwise
+the merged head), then joins the outputs with ``scripts.eval.cli
+compare`` into chapter1-5 comparison folders + pairwise
 paired-bootstrap deltas.
 
 Usage

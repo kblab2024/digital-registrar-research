@@ -173,6 +173,103 @@ def test_effect_sizes_basic():
     assert d_raw <= d_mono <= 0
 
 
+def _make_cascade_atomic() -> pd.DataFrame:
+    """Build a minimal cascade_atomic-shaped fixture for stats consumers.
+
+    Mirrors :func:`_make_grid` but in cascade schema (cascade_stage="C",
+    field_kind="nominal", explicit cell/model_slug/run_id columns plus
+    Stage A/B noise rows that must be filtered out by
+    :func:`_adapt_cascade_atomic_for_stats`).
+    """
+    cases = [f"c{i}" for i in range(5)]
+    rows: list[dict] = []
+    cells_models_correctness = [
+        ("dspy_modular", "gpt-oss", [1.0] * 5, [1.0] * 5),
+        ("dspy_monolithic", "gpt-oss", [1.0, 1.0, 1.0, 1.0, 0.0], [1.0] * 5),
+        ("raw_json", "gpt-oss", [1.0, 0.0, 0.0, 0.0, 1.0], [1.0] * 5),
+    ]
+    for cell, model_slug, pt_corr, grade_corr in cells_models_correctness:
+        for case, c_pt, c_gr in zip(cases, pt_corr, grade_corr, strict=True):
+            # Stage A noise (binary; should be filtered out).
+            rows.append({
+                "run_id": "run01", "method": "ablation",
+                "model": f"{cell}_{model_slug}", "model_slug": model_slug,
+                "cell": cell, "case_id": case,
+                "cascade_stage": "A", "field_kind": "binary",
+                "field": "cancer_excision_report",
+                "correct": True, "attempted": True,
+                "gold_present": True, "wrong": False,
+                "field_missing": False, "parse_error": False,
+                "gate_pass": True,
+            })
+            # Stage C scalar — what the stats consumers reduce on.
+            for field, c in (("pt_category", c_pt), ("grade", c_gr)):
+                rows.append({
+                    "run_id": "run01", "method": "ablation",
+                    "model": f"{cell}_{model_slug}", "model_slug": model_slug,
+                    "cell": cell, "case_id": case,
+                    "cascade_stage": "C", "field_kind": "nominal",
+                    "field": field, "correct": bool(c == 1.0),
+                    "attempted": True, "gold_present": True,
+                    "wrong": bool(c == 0.0), "field_missing": False,
+                    "parse_error": False, "gate_pass": True,
+                })
+            # Stage C nested — must be filtered out (float F1, not bool).
+            rows.append({
+                "run_id": "run01", "method": "ablation",
+                "model": f"{cell}_{model_slug}", "model_slug": model_slug,
+                "cell": cell, "case_id": case,
+                "cascade_stage": "C", "field_kind": "nested_list",
+                "field": "margins", "correct": 0.5,
+                "attempted": True, "gold_present": True,
+                "wrong": 0.5, "field_missing": False,
+                "parse_error": False, "gate_pass": True,
+            })
+    return pd.DataFrame(rows)
+
+
+def test_load_grid_prefers_cascade_atomic_and_filters_stage_c_scalar(tmp_path):
+    """When cascade_atomic.parquet is present, _load_grid filters to
+    Stage-C scalar and derives method/cell/model/seed columns. Stage A
+    rows (binary) and Stage C nested-list rows (float F1) must be
+    excluded so paired deltas reduce on binary correctness only.
+    """
+    from scripts.eval._common.reporting import write_parquet
+
+    cascade = _make_cascade_atomic()
+    # Use the cascade reporting helper because the `correct` column
+    # holds mixed bool/float dtypes (scalar vs nested) that pyarrow
+    # cannot serialise without type-coercion.
+    write_parquet(cascade, tmp_path / "cascade_atomic.parquet")
+
+    loaded = ab_stats._load_grid(tmp_path)
+    # No Stage A or nested-list rows survived.
+    assert (loaded["cascade_stage"] == "C").all()
+    assert (loaded["field_kind"] != "nested_list").all()
+    # Method composed correctly; model points back to the slug.
+    assert set(loaded["method"].unique()) == {
+        "dspy_modular_gpt-oss",
+        "dspy_monolithic_gpt-oss",
+        "raw_json_gpt-oss",
+    }
+    assert set(loaded["model"].unique()) == {"gpt-oss"}
+    # Seed alias points at run_id so multi-run consistency picks it up.
+    assert (loaded["seed"] == loaded["run_id"]).all()
+
+    # Paired deltas on the cascade-derived grid should match the legacy
+    # fixture: dspy_monolithic Δ = -0.2 on pt_category, raw_json Δ = -0.6.
+    deltas = ab_stats.paired_deltas_vs_baseline(
+        loaded, baseline_method="dspy_modular_gpt-oss",
+        n_boot=200, random_state=42,
+    )
+    sub = deltas[(deltas["cell"] == "dspy_monolithic")
+                 & (deltas["field"] == "pt_category")]
+    assert sub["delta"].iloc[0] == pytest.approx(-0.2, abs=1e-9)
+    sub_raw = deltas[(deltas["cell"] == "raw_json")
+                     & (deltas["field"] == "pt_category")]
+    assert sub_raw["delta"].iloc[0] == pytest.approx(-0.6, abs=1e-9)
+
+
 def test_run_all_smoke(tmp_path):
     """End-to-end smoke: write a synthetic grid, call run_all, check files."""
     grid = _make_grid()

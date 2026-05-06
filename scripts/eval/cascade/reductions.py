@@ -265,6 +265,8 @@ def chapter3_per_field_overall(
                 kappa_val = cohens_kappa(list(gv), list(pv))
         except Exception:
             pass
+        eff_acc = _safe_proportion(n_correct, n_total)
+        eff_lo, eff_hi = _wilson(n_correct, n_total, alpha)
         rows.append({
             "model": model, "dataset": dataset, "field": field,
             "n_total": n_total, "n_attempted": n_attempted,
@@ -272,6 +274,9 @@ def chapter3_per_field_overall(
             "coverage": coverage,
             "accuracy_attempted": acc,
             "ci_lo": lo, "ci_hi": hi,
+            "effective_accuracy": eff_acc,
+            "effective_acc_wilson_lo": eff_lo,
+            "effective_acc_wilson_hi": eff_hi,
             "cohens_kappa": kappa_val,
         })
     return pd.DataFrame(rows)
@@ -295,14 +300,27 @@ def chapter3_per_field_by_organ(
     ):
         attempted = sub[sub["attempted"] == True]  # noqa: E712
         n_attempted = len(attempted)
+        n_total = len(sub)
         n_correct = int(attempted["correct"].fillna(False).astype(bool).sum())
         acc = _safe_proportion(n_correct, n_attempted)
         lo, hi = _wilson(n_correct, n_attempted, alpha)
+        eff_acc = _safe_proportion(n_correct, n_total)
+        eff_lo, eff_hi = _wilson(n_correct, n_total, alpha)
+        coverage = _safe_proportion(n_attempted, n_total)
         rows.append({
             "model": model, "dataset": dataset,
             "organ": organ, "field": field,
+            "n_total": n_total,
             "n_attempted": n_attempted,
             "n_correct": n_correct,
+            "coverage": coverage,
+            "accuracy_attempted": acc,
+            "attempted_acc_wilson_lo": lo,
+            "attempted_acc_wilson_hi": hi,
+            "effective_accuracy": eff_acc,
+            "effective_acc_wilson_lo": eff_lo,
+            "effective_acc_wilson_hi": eff_hi,
+            # Legacy aliases preserved for older consumers.
             "accuracy": acc,
             "ci_lo": lo, "ci_hi": hi,
         })

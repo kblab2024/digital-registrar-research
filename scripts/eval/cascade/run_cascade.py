@@ -156,6 +156,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
              "to score additional models alongside --model. When supplied, "
              "model_pair_tests/ outputs are written.",
     )
+    parser.add_argument(
+        "--cell", default=None,
+        help="Ablation cell id (only meaningful with --method ablation). "
+             "Routes prediction lookup through "
+             "results/ablations/{dataset}/{cell}/{model}/{run_id}/... and "
+             "stamps a 'cell' column on every cascade_atomic row.",
+    )
+    parser.add_argument(
+        "--cell-model", default=None,
+        help="Underlying model slug for an ablation cell (only meaningful "
+             "with --method ablation). When set, the cascade walker uses "
+             "this for path resolution and stamps it on the 'model_slug' "
+             "column. The 'model' column is composed as f'{cell}_{cell_model}' "
+             "for backward compat with stats consumers that key on method.",
+    )
     parser.set_defaults(_handler=_main)
 
 
@@ -163,7 +178,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 def _main(args: argparse.Namespace) -> int:
     setup_logging(args.verbose)
-    require_model(args)
+
+    if args.method == "ablation":
+        if not args.cell or not args.cell_model:
+            raise SystemExit(
+                "--method ablation requires --cell and --cell-model",
+            )
+        # Compose the canonical model identifier for downstream consumers
+        # that key on `model` (compare, ablation stats, canonical_stats).
+        if not args.model:
+            args.model = f"{args.cell}_{args.cell_model}"
+    else:
+        require_model(args)
 
     paths = from_args(args.root, args.dataset)
     paths.assert_exists()
@@ -171,16 +197,20 @@ def _main(args: argparse.Namespace) -> int:
     run_ids = parse_run_ids(args) or _autodiscover_runs(paths, args)
     case_filter = parse_cases(args)
 
-    if args.method == "llm" and not run_ids:
+    if args.method in ("llm", "ablation") and not run_ids:
+        if args.method == "llm":
+            search_dir = paths.predictions_dir / "llm" / args.model
+        else:
+            search_dir = paths.ablations_dir / args.cell / args.cell_model
         raise SystemExit(
-            f"no runs found under {paths.predictions_dir / 'llm' / args.model} "
-            f"and --run-ids not given."
+            f"no runs found under {search_dir} and --run-ids not given."
         )
-    effective_runs = run_ids if args.method == "llm" else [""]
+    effective_runs = run_ids if args.method in ("llm", "ablation") else [""]
 
     logger.info(
-        "cascade scoring: method=%s model=%s runs=%d organs=%d",
+        "cascade scoring: method=%s model=%s runs=%d organs=%d%s",
         args.method, args.model, len(effective_runs), len(organs),
+        f" cell={args.cell}" if args.method == "ablation" else "",
     )
 
     atomic, ledger, nested, n_per_organ = _build_atomic_and_ledger(
@@ -368,10 +398,19 @@ def _build_atomic_and_ledger(
             )
             subgroup = subgroup_label(gold)
 
-            pred_path = paths.prediction(
-                method=args.method, model=args.model,
-                run_id=run_id or None, organ_idx=organ_idx, case_id=case_id,
-            )
+            if args.method == "ablation":
+                pred_path = paths.prediction(
+                    method="ablation", model=args.cell_model,
+                    run_id=run_id or None,
+                    organ_idx=organ_idx, case_id=case_id,
+                    cell=args.cell,
+                )
+            else:
+                pred_path = paths.prediction(
+                    method=args.method, model=args.model,
+                    run_id=run_id or None,
+                    organ_idx=organ_idx, case_id=case_id,
+                )
             lo = load_prediction(pred_path)
             case_load = CaseLoad.from_load_outcome(lo)
             pred = case_load.pred or {}
@@ -389,6 +428,15 @@ def _build_atomic_and_ledger(
                 "organ": organ,
                 "subgroup": subgroup,
                 "dataset": args.dataset,
+                # Ablation-scoring metadata. Empty string for non-ablation
+                # methods so the column dtype stays string and downstream
+                # joins on (cell, model_slug) work without dropna.
+                "cell": getattr(args, "cell", None) or "",
+                "model_slug": (
+                    args.cell_model
+                    if args.method == "ablation" and args.cell_model
+                    else (args.model or "")
+                ),
             }
 
             # Stage A row
@@ -714,9 +762,13 @@ def _emit_nested_rows(
 # --- Helpers --------------------------------------------------------------
 
 def _autodiscover_runs(paths: Paths, args: argparse.Namespace) -> list[str]:
-    if args.method != "llm" or not args.model:
-        return []
-    return [rid for rid, _ in paths.discover_runs(args.model, method="llm")]
+    if args.method == "llm" and args.model:
+        return [rid for rid, _ in paths.discover_runs(args.model, method="llm")]
+    if args.method == "ablation" and args.cell and args.cell_model:
+        return [
+            rid for rid, _ in paths.discover_ablation_runs(args.cell, args.cell_model)
+        ]
+    return []
 
 
 __all__ = ["register", "_main"]
