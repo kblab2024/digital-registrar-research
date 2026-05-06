@@ -33,9 +33,13 @@ from .scope import (
     EVAL_EXCLUDED_FIELDS,
     EXCLUDED_INNER_KEYS_BY_FIELD,
     FAIR_SCOPE,
+    LIST_OF_LITERALS_FIELDS,
     NESTED_LIST_FIELDS,
+    SPAN_FIELDS,
     biomarkers_for_organ,
     get_field_value,
+    get_list_of_literals_fields,
+    get_organ_scoreable_fields,
 )
 
 ScopeArg = Iterable[str] | Callable[[str | None], Iterable[str]] | None
@@ -63,13 +67,55 @@ def is_attempted(pred_annotation: dict, field: str) -> bool:
     return field in cd
 
 
-def field_correct(gold: dict, pred: dict, field: str) -> bool | None:
-    """Returns True/False on attempted predictions, None on non-attempts."""
+def _normalize_set(v) -> frozenset:
+    """Coerce a list-of-literals value to a normalised frozenset.
+
+    ``None`` and the empty list both map to ``frozenset()`` so they
+    compare equal — matches the ``outcome._normalize_set`` semantics
+    (replicated here to avoid a metrics→outcome import cycle).
+    """
+    if v is None:
+        return frozenset()
+    if isinstance(v, list):
+        return frozenset(normalize(x) for x in v if x is not None)
+    return frozenset({normalize(v)})
+
+
+def _is_list_of_literals_field(field: str, organ: str | None) -> bool:
+    """Organ-aware lookup of list-of-literals field membership.
+
+    The same name can be a list-of-literals in one organ and a regular
+    categorical in another (e.g. ``tumor_extent`` is a list-of-literals
+    only for liver). When ``organ`` is None, fall back to the
+    cross-organ union.
+    """
+    if organ is None:
+        return field in LIST_OF_LITERALS_FIELDS
+    return field in get_list_of_literals_fields(organ)
+
+
+def field_correct(
+    gold: dict, pred: dict, field: str, *, organ: str | None = None,
+) -> bool | None:
+    """Returns True/False on attempted predictions, None on non-attempts.
+
+    Field-kind dispatch:
+      * list-of-literals (organ-aware) — unordered set equality.
+      * span / numeric in :data:`scope.SPAN_FIELDS` — ±2 mm tolerance
+        when both sides are numeric, else exact (``None == None``).
+      * everything else — string equality after :func:`normalize`.
+
+    ``organ`` lets the cascade scorer pick the right enum-vs-list
+    interpretation. When omitted, falls back to ``gold.cancer_category``.
+    """
     if not is_attempted(pred, field):
         return None
     g = get_field_value(gold, field)
     p = get_field_value(pred, field)
-    if field == "tumor_size" and isinstance(g, (int, float)) and isinstance(p, (int, float)):
+    organ_arg = organ if organ is not None else normalize(gold.get("cancer_category"))
+    if _is_list_of_literals_field(field, organ_arg):
+        return _normalize_set(g) == _normalize_set(p)
+    if field in SPAN_FIELDS and isinstance(g, (int, float)) and isinstance(p, (int, float)):
         return abs(g - p) <= NUMERIC_TOLERANCE_MM
     return normalize(g) == normalize(p)
 
@@ -367,14 +413,19 @@ def _score_case_cascade(gold: dict, pred: dict) -> dict:
     out["stage_c_eligible"] = True
     organ = g_org
 
-    fields = _resolve_scope(None, gold)
+    # Use the FULL per-organ scope, not FAIR_SCOPE. FAIR_SCOPE is only
+    # the head-to-head comparison set used by the legacy ClinicalBERT
+    # baselines; it deliberately excludes most categorical / bool /
+    # span / list-of-literals fields. Cascade chapter 3 must score
+    # everything in the schema for the organ.
+    fields = list(get_organ_scoreable_fields(organ).keys())
     for field in fields:
         # The two cascade gate fields are scored above; not part of Stage C.
         if field in ("cancer_excision_report", "cancer_category"):
             continue
         if field in EVAL_EXCLUDED_FIELDS:
             continue
-        out[field] = field_correct(gold, pred, field)
+        out[field] = field_correct(gold, pred, field, organ=organ)
 
     # Per-organ biomarkers (whitelist applied via biomarkers_for_organ).
     whitelist = biomarkers_for_organ(organ)
