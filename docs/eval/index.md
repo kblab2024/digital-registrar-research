@@ -15,6 +15,7 @@ ELI5-style explanations of every metric the `scripts/eval/` pipeline produces, p
 | "Why is missing field different from wrong field?" | [completeness.md](completeness.md) |
 | "What's Fleiss κ / vote calibration / ensemble Δ?" | [multirun.md](multirun.md) |
 | "Cohen κ vs Krippendorff α — when do I use which?" | [iaa_basics.md](iaa_basics.md) |
+| "I just want one overall κ for a specific annotator pair." | [iaa_basics.md](iaa_basics.md#pair-focused-headline-iaa_pair) |
 | "What's the anchoring index? Δκ? Convergence to preann?" | [preann_effect.md](preann_effect.md) |
 | "Wilson vs BCa vs two-source bootstrap CI?" | [ci_methods.md](ci_methods.md) |
 | "Source-of-error decomposition / difficulty tiers / worst cases?" | [diagnostics.md](diagnostics.md) |
@@ -48,6 +49,11 @@ ELI5-style explanations of every metric the `scripts/eval/` pipeline produces, p
 | `chapter*/multirun_consistency.csv` | ICC(2,1), ICC(3,k), Cronbach α, accuracy-flip-rate | [multirun.md](multirun.md) |
 | `model_pair_tests/*.csv` | McNemar / Cochran-Q / Stuart-Maxwell + Holm/BH adjusted p | [multiple_comparisons.md](multiple_comparisons.md), [../stat_methods.md](../stat_methods.md) §2.2 |
 | `iaa/pair_*.csv` | Cohen's κ (un/weighted), CCC, ICC, BA LoA, F1, Krippendorff α | [iaa_basics.md](iaa_basics.md) |
+| `iaa_pair/pair_<a>_vs_<b>/headline.csv` | overall pair κ — mean per-field κ, n-weighted mean, pooled categorical κ, agree/disagree PABAK, Krippendorff α | [iaa_basics.md](iaa_basics.md#pair-focused-headline-iaa_pair) |
+| `iaa_pair/pair_<a>_vs_<b>/per_section.csv` | section roll-up (top_level / scalar_pathology / nested) | [iaa_basics.md](iaa_basics.md#pair-focused-headline-iaa_pair) |
+| `iaa_pair/pair_<a>_vs_<b>/per_organ.csv` | per-organ κ summary (4 stats × n_organs) | [iaa_basics.md](iaa_basics.md#pair-focused-headline-iaa_pair) |
+| `iaa_pair/pair_<a>_vs_<b>/confusion/<field>.csv` | top-N categorical fields' confusion matrices | [confusion_pairs.md](confusion_pairs.md) |
+| `iaa_pair/pair_<a>_vs_<b>/summary.md` | human-readable headline + top-K most disagreed fields | [iaa_basics.md](iaa_basics.md#pair-focused-headline-iaa_pair) |
 | `iaa/preann/delta_kappa_per_field__*.csv` | Δκ with vs without preann + paired bootstrap CI | [preann_effect.md](preann_effect.md) |
 | `iaa/preann/anchoring_index__*.csv` | AI = P(human=preann \| with) − P(human=preann \| without) | [preann_effect.md](preann_effect.md) |
 | `completeness/modularity_advantage.csv` | sorted method-pair Δ on attempted_rate (ablation headline) | [completeness.md](completeness.md) |
