@@ -104,7 +104,7 @@ MAX_RUN_SLOTS = 10  # memory: "run01..run10"
 # model_list keys (gpt, gemma27b, qwen30b, ...) still resolve but are not
 # offered from the CLI to keep the surface small and self-documenting.
 UNIFIED_MODELS = (
-    "gptoss", "gemma3", "gemma4", "qwen3_5", "medgemmalarge", "medgemmasmall",
+    "gptoss", "gemma3", "gemma4", "qwen3_5", "medgemmalarge", "medgemmasmall", "gemma4large", "qwen3_6"
 )
 
 

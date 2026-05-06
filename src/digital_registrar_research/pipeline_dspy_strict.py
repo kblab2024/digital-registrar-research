@@ -148,8 +148,8 @@ class DspyStrictCancerPipeline(dspy.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.analyzer_is_cancer = dspy.ChainOfThought(is_cancer)
-        self.jsonize = dspy.ChainOfThought(ReportJsonize)
+        self.analyzer_is_cancer = dspy.Predict(is_cancer)
+        self.jsonize = dspy.Predict(ReportJsonize)
 
     def forward(
         self, report: str | list[str], logger: logging.Logger,
@@ -210,7 +210,7 @@ class DspyStrictCancerPipeline(dspy.Module):
                 cls.__name__, time.strftime("%Y-%m-%d %H:%M:%S"),
                 context_response.cancer_category, fname,
             )
-            organ_analyzer = dspy.ChainOfThought(cls)
+            organ_analyzer = dspy.Predict(cls)
             try:
                 organ_response = organ_analyzer(
                     report=paragraphs, report_jsonized=json_report,
