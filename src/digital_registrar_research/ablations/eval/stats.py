@@ -188,10 +188,23 @@ _KNOWN_CELL_IDS: tuple[str, ...] = tuple(sorted((
 
 
 def _load_grid(results_root: Path) -> pd.DataFrame:
+    """Load the long-form correctness grid for stats consumption.
+
+    Prefers ``cascade_atomic.parquet`` (the canonical scorer output);
+    derives the legacy ``method``, ``cell``, ``model``, ``run``, and
+    ``seed`` columns from the cascade schema and filters to Stage-C
+    scalar rows (stats functions reduce on binary correctness, not
+    nested F1). Falls back to ``ablation_grid.csv`` when the parquet
+    is absent.
+    """
+    cascade_path = results_root / "cascade_atomic.parquet"
+    if cascade_path.exists():
+        return _adapt_cascade_atomic_for_stats(pd.read_parquet(cascade_path))
     grid_path = results_root / GRID_CSV
     if not grid_path.exists():
         raise FileNotFoundError(
-            f"{grid_path} not found — run the aggregator first.")
+            f"neither cascade_atomic.parquet nor {grid_path} found — "
+            f"run the aggregator first.")
     df = pd.read_csv(grid_path)
     # Prefer explicit cell/model columns when the aggregator emitted
     # them (current behaviour) — the underscore parsing is brittle
@@ -201,6 +214,87 @@ def _load_grid(results_root: Path) -> pd.DataFrame:
         df["cell"] = [c for c, _ in cells_models]
         df["model"] = [m for _, m in cells_models]
     return df
+
+
+def _adapt_cascade_atomic_for_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Project ``cascade_atomic`` rows onto the stats-consumer schema.
+
+    Stats functions reduce on binary correctness (``correct ∈ {0, 1}``)
+    keyed by ``(cell, model, field, case_id)``. Cascade atomic stores
+    F1 floats in nested-list rows and rows for Stage A/B that aren't
+    fields-of-interest here. Filter to Stage-C scalar, then derive the
+    legacy column names from cascade columns:
+
+    - ``method`` ← ``f"{cell}_{model_slug}"`` (joint key for the
+      stats consumers)
+    - ``model`` ← ``model_slug`` (revert from the composite that the
+      cascade walker stamped onto ``model`` for ablation runs)
+    - ``run``  ← ``run_id``
+    - ``seed`` ← ``run_id`` (so :func:`_detect_seed_column` finds a
+      seed dimension; multi-run ablation cells use ``run_id`` as
+      their seed identifier)
+    """
+    if df.empty:
+        return df
+    sub = df.copy()
+    if "cascade_stage" in sub.columns:
+        sub = sub[sub["cascade_stage"] == "C"]
+    if "field_kind" in sub.columns:
+        sub = sub[sub["field_kind"] != "nested_list"]
+    if sub.empty:
+        return sub
+    if "model_slug" not in sub.columns:
+        sub["model_slug"] = sub.get("model", "")
+    sub["model"] = sub["model_slug"]
+    sub["method"] = (
+        sub["cell"].astype(str) + "_" + sub["model_slug"].astype(str)
+    )
+    sub["run"] = sub["run_id"]
+    if "seed" not in sub.columns:
+        sub["seed"] = sub["run_id"]
+    # When cascade_atomic was written via _common.reporting.write_parquet
+    # with mixed bool / float `correct` rows (scalar Stage C + nested
+    # Stage C in the same column), the helper JSON-stringifies the
+    # column ("true" / "false" / "0.5"). Stats consumers reduce on
+    # numeric correctness, so coerce back. Stage-C nested rows have
+    # already been dropped above.
+    sub["correct"] = _coerce_str_correct(sub["correct"])
+    sub["attempted"] = sub["attempted"].apply(_coerce_bool_str).astype(bool)
+    return sub
+
+
+def _coerce_str_correct(s: pd.Series) -> pd.Series:
+    """Map a possibly-stringified correctness column to floats in {0, 1}."""
+    def _one(v):
+        if v is None:
+            return float("nan")
+        if isinstance(v, bool):
+            return 1.0 if v else 0.0
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            lv = v.strip().lower()
+            if lv == "true":
+                return 1.0
+            if lv == "false":
+                return 0.0
+            try:
+                return float(lv)
+            except ValueError:
+                return float("nan")
+        return float("nan")
+    return s.apply(_one)
+
+
+def _coerce_bool_str(v) -> bool:
+    """Map "true" / True / 1 / etc. to bool; everything else to False."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str):
+        return v.strip().lower() == "true"
+    return False
 
 
 def _load_axes(path: Path = DEFAULT_AXES_PATH) -> dict[str, str]:
@@ -730,40 +824,6 @@ def effect_sizes_per_field(
     return pd.DataFrame(out_rows)
 
 
-def cancer_category_mismatch_stats(grid_df: pd.DataFrame) -> pd.DataFrame:
-    """Per (cell, model): count unique cases whose prediction's
-    ``cancer_category`` disagrees with gold's, plus the rate over
-    gradable cases.
-
-    Returns columns ``cell, model, n_cases, n_cancer_category_mismatch,
-    rate``. Empty DataFrame if the grid lacks the mismatch column
-    (older grid CSVs predating gold-vs-pred tracking).
-    """
-    if "cancer_category_mismatch" not in grid_df.columns:
-        return pd.DataFrame()
-    if grid_df.empty:
-        return pd.DataFrame()
-
-    out_rows: list[dict] = []
-    for (cell, model), group in grid_df.groupby(["cell", "model"]):
-        n_cases = int(group["case_id"].nunique())
-        if n_cases == 0:
-            continue
-        flagged_cases = (
-            group.loc[group["cancer_category_mismatch"], "case_id"]
-            .nunique()
-        )
-        n_mismatch = int(flagged_cases)
-        out_rows.append({
-            "cell": str(cell),
-            "model": str(model),
-            "n_cases": n_cases,
-            "n_cancer_category_mismatch": n_mismatch,
-            "rate": (n_mismatch / n_cases) if n_cases else float("nan"),
-        })
-    return pd.DataFrame(out_rows)
-
-
 # ---------------------------------------------------------------------------
 # Top-level orchestrator
 # ---------------------------------------------------------------------------
@@ -830,12 +890,12 @@ def run_all(results_root: Path,
         effect.to_csv(path, index=False)
         out["effect_sizes"] = path
 
-    cc_mismatch = cancer_category_mismatch_stats(grid_df)
-    if not cc_mismatch.empty:
-        path = results_root / "ablation_cancer_category_mismatch.csv"
-        cc_mismatch.to_csv(path, index=False)
-        out["cancer_category_mismatch"] = path
-
+    # NOTE: ``cancer_category_mismatch_stats`` was removed in the
+    # cascade-conformance migration. Cascade gating means Stage-C only
+    # emits when Stage B was correct, so the per-case mismatch rate is
+    # always 0.0 for Stage-C rows — the metric collapsed to Stage B
+    # accuracy, which is now reported by the ``compare`` subcommand's
+    # ``chapter2_organ_classification/comparison.csv``.
     return out
 
 

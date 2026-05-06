@@ -4,23 +4,30 @@ Usage:
     python -m scripts.eval.cli <subcommand> [options]
 
 Subcommands:
-    cascade      — cascade-gated three-chapter evaluation (Stage A:
-                   eligibility triage, Stage B: organ classification,
-                   Stage C: field extraction). The primary subcommand.
-    iaa          — inter-annotator agreement + preann effect
-    iaa_pair     — pair-focused IAA: overall κ headline, roll-ups,
-                   confusion matrices, markdown summary, for one or
-                   more requested pairs
-    completeness — detailed missingness analysis across methods
-    diagnostics  — source-of-error decomposition, difficulty tiers, worst cases
+    cascade       — cascade-gated five-chapter evaluation (Stage A:
+                    eligibility triage, Stage B: organ classification,
+                    Stage C: field extraction; Chapter 4 margins, Chapter 5
+                    lymph nodes). The primary subcommand.
+    compare       — side-by-side comparison of cascade runs (chapter1-5
+                    layout); paired bootstrap + McNemar.
+    iaa           — inter-annotator agreement + preann effect.
+    iaa_pair      — pair-focused IAA: overall κ headline, roll-ups,
+                    confusion matrices, markdown summary, for one or
+                    more requested pairs.
+    completeness  — detailed missingness analysis across methods.
+    diagnostics   — source-of-error decomposition, difficulty tiers,
+                    worst cases (consumes cascade_atomic.parquet).
     cross_dataset — per-field Δ between datasets + distribution shift
-    headline     — joint forest-plot CSV combining IAA + accuracy
+                    (consumes cascade_atomic.parquet).
+    headline      — joint forest-plot CSV combining IAA + cascade
+                    chapter3 accuracy.
 
-The legacy ``non_nested`` and ``nested`` subcommands have been removed
-in favor of ``cascade``. The cascade emits per-field accuracy
-(formerly ``non_nested``) and bipartite-F1 nested fields (formerly
-``nested``) under the same gating, with the gate cohorts honestly
-applied to denominators.
+The legacy ``non_nested`` and ``nested`` subcommands were removed in
+favor of ``cascade``. The cascade emits per-field accuracy (formerly
+``non_nested``) and bipartite-F1 nested fields (formerly ``nested``)
+under the same gating, with the gate cohorts honestly applied to
+denominators. Downstream consumers (diagnostics / cross_dataset /
+headline / compare) now read ``cascade_atomic.parquet`` directly.
 
 All subcommands share a common argument schema (see _common/args.py).
 """
@@ -42,6 +49,11 @@ SubcommandBuilder = Callable[[argparse._SubParsersAction], None]
 
 def _register_cascade(sub: argparse._SubParsersAction) -> None:
     from scripts.eval.cascade.run_cascade import register
+    register(sub)
+
+
+def _register_compare(sub: argparse._SubParsersAction) -> None:
+    from scripts.eval.cascade.compare_runs import register
     register(sub)
 
 
@@ -77,6 +89,7 @@ def _register_headline(sub: argparse._SubParsersAction) -> None:
 
 REGISTRARS: dict[str, SubcommandBuilder] = {
     "cascade": _register_cascade,
+    "compare": _register_compare,
     "iaa": _register_iaa,
     "iaa_pair": _register_iaa_pair,
     "completeness": _register_completeness,

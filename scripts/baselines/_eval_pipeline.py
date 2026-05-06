@@ -3,12 +3,9 @@
 Each wrapper script (eval_rule_vs_llm, eval_bert_vs_llm,
 eval_rule_bert_llm) runs ``scripts.eval.cli cascade`` for each
 (method, dataset) pair, then concatenates the per-dataset
-``cascade_atomic.parquet`` outputs into a single per-method parquet
-(with a ``dataset`` column added), then calls
-``scripts.eval.compare.run_compare`` to join across methods. The output
-parquet name is preserved as ``correctness_table.parquet`` for
-backwards compat with run_compare; content is the cascade atomic
-table.
+``cascade_atomic.parquet`` outputs into a single per-method
+``cascade_atomic.parquet`` (with a ``dataset`` column added), then
+calls ``scripts.eval.cli compare`` to join across methods.
 
 Defaults (cross-corpus baseline contract)
 ------------------------------------------
@@ -19,6 +16,14 @@ Defaults (cross-corpus baseline contract)
 
 Every gold case under ``<folder>/data/<dataset>/annotations/gold/`` is
 scored. There is no train/test split within a corpus.
+
+The ``--folder`` / ``--datasets`` argument surface here is intentionally
+narrower than ``scripts.eval._common.args.add_common_args``: this
+wrapper accepts plural ``--datasets`` (the cross-corpus comparison
+spans both CMUH and TCGA) and forwards each one to the cascade
+subprocess in turn. Users who need finer-grained control (``--alpha``,
+``--device``, etc.) should invoke ``scripts.eval.cli cascade`` /
+``scripts.eval.cli compare`` directly.
 """
 from __future__ import annotations
 
@@ -112,12 +117,19 @@ def concat_per_dataset_parquets(
 
 def run_compare(specs: list[MethodSpec], cascade_dirs: dict[str, Path],
                 out_dir: Path, n_boot: int, seed: int) -> None:
-    """Invoke scripts.eval.compare.run_compare with the joined inputs."""
+    """Invoke ``scripts.eval.cli compare`` with the joined inputs.
+
+    The compare subcommand expects ``--runs LABEL=PATH`` where each PATH
+    is a cascade output directory containing ``cascade_atomic.parquet``.
+    The baseline pipeline writes its per-method combined parquet at
+    ``<out>/cascade_<label>/cascade_atomic.parquet``, so each PATH here
+    is the per-method root directory.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
-    inputs = [f"{s.label}:{cascade_dirs[s.label]}" for s in specs]
+    inputs = [f"{s.label}={cascade_dirs[s.label]}" for s in specs]
     cmd = [
-        sys.executable, "-m", "scripts.eval.compare.run_compare",
-        "--inputs", *inputs,
+        sys.executable, "-m", "scripts.eval.cli", "compare",
+        "--runs", *inputs,
         "--out", str(out_dir),
         "--n-boot", str(n_boot),
         "--seed", str(seed),
@@ -166,9 +178,9 @@ def run_pipeline(specs: list[MethodSpec], args: argparse.Namespace) -> int:
             )
             per_ds_parquets[ds] = parquet
         # Combined parquet at the method root (sibling of <dataset>/ subdirs).
-        # Filename retained for backwards compat with run_compare; content is
-        # the cascade atomic table with cascade_stage / gate_pass columns.
-        combined = method_root / "correctness_table.parquet"
+        # Filename matches the cascade output convention so the new
+        # `compare` subcommand finds it via --runs LABEL=PATH.
+        combined = method_root / "cascade_atomic.parquet"
         concat_per_dataset_parquets(per_ds_parquets, combined)
         logger.info(
             "[%s] combined %d datasets into %s",

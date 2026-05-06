@@ -1,7 +1,9 @@
 """Joint headline forest report.
 
 Combines:
-    - per-field model accuracy from ``non_nested/per_field_overall.csv``
+    - per-field model accuracy from cascade
+      ``chapter3_field_extraction/per_field_by_organ.csv`` (and
+      ``per_field_overall.csv`` for the cross-organ row).
     - human-vs-human and human-vs-gold κ from ``iaa/pair_*.csv``
     - paired Δκ from ``iaa/preann/delta_kappa_per_field__*.csv``
 
@@ -31,12 +33,13 @@ logger = logging.getLogger("scripts.eval.joint")
 def register(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
         "headline",
-        help="Joint forest-plot CSV combining non_nested + IAA outputs.",
+        help="Joint forest-plot CSV combining cascade chapter3 + IAA outputs.",
         description=__doc__,
     )
     parser.add_argument(
-        "--non-nested-out", type=Path, required=True,
-        help="Path to non_nested output directory.",
+        "--cascade-out", type=Path, required=True,
+        help="Path to cascade output directory (the parent of "
+             "chapter3_field_extraction/).",
     )
     parser.add_argument(
         "--iaa-out", type=Path, required=True,
@@ -59,7 +62,7 @@ def _main(args: argparse.Namespace) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict] = []
-    rows.extend(_load_model_accuracy(args.non_nested_out))
+    rows.extend(_load_model_accuracy(args.cascade_out))
     rows.extend(_load_iaa_pairs(args.iaa_out))
     rows.extend(_load_preann_delta(args.iaa_out))
 
@@ -75,12 +78,20 @@ def _main(args: argparse.Namespace) -> int:
     return 0
 
 
-def _load_model_accuracy(nn_out: Path) -> list[dict]:
+def _load_model_accuracy(cascade_out: Path) -> list[dict]:
     """Pull attempted_accuracy and effective_accuracy per (organ, field)
-    with bootstrap CI."""
+    from cascade chapter3 outputs with Wilson CI.
+
+    Reads ``chapter3_field_extraction/per_field_by_organ.csv`` for the
+    per-organ rows and ``per_field_overall.csv`` for the cross-organ
+    rows (stamped as ``organ="ALL"``). Both CSVs carry the
+    ``effective_accuracy`` + ``effective_acc_wilson_lo/hi`` columns
+    added by the cascade redesign.
+    """
     rows: list[dict] = []
-    by_organ_path = nn_out / "per_field_by_organ.csv"
-    overall_path = nn_out / "per_field_overall.csv"
+    ch3_dir = cascade_out / "chapter3_field_extraction"
+    by_organ_path = ch3_dir / "per_field_by_organ.csv"
+    overall_path = ch3_dir / "per_field_overall.csv"
     if by_organ_path.is_file():
         df = pd.read_csv(by_organ_path)
         for _, r in df.iterrows():
