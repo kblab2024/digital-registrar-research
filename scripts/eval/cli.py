@@ -8,6 +8,9 @@ Subcommands:
                    eligibility triage, Stage B: organ classification,
                    Stage C: field extraction). The primary subcommand.
     iaa          — inter-annotator agreement + preann effect
+    iaa_pair     — pair-focused IAA: overall κ headline, roll-ups,
+                   confusion matrices, markdown summary, for one or
+                   more requested pairs
     completeness — detailed missingness analysis across methods
     diagnostics  — source-of-error decomposition, difficulty tiers, worst cases
     cross_dataset — per-field Δ between datasets + distribution shift
@@ -47,6 +50,11 @@ def _register_iaa(sub: argparse._SubParsersAction) -> None:
     register(sub)
 
 
+def _register_iaa_pair(sub: argparse._SubParsersAction) -> None:
+    from scripts.eval.iaa.run_iaa_pair import register
+    register(sub)
+
+
 def _register_completeness(sub: argparse._SubParsersAction) -> None:
     from scripts.eval.completeness.run_completeness import register
     register(sub)
@@ -70,6 +78,7 @@ def _register_headline(sub: argparse._SubParsersAction) -> None:
 REGISTRARS: dict[str, SubcommandBuilder] = {
     "cascade": _register_cascade,
     "iaa": _register_iaa,
+    "iaa_pair": _register_iaa_pair,
     "completeness": _register_completeness,
     "diagnostics": _register_diagnostics,
     "cross_dataset": _register_cross_dataset,
