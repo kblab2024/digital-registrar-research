@@ -125,6 +125,82 @@ Long-form: one row per `(organ, field, stat_name)`. Columns: `n` (number of pair
 
 One row per statistic per pair.
 
+## Pair-focused headline (`iaa_pair`)
+
+`iaa/whole_report.csv` gives Krippendorff α per type bucket but **no single overall Cohen's κ** for the pair you actually care about. The `iaa_pair` subcommand fills that gap. It scopes a comprehensive report to one or more requested annotator pairs and emits four headline κ flavours side-by-side, plus per-section / per-organ roll-ups, confusion matrices, and a markdown summary.
+
+### When to use it
+
+- "What's the overall κ between gold and `nhc_with_preann`?" → use `iaa_pair`.
+- "I want a confusion matrix for `pt_category` between two annotators." → use `iaa_pair`.
+- "I want everything `iaa` already produces, but for arbitrary pairs." → use `iaa`. `iaa_pair` is *additive* — it doesn't replace the per-field stats, it adds the missing summary layer.
+
+### Why four flavours of κ?
+
+There is no canonical pooled-κ for heterogeneous fields (binary + ordinal + nominal + continuous + nested-list). Different definitions answer different questions, so we report all four:
+
+| Statistic | What it answers | Caveats |
+|---|---|---|
+| `mean_per_field_kappa` | "On average, how much do they agree per field?" | Equal weight to every field. CI omitted (would require field_count × n_boot recomputations). |
+| `n_weighted_mean_per_field_kappa` | Same, but fields with more observations contribute more. | Same CI caveat. Closer to a "per-observation" interpretation. |
+| `pooled_categorical_kappa` | One Cohen's κ over every (case, field) tuple, restricted to categorical fields (binary / ordinal / nominal). Missing-on-one-side encoded as `__missing__`. | Continuous and nested-list fields excluded — their value spaces don't share a κ category structure. Case-level bootstrap CI included. |
+| `agree_disagree_pabak` | Single chance-corrected agreement rate across **all** fields, including continuous (within tolerance) and nested-list (bipartite F1 = 1.0). PABAK = 2·p_o − 1. | Loses information about *which* category the disagreements fall in. Use as a complement, not a substitute. |
+
+`iaa_pair` also forwards Krippendorff α (nominal / ordinal / interval) and the case-exact-match rate from `iaa.whole_report_stats`, so the headline table is self-contained.
+
+### Why PABAK and not Cohen's κ for agree/disagree?
+
+If you build the (case, field) → agree(1)/disagree(0) indicator and try to compute Cohen's κ on it, one "rater" is constant (always 1 by construction). The chance baseline `p_e` then equals `p_o`, so κ collapses to 0 regardless of agreement rate. **PABAK** = 2·p_o − 1 is the principled chance-corrected statistic in this setting (range [−1, +1]; 0 = chance-50/50, +1 = perfect agreement). See Byrt et al. (1993) cited above under PABAK.
+
+### Bootstrap unit
+
+**Case** (with `strata = organ_per_case`). Multiple (case, field) observations from the same source case move together under a single bootstrap draw — this respects within-case correlation across fields and matches the standard for IAA bootstraps.
+
+### Pre-annotation effect — same numbers, different reading
+
+`iaa_pair` is **pair-agnostic**: it answers *"how different are these two streams?"* For inter-observer pairs (`gold:nhc_with_preann`, `kpc_with_preann:nhc_with_preann`) that's the right question.
+
+For within-annotator preann pairs (`kpc_with_preann:kpc_without_preann`), the same κ measures the *magnitude of preann-induced change* rather than whether preann helps or hurts. Two readings:
+
+- High κ: either preann had little effect, **or** the human rubber-stamped suggestions (anchoring risk).
+- Low κ: either the human read carefully and overrode the LLM, **or** the LLM was so bad it had to be fixed everywhere.
+
+The valence is **ambiguous** — the causal "does preann pull the annotator toward gold?" question requires Δκ vs gold + anchoring index, which live in the existing `iaa` subcommand's `preann/` outputs. The markdown summary auto-detects within-annotator pairs (matching `nhc_*` or `kpc_*` prefix on both sides) and shows a banner pointing readers to that output tree.
+
+### Output tree
+
+```
+iaa_pair/
+    manifest.json
+    pair_<a>_vs_<b>/
+        headline.csv          — 8 rows: 4 κ flavours + 3 α + case_exact_match
+        per_field_kappa.csv   — long-form, one row per (organ × field × κ-stat)
+        per_section.csv       — section roll-up
+        per_organ.csv         — 4 stats × n_organs rows
+        summary.md            — human-readable headline
+        confusion/<field>.csv — top-N categorical fields by disagreement
+```
+
+### CLI
+
+```
+python -m scripts.eval.cli iaa_pair \
+    --root workspace --dataset cmuh \
+    --pair gold:nhc_with_preann \
+    --pair kpc_with_preann:nhc_with_preann \
+    --pair kpc_with_preann:kpc_without_preann \
+    --out workspace/results/eval/iaa_pair \
+    --n-boot 2000 --seed 0
+```
+
+`--pair` is repeatable. Both sides must be valid annotators (`gold`, `nhc_with_preann`, `nhc_without_preann`, `kpc_with_preann`, `kpc_without_preann`). Self-pairs (`a:a`) are rejected; duplicates are dropped with a warning; both `a:b` and `b:a` are kept when both are requested (confusion-matrix orientation differs).
+
+Optional flags:
+- `--n-confusion N` — top-N categorical fields by disagreement count to write as confusion matrices (default 20).
+- `--top-fields K` — top-K most-disagreed fields shown in the markdown summary (default 10).
+
+**Implementation:** `scripts.eval.iaa.run_iaa_pair`; library at `digital_registrar_research.benchmarks.eval.iaa_headline`.
+
 ## Disagreement resolution dynamics
 
 When NHC and KPC disagree, gold acts as the tie-breaker. `iaa/disagreement_resolution.csv` reports, per (organ, field):
