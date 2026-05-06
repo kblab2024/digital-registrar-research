@@ -45,7 +45,7 @@ python scripts/baselines/run_bert.py
 
 # 4. Side-by-side compare. Default --datasets tcga.
 python scripts/baselines/eval_rule_bert_llm.py \
-    --llm-model gpt_oss_20b \
+    --llm-models gpt_oss_20b \
     --out workspace/results/eval/rule_bert_llm
 ```
 

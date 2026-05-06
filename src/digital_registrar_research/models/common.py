@@ -38,6 +38,11 @@ model_list = {
     "medgemmalarge":  "ollama_chat/medgemma:27b",
     "medgemmasmall":  "ollama_chat/medgemma:4b",
     "qwen3_6":        "ollama_chat/qwen3.6:27b",
+    # OpenAI-hosted top-class model. Routed through dspy.LM via LiteLLM's
+    # `openai/` provider; api_key is loaded from util.secrets.load_openai_key
+    # (see load_model below). Used as a "yet another top-class model"
+    # comparator on the public TCGA set for the rebuttal vs reviewer (a).
+    "gpt5_4_mini":    "openai/gpt-5.4-mini",
 }
 
 localaddr = "http://localhost:11434"
@@ -53,19 +58,63 @@ MODEL_PROFILES: dict[str, dict] = {
     "ollama_chat/qwen3.5:27b":   {"temperature": 0.15, "top_p": 0.9,  "top_k": 40, "num_ctx": 8192, "max_tokens": 4096},
     "ollama_chat/medgemma:27b":  {"temperature": 0.15, "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
     "ollama_chat/medgemma:4b":   {"temperature": 0.2,  "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096},
+    # OpenAI: stochastic profile mirrors the gpt-oss shape so K-run
+    # reliability metrics (ICC, flip-rate, paired bootstrap) are meaningful.
+    # No top_k / num_ctx (not supported by the chat-completions API).
+    "openai/gpt-5.4-mini":       {"temperature": 0.3,  "top_p": 1.0,  "max_tokens": 4096},
 }
 _DEFAULT_PROFILE = {"temperature": 0.2, "top_p": 0.95, "top_k": 64, "num_ctx": 8192, "max_tokens": 4096}
 _BASE_KWARGS = {"repeat_penalty": 1.05, "keep_alive": "30m", "cache": False, "seed": 10}
 
+# Sampler / runtime kwargs that only make sense for the local Ollama backend.
+# When a model_id is dispatched through a non-Ollama provider (e.g. ``openai/``)
+# these are stripped from the kwargs passed to ``dspy.LM`` so LiteLLM does not
+# forward them to the upstream API (which would 400).
+_OLLAMA_ONLY_KEYS = ("top_k", "num_ctx", "repeat_penalty", "keep_alive")
 
-def load_model(model_name: str, overrides: dict | None = None):
+
+def compute_lm_kwargs(model_name: str, overrides: dict | None = None) -> dict:
+    """Resolve the final dspy.LM kwargs for *model_name*.
+
+    Layered: ``_BASE_KWARGS`` ⊕ ``MODEL_PROFILES[model_id]`` (or
+    ``_DEFAULT_PROFILE``) ⊕ caller overrides (non-None only). Returned
+    verbatim so callers (runners, manifests) can record what was actually
+    sent to the LM. ``load_model`` calls this internally; runners that
+    need to log the kwargs without constructing an LM should call it
+    directly. Provider-incompatible keys are not stripped here — that
+    happens in :func:`load_model` only when the LM is actually built,
+    so the manifest still records the intended sampler config.
+    """
     if model_name not in model_list:
-        raise ValueError(f"Model {model_name} not found. Available models: {list(model_list.keys())}")
-
+        raise ValueError(
+            f"Model {model_name} not found. Available models: {list(model_list.keys())}")
     model_id = model_list[model_name]
     kwargs = {**_BASE_KWARGS, **MODEL_PROFILES.get(model_id, _DEFAULT_PROFILE)}
     if overrides:
         kwargs.update({k: v for k, v in overrides.items() if v is not None})
+    return kwargs
+
+
+def load_model(model_name: str, overrides: dict | None = None):
+    model_id = model_list[model_name] if model_name in model_list else None
+    if model_id is None:
+        raise ValueError(f"Model {model_name} not found. Available models: {list(model_list.keys())}")
+
+    kwargs = compute_lm_kwargs(model_name, overrides=overrides)
+
+    if model_id.startswith("openai/"):
+        from digital_registrar_research.util.secrets import load_openai_key
+        api_key = load_openai_key()
+        api_kwargs = {k: v for k, v in kwargs.items() if k not in _OLLAMA_ONLY_KEYS}
+        lm = dspy.LM(
+            model=model_id,
+            api_key=api_key,
+            model_type="chat",
+            **api_kwargs,
+        )
+        # Print the redacted kwargs (api_key never logged).
+        print(f"Loaded model: {model_name} (openai) with {api_kwargs}")
+        return lm
 
     lm = dspy.LM(
         model=model_id,
