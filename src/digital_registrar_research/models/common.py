@@ -33,9 +33,11 @@ model_list = {
     "gptoss":         "ollama_chat/gpt-oss:20b",
     "gemma3":         "ollama_chat/gemma3:27b",
     "gemma4":         "ollama_chat/gemma4:26b",
+    "gemma4large":         "ollama_chat/gemma4:31b",
     "qwen3_5":        "ollama_chat/qwen3.5:27b",
     "medgemmalarge":  "ollama_chat/medgemma:27b",
     "medgemmasmall":  "ollama_chat/medgemma:4b",
+    "qwen3_6":        "ollama_chat/qwen3.6:27b",
 }
 
 localaddr = "http://localhost:11434"
