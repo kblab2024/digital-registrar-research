@@ -62,11 +62,12 @@ which is alphabetical and therefore wrong for both datasets.
 
 `--folder dummy`, `--folder workspace`, and `--folder reference` are the
 standard shortcuts. The `reference` shortcut builds a one-time symlink
-staging tree under `reference/_staged/` from
-`reference/tcga_dataset_20251117/` and
-`reference/tcga_annotation_20251117/` so the M2-mac smoke runs can use
-real TCGA data without restructuring it. Absolute paths and other
-relatives are accepted and resolved against the repo root via
+staging tree under `reference/_staged/` from the canonical TCGA reports
+at `reference/reports/<organ_n>/*.txt` so the M2-mac smoke runs can use
+real TCGA data without restructuring it. (The reference checkout is
+reports-only — gold annotations aren't staged, so eval-with-gold needs a
+`workspace` checkout.) Absolute paths and other relatives are accepted
+and resolved against the repo root via
 [`_config_loader.resolve_folder`](../scripts/_config_loader.py).
 Models are passed by alias from `models.common.UNIFIED_MODELS`
 (`gptoss | gemma3 | gemma4 | gemma4e2b | qwen3_5 | medgemmalarge |
