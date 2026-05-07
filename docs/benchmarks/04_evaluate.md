@@ -22,7 +22,7 @@ python -m scripts.eval.cli cascade \
 | `--dataset` | yes | `cmuh` or `tcga`. |
 | `--method` | yes | `rule_based`, `clinicalbert`, or `llm`. |
 | `--model` | required for `clinicalbert` and `llm` | For `clinicalbert`: `cls`, `qa`, or `merged`. For `llm`: the model slug, e.g. `gpt_oss_20b`. Not used for `rule_based`. |
-| `--run-ids` | optional (LLM only) | Specific run IDs to score. Default: auto-discover every `run*` subdir under the model. |
+| `--run-ids` | optional (LLM and ClinicalBERT) | Specific run IDs to score. Default: auto-discover every `run*` subdir under the model. Applies to LLM (Ollama and OpenAI alike — same namespace) and to ClinicalBERT when the K-seed multirun trainer was used. Ignored for `rule_based` (deterministic, no run slots). |
 | `--annotator` | default `gold` | Annotator subdir to score against. |
 | `--organs` | default all | Restrict to organ indices (1..10) or names. |
 | `--cases` | optional | Allowlist of case IDs (inline or `@path/to/list.txt`). |
@@ -49,7 +49,7 @@ python -m scripts.eval.cli cascade \
 ├── top_k_ordinal.csv                 top-k accuracy for ordinal fields
 ├── schema_conformance.csv            does the prediction respect the field's enum?
 ├── refusal_calibration.csv           is the method's "I don't know" rate calibrated?
-├── run_consistency.csv               cross-run variance (LLM only)
+├── chapter*/multirun_consistency.csv per-chapter cross-run variance — Fleiss κ across runs, flip rate, stability accuracy, brittle-case rate, per-run accuracy CI (Student-t over the K per-run accuracy vector). Emitted only when `--run-ids` resolved >1 run, i.e. for LLM and for ClinicalBERT-multirun. Not produced for `rule_based`.
 ├── section_rollup.csv                accuracy rolled up by report section
 └── missingness_summary.csv           where each method drops out
 ```
@@ -62,7 +62,7 @@ The atomic `correctness_table.parquet` is what the side-by-side comparison consu
 
 | Column | Type | Meaning |
 |---|---|---|
-| `run_id` | str | Empty `""` for rule_based and clinicalbert; populated for llm. |
+| `run_id` | str | Empty `""` for `rule_based`. Populated as `run01`..`runK` for `llm` and for `clinicalbert` when the K-seed multirun trainer was used. Empty for single-seed `clinicalbert` (legacy flat layout). |
 | `method` | str | `rule_based` / `clinicalbert` / `llm`. |
 | `model` | str | Model name (head for BERT, slug for LLM, empty for rule_based). |
 | `annotator` | str | `gold` etc. |
