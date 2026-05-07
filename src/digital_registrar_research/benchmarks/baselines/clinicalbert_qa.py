@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -56,7 +57,9 @@ from transformers import (
 from ...paths import BENCHMARKS_RESULTS
 from .. import organs as _organs
 from ..eval.scope import get_field_value
-from ._data import load_cases, per_dataset_counts
+from ._data import load_cases, load_predict_cases, per_dataset_counts
+
+_LOGGER = logging.getLogger(__name__)
 
 MODEL_ID = "emilyalsentzer/Bio_ClinicalBERT"
 MAX_LEN = 512
@@ -277,13 +280,14 @@ def predict(args) -> None:
                     f"({sorted(train_datasets)})."
                 )
     else:
-        print(f"[warn] {train_meta_path} not found — leakage guard "
-              f"disabled. Retrain with the current train_bert.py to enable.")
+        _LOGGER.warning(
+            "%s not found — leakage guard disabled. Retrain with the "
+            "current train_bert.py to enable.", train_meta_path)
 
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
 
-    cases = load_cases(
+    cases = load_predict_cases(
         datasets=datasets,
         root=Path(args.data_root),
         organs=organs,
@@ -292,6 +296,12 @@ def predict(args) -> None:
     pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
     print(f"Predicting on {len(cases)} cases ({pretty})  "
           f"organs={sorted(organs)}")
+    if not cases:
+        reports_dir = Path(args.data_root) / "data" / datasets[0] / "reports"
+        raise SystemExit(
+            f"refusing to predict on 0 cases for {datasets} — check that "
+            f"{reports_dir} is populated and --organs={sorted(organs)} "
+            f"matches non-empty organ_n dirs there.")
 
     for case in tqdm(cases, desc="predict"):
         report = Path(case["report_path"]).read_text(encoding="utf-8")

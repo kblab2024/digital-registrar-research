@@ -7,10 +7,11 @@ isolates the contribution of model capacity from pipeline design: the
 signatures, prompts, and post-processing are all held constant.
 
 Cases are discovered the same way as the BERT baselines: walk
-``<folder>/data/<dataset>/annotations/gold/`` via
-``benchmarks.baselines._data.load_cases``. The cross-corpus contract
-is "predict on TCGA, full corpus" — TCGA is held out from any model
-that's trained on CMUH, so there is no in-corpus split to honor.
+``<folder>/data/<dataset>/reports/<organ_n>/*.txt`` via
+``benchmarks.baselines._data.load_predict_cases`` (gold annotations are
+optional for predict-side runs). The cross-corpus contract is "predict
+on TCGA, full corpus" — TCGA is held out from any model that's trained
+on CMUH, so there is no in-corpus split to honor.
 
 Requires:
     pip install dspy-ai openai
@@ -35,7 +36,7 @@ import dspy
 from ...paths import BENCHMARKS_RESULTS
 from ...pipeline import CancerPipeline
 from .. import organs as _organs
-from ._data import load_cases
+from ._data import load_predict_cases
 
 DEFAULT_MODEL = "openai/gpt-4-turbo"  # swap to "openai/gpt-4o" if preferred
 DEFAULT_DATASETS = ("tcga",)
@@ -62,7 +63,7 @@ def run_on_dataset(folder: Path, datasets: list[str], out_dir: Path,
                    model_id: str = DEFAULT_MODEL,
                    organs: set[str] | None = None) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    cases = load_cases(datasets=datasets, root=folder, organs=organs)
+    cases = load_predict_cases(datasets=datasets, root=folder, organs=organs)
     if limit is not None:
         cases = cases[:limit]
 

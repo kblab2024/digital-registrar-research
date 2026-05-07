@@ -120,6 +120,19 @@ def _setup_logging(out_dir: Path, verbose: bool) -> logging.Logger:
     fh.setLevel(logging.DEBUG)
     logger.addHandler(fh)
     logger.propagate = False
+
+    # Fan out to the package logger so library modules' getLogger(__name__)
+    # calls (e.g. _data._LOGGER) reach the same console + _run.log. Without
+    # this, a "no reports under …" error from _walk_reports would land in
+    # the root logger's default handler (or be lost) and never make it to
+    # _run.log — exactly the silent-fail mode that hid the 0-cases bug.
+    pkg_logger = logging.getLogger("digital_registrar_research")
+    pkg_logger.handlers.clear()
+    pkg_logger.setLevel(logging.DEBUG)
+    pkg_logger.addHandler(console)
+    pkg_logger.addHandler(fh)
+    pkg_logger.propagate = False
+
     return logger
 
 

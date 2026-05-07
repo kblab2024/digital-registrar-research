@@ -353,21 +353,24 @@ def _run_one_dataset(
     """Predict on one dataset. Returns (exit_code, summary or None)."""
     reports_root = args.experiment_root / "data" / dataset / "reports"
     annotations_root = args.experiment_root / "data" / dataset / "annotations"
+    out_dir = (args.experiment_root / "results" / "predictions"
+               / dataset / "rule_based")
+    # Set up the logger up-front so missing-data errors land in _run.log
+    # alongside everything else, instead of vanishing into stderr.
+    logger = _setup_logging(out_dir, args.verbose)
+
     if not reports_root.is_dir():
-        print(f"[skip] {dataset}: reports not found at {reports_root}",
-              file=sys.stderr)
+        logger.error("[%s] reports not found at %s — workspace not "
+                     "populated?", dataset, reports_root)
         return 0, None
 
     organs = discover_organs(reports_root, args.organs)
     if not organs:
         suffix = f" matching {args.organs}" if args.organs else ""
-        print(f"[skip] {dataset}: no organ dirs with *.txt found under "
-              f"{reports_root}{suffix}", file=sys.stderr)
+        logger.error("[%s] no organ dirs with *.txt found under %s%s",
+                     dataset, reports_root, suffix)
         return 0, None
 
-    out_dir = (args.experiment_root / "results" / "predictions"
-               / dataset / "rule_based")
-    logger = _setup_logging(out_dir, args.verbose)
     logger.info("experiment_root: %s", args.experiment_root)
     logger.info("dataset: %s", dataset)
     logger.info("method: rule_based (deterministic; no model, no run_id)")
