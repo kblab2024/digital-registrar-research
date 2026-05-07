@@ -24,6 +24,7 @@ python scripts/baselines/run_rule.py \
 
 - The rule baseline classifies the organ from the report itself (lexicon vote, `rules.classify_organ`). It does **not** read the gold annotation. This keeps the floor honest — when the lexicon classifier is wrong, the per-organ extraction emits an empty `cancer_data`.
 - Runtime: <1 second per case on a laptop CPU. Pure Python, no GPU, no model.
+- **Deterministic — no multirun needed.** Given the same input, the rule baseline produces the same output, so running it K times has no value. The CI you see for rule in the cross-method comparison comes from case-level Wilson intervals (within-method) and case-level paired bootstrap (vs other methods), not from run-level variance.
 
 Output: `{folder}/results/predictions/{dataset}/rule_based/{organ_n}/{case_id}.json` plus side files.
 
@@ -54,7 +55,35 @@ python scripts/baselines/run_bert.py \
 - Device auto-detected: MPS / CUDA / CPU.
 - `merged` does a per-case key-merge: CLS provides the base (carries `cancer_category` + `cancer_excision_report`); QA's `cancer_data` scalars overlay onto CLS's, with CLS winning on collisions.
 
-Output: `{folder}/results/predictions/{dataset}/clinicalbert/{cls|qa|merged}/{organ_n}/{case_id}.json`.
+Output (single-seed): `{folder}/results/predictions/{dataset}/clinicalbert/{cls|qa|merged}/{organ_n}/{case_id}.json`.
+
+Output (multirun): `{folder}/results/predictions/{dataset}/clinicalbert/{cls|qa|merged}/run{NN}/{organ_n}/{case_id}.json`. The `run{NN}/` slot is present iff the multirun trainer was used — see the next subsection.
+
+### Multi-run training (K-seed sweep)
+
+LLMs are stochastic at inference time; BERT is stochastic at *training* time (random head init, dropout, data-shuffle order). To put BERT on the same statistical footing as the LLM K-run sweep, train K seeds and feed each seed's predictions into the cascade as a separate `run_id`:
+
+```bash
+# Smoke (2 seeds × 1 epoch each, dummy data — ~3 min total)
+python scripts/baselines/train_bert_multirun.py \
+    --folder dummy --num-runs 2 --master-seed 1234 \
+    --epochs-cls 1 --epochs-qa 1 --datasets tcga
+
+# Full K=10 sweep on workspace (~6.5–7 hr on A6000 Ada)
+python scripts/baselines/train_bert_multirun.py \
+    --folder workspace --num-runs 10 --master-seed 42 --datasets tcga
+```
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--num-runs N` | 10 | Number of seeds to train. Mirrors LLM `--n`. |
+| `--master-seed M` | random (`secrets.randbelow(2**31)`) | Makes the *sequence* of per-iteration seeds reproducible: same master seed → same K seeds → same K checkpoints (modulo CUDA non-determinism, which is intentional). |
+| `--epochs-cls`, `--epochs-qa` | inherited from `train_bert.py` | Per-head epoch counts. Same defaults as the single-seed trainer. |
+| `--folder`, `--datasets`, `--heads` | as `train_bert.py` | Forwarded verbatim to the per-seed train + predict subprocesses. |
+
+Each iteration draws a fresh 31-bit seed, trains both heads, runs inference into `clinicalbert/{head}/run{NN}/...`, then **deletes the checkpoint** to keep transient disk to ~1× the per-seed footprint. The model-level `_manifest.yaml` at `clinicalbert/merged/_manifest.yaml` lists every seed and its validity flag.
+
+Cascade auto-discovers these run slots — there is no extra flag to pass at evaluation time. See [04_evaluate.md](04_evaluate.md) for the consumption side and [05_compare.md](05_compare.md) for the multirun-vs-multirun-vs-rule comparison wrapper.
 
 ## LLM (DSPy + Ollama)
 
@@ -99,6 +128,8 @@ python scripts/pipeline/run_pipeline_openai_multirun.py \
 `--model` aliases live in `models.common.model_list` and must resolve to `openai/...`. Add a new alias + `MODEL_PROFILES[...]` entry there to onboard another OpenAI model.
 
 Output: same canonical layout as the Ollama runner — `{folder}/results/predictions/{dataset}/llm/{model_slug}/{run_id}/{organ_n}/{case_id}.json`. `openai/gpt-5.4-mini` → slug `gpt_5_4_mini` (no `_dspy_strict` suffix; the loose-pipeline runner is the only OpenAI driver).
+
+**Provider-agnostic discovery.** OpenAI-hosted runs land in the **same canonical namespace as Ollama runs** — `llm/{model_slug}/run{NN}/...`. Cascade auto-discovery (when `--llm-runs` is omitted) walks that directory and is provider-blind; the only thing that distinguishes a hosted run from a local run downstream is the model slug, e.g. `gpt_5_4_mini` vs `gpt_oss_20b`. So the multi-method comparison wrapper `eval_rule_bert_llm.py` finds OpenAI runs automatically — no extra flag, no separate code path.
 
 The runner writes one extra side file per run: `_cost_ledger.json` (per-case wall-time as a proxy for spend; pricing is not queried).
 
