@@ -2,11 +2,13 @@
 
 A reproducible cross-corpus comparison of three baseline methods against gold annotations on pathology reports:
 
-| Method | What it is | Trained on (default) | Evaluated on (default) |
-|---|---|---|---|
-| **Rule-based** | Per-organ regex + lexicon. Deterministic floor LLMs have to beat. | None | TCGA |
-| **ClinicalBERT** | Bio_ClinicalBERT fine-tuned as multi-head CLS (categorical/boolean) + extractive QA (numeric spans). Outputs are merged per case. | **CMUH** | TCGA (held out) |
-| **LLM** | DSPy + Ollama / OpenAI cancer extraction pipeline (gptoss, gemma3, qwen3.5, medgemma, gpt-4o, ...). Multi-run by design. | None (zero / few-shot) | TCGA |
+| Method | What it is | Trained on (default) | Evaluated on (default) | Multi-run |
+|---|---|---|---|---|
+| **Rule-based** | Per-organ regex + lexicon. Deterministic floor LLMs have to beat. | None | TCGA | n/a (deterministic) |
+| **ClinicalBERT** | Bio_ClinicalBERT fine-tuned as multi-head CLS (categorical/boolean) + extractive QA (numeric spans). Outputs are merged per case. | **CMUH** | TCGA (held out) | Yes — K-seed (`train_bert_multirun.py`) |
+| **LLM** | DSPy + Ollama / OpenAI cancer extraction pipeline (gptoss, gemma3, qwen3.5, medgemma, gpt-4o, ...). | None (zero / few-shot) | TCGA | Yes — K-run (sampling-temperature seeds) |
+
+Rule-based is **deterministic** — one run is the right answer; running it K times produces K identical prediction sets, so there is no run-level variance to estimate. BERT and LLM both have run-level variance — BERT from random head init / dropout / shuffle order at training time, LLM from sampling at inference time — and are run K times so the eval pipeline can quantify it (Fleiss κ, flip rate, Student-t over per-run accuracy). See [03_run_baselines.md](03_run_baselines.md#multi-run-training-k-seed-sweep) for the BERT K-seed sweep and [05_compare.md](05_compare.md#where-do-cis-come-from-in-a-multirun-comparison) for how the multirun-vs-multirun-vs-rule comparison computes its CIs.
 
 ## Why TCGA-only evaluation is the canonical default
 

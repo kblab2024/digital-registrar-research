@@ -14,7 +14,7 @@ the nested margins / lymph-node / biomarker chapters, run a
 
 Usage
 -----
-    # Original 3-way (rule + bert + one LLM)
+    # Original 3-way (rule + bert + one LLM), auto-discover all runs
     python scripts/baselines/eval_rule_bert_llm.py \\
         --folder workspace --datasets tcga \\
         --bert-head merged \\
@@ -28,10 +28,20 @@ Usage
         --llm-models gpt_oss_20b gpt_5_4_mini \\
         --out workspace/results/eval/rule_bert_locallm_apillm
 
+    # Pin specific BERT seeds and LLM seeds (multirun-vs-multirun comparison
+    # with case-paired bootstrap CIs across every method pair):
+    python scripts/baselines/eval_rule_bert_llm.py \\
+        --folder workspace --datasets tcga \\
+        --bert-head merged --bert-runs run01 run02 run03 \\
+        --llm-models gpt_oss_20b --llm-runs run01 run02 run03 \\
+        --out workspace/results/eval/rule_bert_llm_3x3
+
 Prerequisites: predictions for every method must exist under
-``{folder}/results/predictions/{dataset}/...``. ``--llm-runs`` (if
-given) applies to every LLM; the default (auto-discover) works for
-K-seed sweeps.
+``{folder}/results/predictions/{dataset}/...``. ``--bert-runs`` /
+``--llm-runs`` (if given) restrict BERT / each LLM model to the listed
+run slots; the default (auto-discover) walks every ``run*`` subdir
+under ``clinicalbert/{head}/`` and ``llm/{model}/`` respectively. Rule
+is deterministic — there is no ``--rule-runs`` flag.
 """
 from __future__ import annotations
 
@@ -53,6 +63,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--bert-head", default="merged",
                     choices=("cls", "qa", "merged"),
                     help="Which ClinicalBERT head to compare (default: merged).")
+    ap.add_argument("--bert-runs", nargs="*", default=None,
+                    help="ClinicalBERT run IDs from a K-seed multirun "
+                         "(default: auto-discover every run* subdir under "
+                         "clinicalbert/<head>/). Pass empty / omit on a "
+                         "single-seed checkpoint — cascade falls through to "
+                         "the flat layout. See "
+                         "scripts/baselines/train_bert_multirun.py.")
     ap.add_argument("--llm-models", required=True, nargs="+",
                     help="One or more LLM model slugs to include, e.g. "
                          "'gpt_oss_20b' for a 3-way compare or "
@@ -60,7 +77,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                          "(rule + bert + local LLM + hosted LLM).")
     ap.add_argument("--llm-runs", nargs="*", default=None,
                     help="LLM run IDs (default: auto-discover). Applied to "
-                         "every model in --llm-models.")
+                         "every model in --llm-models. Provider-agnostic: "
+                         "Ollama and OpenAI runners share the "
+                         "llm/<model_slug>/runNN/ namespace.")
     return ap.parse_args(argv)
 
 
@@ -69,7 +88,8 @@ def main(argv: list[str] | None = None) -> int:
     specs: list[MethodSpec] = [
         MethodSpec(label="rule_based", method="rule_based", model=None),
         MethodSpec(label=f"bert_{args.bert_head}",
-                   method="clinicalbert", model=args.bert_head),
+                   method="clinicalbert", model=args.bert_head,
+                   run_ids=args.bert_runs),
     ]
     for llm_slug in args.llm_models:
         specs.append(MethodSpec(
