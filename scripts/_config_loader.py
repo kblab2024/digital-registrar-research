@@ -105,10 +105,12 @@ def resolve_folder(raw: str | Path) -> Path:
 
     "reference" is a virtual experiment root: it resolves to
     ``<repo_root>/reference/_staged``, a symlink tree built on demand from
-    the actual TCGA test data at ``reference/tcga_dataset_20251117/`` and
-    ``reference/tcga_annotation_20251117/``. The staging tree mirrors the
-    canonical ``data/{dataset}/reports/{organ_n}/*.txt`` layout so the
-    runners need no special handling.
+    the canonical TCGA test data at ``reference/reports/<organ_n>/*.txt``.
+    The staging tree mirrors the canonical
+    ``data/{dataset}/reports/{organ_n}/*.txt`` layout that runners expect,
+    so they need no special handling. Predict-side runs work from this
+    tree directly; gold annotations are not staged (the reference checkout
+    is reports-only).
 
     Any absolute path is used verbatim; any other relative path is resolved
     against the repo root (not the caller's cwd) for reproducibility."""
@@ -124,69 +126,59 @@ def resolve_folder(raw: str | Path) -> Path:
 
 _REFERENCE_DIR = REPO_ROOT / "reference"
 _REFERENCE_STAGED = _REFERENCE_DIR / "_staged"
-# (dataset, reports_src, gold_src) tuples driving the staging build.
-_REFERENCE_SOURCES = (
-    ("tcga", "tcga_dataset_20251117", "tcga_annotation_20251117"),
-)
+# Datasets whose reports live under the canonical flat layout
+# ``reference/reports/<organ_n>/*.txt``. The reference checkout is
+# reports-only — gold annotations are not staged. Add a tuple here when a
+# new dataset gets a reference subset, and split `reports/` per-dataset
+# (e.g. ``reference/reports/<dataset>/<organ_n>/...``) if/when the
+# reports tree stops being TCGA-only.
+_REFERENCE_DATASETS: tuple[str, ...] = ("tcga",)
 
 
 def _ensure_reference_staged() -> Path:
     """Build (or refresh) the canonical-layout symlink tree under
     ``reference/_staged/``. Idempotent: re-uses existing symlinks when the
-    target paths haven't changed."""
+    target paths haven't changed.
+
+    Source layout (reports-only):
+        reference/reports/<organ_n>/<case_id>.txt
+
+    Staged layout (what runners read via ``--folder reference``):
+        reference/_staged/data/<dataset>/reports/<organ_n>/<case_id>.txt
+    """
     if not _REFERENCE_DIR.is_dir():
         raise FileNotFoundError(
             f"--folder reference requires {_REFERENCE_DIR} to exist")
+    src_reports = _REFERENCE_DIR / "reports"
+    if not src_reports.is_dir():
+        raise FileNotFoundError(
+            f"--folder reference requires {src_reports} (canonical "
+            f"reports/<organ_n>/*.txt layout) to exist")
     _REFERENCE_STAGED.mkdir(exist_ok=True)
     (_REFERENCE_STAGED / "results").mkdir(exist_ok=True)
-    for dataset, reports_dirname, gold_dirname in _REFERENCE_SOURCES:
-        reports_src_root = _REFERENCE_DIR / reports_dirname
-        gold_src_root = _REFERENCE_DIR / gold_dirname
-        if not reports_src_root.is_dir():
-            continue  # silently skip datasets whose source isn't present
-        _stage_reports(dataset, reports_src_root)
-        if gold_src_root.is_dir():
-            _stage_gold(dataset, gold_src_root)
+    for dataset in _REFERENCE_DATASETS:
+        _stage_reports(dataset, src_reports)
     return _REFERENCE_STAGED.resolve()
 
 
 def _stage_reports(dataset: str, src_root: Path) -> None:
-    """Symlink ``reference/<src_root>/tcgaN/tcgaN_M.txt`` to
-    ``reference/_staged/data/{dataset}/reports/N/tcgaN_M.txt``."""
+    """Symlink ``reference/reports/<organ_n>/<case_id>.txt`` to
+    ``reference/_staged/data/<dataset>/reports/<organ_n>/<case_id>.txt``.
+
+    The source layout is already canonical (numeric ``<organ_n>`` dirs,
+    ``<case_id>.txt`` filenames), so this is a 1:1 file-level symlink
+    pass with no path rewriting.
+    """
     dst_root = _REFERENCE_STAGED / "data" / dataset / "reports"
-    dst_root.mkdir(parents=True, exist_ok=True)
-    for src_organ in sorted(src_root.iterdir()):
-        if not src_organ.is_dir():
-            continue
-        # tcga1 -> 1, tcga10 -> 10
-        organ_n = src_organ.name.lstrip("tcga") or src_organ.name
-        if not organ_n.isdigit():
-            continue
-        dst_organ = dst_root / organ_n
-        dst_organ.mkdir(exist_ok=True)
-        for txt in src_organ.glob("*.txt"):
-            link = dst_organ / txt.name
-            _refresh_symlink(link, txt)
-
-
-def _stage_gold(dataset: str, src_root: Path) -> None:
-    """Symlink ``reference/<src_root>/N/tcgaN_M_annotation.json`` to
-    ``reference/_staged/data/{dataset}/annotations/gold/N/tcgaN_M.json``
-    (note the ``_annotation`` suffix is stripped to match the canonical
-    case_id ↔ gold-file convention)."""
-    dst_root = _REFERENCE_STAGED / "data" / dataset / "annotations" / "gold"
     dst_root.mkdir(parents=True, exist_ok=True)
     for src_organ in sorted(src_root.iterdir()):
         if not src_organ.is_dir() or not src_organ.name.isdigit():
             continue
         dst_organ = dst_root / src_organ.name
         dst_organ.mkdir(exist_ok=True)
-        for jf in src_organ.glob("*.json"):
-            stem = jf.stem
-            if stem.endswith("_annotation"):
-                stem = stem[: -len("_annotation")]
-            link = dst_organ / f"{stem}.json"
-            _refresh_symlink(link, jf)
+        for txt in src_organ.glob("*.txt"):
+            link = dst_organ / txt.name
+            _refresh_symlink(link, txt)
 
 
 def _refresh_symlink(link: Path, target: Path) -> None:

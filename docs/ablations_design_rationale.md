@@ -284,7 +284,8 @@ the prior numbers uninterpretable. The relevant changes:
   try/catch (with `--continue-on-cell-error`) writes a
   `grid_failures.json` so re-runs only target the failed subset.
 * **`reference` folder shorthand.** `--folder reference` builds a
-  one-time symlink staging tree under `reference/_staged/` from
-  `reference/tcga_dataset_20251117/` and
-  `reference/tcga_annotation_20251117/` so M2-mac smoke runs use real
-  TCGA data without restructuring the on-disk source.
+  one-time symlink staging tree under `reference/_staged/` from the
+  canonical TCGA reports at `reference/reports/<organ_n>/*.txt` so
+  M2-mac smoke runs use real TCGA data without restructuring the
+  on-disk source. The reference checkout is reports-only; gold
+  annotations aren't staged.
