@@ -30,7 +30,8 @@ results/
 │   ├── llm/{model}/run{NN}/{organ_n}/{case_id}.json
 │   │                       + _summary.json, _log.jsonl
 │   │   {model}/_manifest.yaml
-│   ├── clinicalbert/{variant}/{organ_n}/{case_id}.json  + _summary.json
+│   ├── clinicalbert/{variant}/[run{NN}/]{organ_n}/{case_id}.json  + _summary.json
+│   │                          # run{NN}/ slot present iff trained via train_bert_multirun.py
 │   └── rule_based/{organ_n}/{case_id}.json              + _summary.json
 └── evaluation/{dataset}/
     ├── iaa/*.csv                                    # inter-annotator agreement
