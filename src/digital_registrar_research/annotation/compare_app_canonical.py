@@ -81,7 +81,21 @@ MODE_LABELS = {
     "without_preann": "不含預標註 (without_preann)",
 }
 
-st.set_page_config(page_title="Compare / Consensus (Canonical)", layout="wide")
+# ── Locked-mode (Windows standalone distribution) ─────────────────────────────
+# When REGISTRAR_COMPARE_LOCKED=1 the sidebar pickers are hidden and the app
+# is fixed to: Consensus mode · with_preann · A=nhc, B=kpc → gold. Used by
+# the bundled Windows distribution (see packaging/windows_dist/).
+LOCKED = os.environ.get("REGISTRAR_COMPARE_LOCKED") == "1"
+LOCKED_MODE = "consensus"
+LOCKED_ANNOTATION_MODE = "with_preann"
+LOCKED_SUFFIX_A = os.environ.get("REGISTRAR_COMPARE_SUFFIX_A", "nhc")
+LOCKED_SUFFIX_B = os.environ.get("REGISTRAR_COMPARE_SUFFIX_B", "kpc")
+
+_page_title = (
+    "Digital Registrar — Compare / Consensus" if LOCKED
+    else "Compare / Consensus (Canonical)"
+)
+st.set_page_config(page_title=_page_title, layout="wide")
 
 
 # ── CSS ────────────────────────────────────────────────────────────────────────
@@ -109,15 +123,15 @@ _CSS = """
 
 def _init_state():
     defaults = {
-        "mode": "consensus",                # "consensus" | "evaluation"
-        "annotation_mode": "with_preann",   # "with_preann" | "without_preann"
+        "mode": LOCKED_MODE if LOCKED else "consensus",
+        "annotation_mode": LOCKED_ANNOTATION_MODE if LOCKED else "with_preann",
         "base_dir": os.environ.get("REGISTRAR_ANNOTATE_BASE_DIR", ""),
         "available_datasets": [],
         "dataset": "",
         "workspace": None,                  # WorkspaceSet | None
         "annotators": load_annotators(),
-        "suffix_a": None,
-        "suffix_b": None,
+        "suffix_a": LOCKED_SUFFIX_A if LOCKED else None,
+        "suffix_b": LOCKED_SUFFIX_B if LOCKED else None,
         "eval_ref_suffix": None,            # used in evaluation mode
         "eval_method": None,                # "llm" | "clinicalbert" | "rule_based"
         "eval_model": None,
@@ -1011,33 +1025,42 @@ def _eval_pickers() -> None:
 
 def render_sidebar() -> None:
     st.sidebar.title("🔍 Compare / Consensus")
-    _mode_selector()
-    _annotation_mode_selector()
-    st.sidebar.divider()
 
-    if st.sidebar.button("📂 選擇資料夾", use_container_width=True):
-        picked = pick_folder(initial=st.session_state.base_dir or "")
-        if picked:
-            ok, msg = _reload_from_base(picked)
-            (st.sidebar.success if ok else st.sidebar.error)(msg)
-            if ok:
-                st.rerun()
-
-    if st.session_state.base_dir:
-        st.sidebar.caption(f"📁 {st.session_state.base_dir}")
-
-    with st.sidebar.expander("手動輸入路徑", expanded=not bool(st.session_state.samples)):
-        path_val = st.text_input(
-            "Base folder path", value=st.session_state.base_dir, key="manual_base_cmp"
+    if LOCKED:
+        st.sidebar.markdown(
+            "**Mode**: Consensus  \n"
+            f"**Annotation mode**: {LOCKED_ANNOTATION_MODE}  \n"
+            f"**Annotators**: `{LOCKED_SUFFIX_A}` vs `{LOCKED_SUFFIX_B}` → `gold`"
         )
-        if st.button("Load", key="manual_load_cmp"):
-            if not os.path.isdir(path_val):
-                st.error("Directory not found.")
-            else:
-                ok, msg = _reload_from_base(path_val)
-                (st.success if ok else st.error)(msg)
+        st.sidebar.divider()
+    else:
+        _mode_selector()
+        _annotation_mode_selector()
+        st.sidebar.divider()
+
+        if st.sidebar.button("📂 選擇資料夾", use_container_width=True):
+            picked = pick_folder(initial=st.session_state.base_dir or "")
+            if picked:
+                ok, msg = _reload_from_base(picked)
+                (st.sidebar.success if ok else st.sidebar.error)(msg)
                 if ok:
                     st.rerun()
+
+        if st.session_state.base_dir:
+            st.sidebar.caption(f"📁 {st.session_state.base_dir}")
+
+        with st.sidebar.expander("手動輸入路徑", expanded=not bool(st.session_state.samples)):
+            path_val = st.text_input(
+                "Base folder path", value=st.session_state.base_dir, key="manual_base_cmp"
+            )
+            if st.button("Load", key="manual_load_cmp"):
+                if not os.path.isdir(path_val):
+                    st.error("Directory not found.")
+                else:
+                    ok, msg = _reload_from_base(path_val)
+                    (st.success if ok else st.error)(msg)
+                    if ok:
+                        st.rerun()
 
     # Auto-load from env once at startup if it points at a populated dir.
     if (
@@ -1051,10 +1074,14 @@ def render_sidebar() -> None:
 
     _dataset_selector()
 
-    if st.session_state.mode == "consensus":
-        _consensus_annotator_pickers()
-    else:
-        _eval_pickers()
+    if not LOCKED:
+        if st.session_state.mode == "consensus":
+            _consensus_annotator_pickers()
+        else:
+            _eval_pickers()
+    elif not st.session_state.samples and st.session_state.workspace:
+        # Locked mode: samples should auto-build once workspace + suffixes are set.
+        _reload_samples()
 
     samples = st.session_state.samples
     if not samples:

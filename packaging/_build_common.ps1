@@ -29,8 +29,8 @@ if ([string]::IsNullOrEmpty($AnnotatorSet)) {
 if ($Platform -notin @('windows','unix','macos')) {
     throw "unknown PLATFORM='$Platform' (expected windows|unix|macos)"
 }
-if ($AnnotatorSet -notin @('single','single_kpc','multi')) {
-    throw "unknown ANNOTATOR_SET='$AnnotatorSet' (expected single|single_kpc|multi)"
+if ($AnnotatorSet -notin @('single','single_kpc','multi','compare')) {
+    throw "unknown ANNOTATOR_SET='$AnnotatorSet' (expected single|single_kpc|multi|compare)"
 }
 
 # ── Pins ──────────────────────────────────────────────────────────────────────
@@ -53,7 +53,13 @@ $RepoRoot   = Split-Path -Parent $PkgDir
 $DlDir      = Join-Path $PkgDir '_downloads'
 $BuildDir   = Join-Path $PkgDir 'build'
 $DistDir    = Join-Path $PkgDir 'dist'
-$BundleName = "digital-registrar-annotator-${Platform}-${AnnotatorSet}"
+if ($AnnotatorSet -eq 'compare') {
+    # Compare/Consensus tool ships under its own family name so it's not
+    # confused with the per-annotator bundles.
+    $BundleName = "digital-registrar-compare-${Platform}"
+} else {
+    $BundleName = "digital-registrar-annotator-${Platform}-${AnnotatorSet}"
+}
 $BundleDir  = Join-Path $BuildDir $BundleName
 
 $PyHost = if ($env:PYTHON) { $env:PYTHON } else { 'python' }
@@ -300,6 +306,19 @@ $annotatorsJson = switch ($AnnotatorSet) {
 }
 '@
     }
+    'compare' {
+        # Compare/Consensus tool needs both annotators present so the
+        # demo (unlocked) launcher can populate its picker. The locked
+        # launcher hides the picker entirely and never reads this file.
+@'
+{
+  "annotators": [
+    {"name": "Nan-Haw Chow", "suffix": "nhc"},
+    {"name": "Kai-Po Chang", "suffix": "kpc"}
+  ]
+}
+'@
+    }
 }
 # Write UTF-8 *without* BOM. PS 5.1's `Set-Content -Encoding UTF8` emits a BOM,
 # which makes Python's json.loads() raise JSONDecodeError — the runtime loader
@@ -333,7 +352,10 @@ Invoke-Robocopy (Join-Path $RepoRoot 'workspace') $workspaceDest @(
 Say 'Installing launchers'
 if ($Platform -eq 'windows') {
     Copy-Item (Join-Path $PkgDir "run_workspace_locked_${AnnotatorSet}.bat") (Join-Path $BundleDir 'run.bat')
-    Copy-Item (Join-Path $PkgDir "run_dummy_unlocked_${AnnotatorSet}.bat")   (Join-Path $BundleDir 'run_demo.bat')
+    $demoSrc = Join-Path $PkgDir "run_dummy_unlocked_${AnnotatorSet}.bat"
+    if (Test-Path $demoSrc) {
+        Copy-Item $demoSrc (Join-Path $BundleDir 'run_demo.bat')
+    }
 } else {
     # macOS launchers also strip the Gatekeeper quarantine bit from the bundled
     # Python tree on first run; otherwise the unsigned python binary is blocked.
@@ -342,7 +364,12 @@ if ($Platform -eq 'windows') {
     Copy-Item (Join-Path $PkgDir "run_dummy_unlocked_${AnnotatorSet}${launcherSuffix}.sh")   (Join-Path $BundleDir 'run_demo.sh')
     # Windows filesystems don't carry POSIX exec bits; tar will add them via --mode below.
 }
-Copy-Item (Join-Path $PkgDir 'README.txt') (Join-Path $BundleDir 'README.txt')
+$readmeSrc = if ($AnnotatorSet -eq 'compare') {
+    Join-Path $PkgDir 'README_compare.txt'
+} else {
+    Join-Path $PkgDir 'README.txt'
+}
+Copy-Item $readmeSrc (Join-Path $BundleDir 'README.txt')
 
 # ── Final pycache sweep ───────────────────────────────────────────────────────
 Remove-PyCruft $BundleDir
