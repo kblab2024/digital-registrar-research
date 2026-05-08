@@ -144,3 +144,116 @@ def _sample_sort_key(s: SampleRef) -> tuple:
     if m:
         return (m.group(1), int(m.group(2)), int(m.group(3)))
     return (s.sample_id, 0, 0)
+
+
+# ── Canonical path helpers (used by compare_app_canonical) ────────────────────
+
+def gold_path(ws: WorkspaceSet, n: str, case_id: str) -> str:
+    """Path to the consensus-gold annotation under the canonical layout.
+
+    Eval scripts read gold from a flat ``annotations/gold/`` folder — no
+    ``_with_preann`` / ``_without_preann`` mode suffix — so the consensus
+    output is shared across both annotation modes.
+    """
+    return os.path.join(ws.annotations_dir, "gold", n, f"{case_id}.json")
+
+
+def annotator_path(ws: WorkspaceSet, annotator_suffix: str, n: str, case_id: str) -> str:
+    """Path to a per-annotator annotation file under the canonical layout.
+
+    Mirrors ``list_samples``' ``{suffix}_{mode}/{n}/{case_id}.json`` rule
+    but is callable for the "B" annotator in compare/consensus mode.
+    Gold is special-cased to the flat ``gold/`` folder so eval can find it.
+    """
+    if annotator_suffix == "gold":
+        return gold_path(ws, n, case_id)
+    return os.path.join(
+        ws.annotations_dir, f"{annotator_suffix}_{ws.mode}", n, f"{case_id}.json"
+    )
+
+
+def prediction_path(
+    ws_root: str,
+    dataset: str,
+    method: str,
+    model: str | None,
+    run_id: str | None,
+    n: str,
+    case_id: str,
+) -> str:
+    """Path to a model prediction file under ``results/predictions/``.
+
+    Mirrors ``scripts/eval/_common/paths.py:Paths.prediction``. Duplicated
+    here because ``scripts/`` is not on the package import path.
+    """
+    base = os.path.join(ws_root, "results", "predictions", dataset)
+    if method == "llm":
+        if not model or not run_id:
+            raise ValueError("llm predictions require model and run_id")
+        return os.path.join(base, "llm", model, run_id, n, f"{case_id}.json")
+    if method == "clinicalbert":
+        if not model:
+            raise ValueError("clinicalbert predictions require model")
+        if run_id:
+            return os.path.join(base, "clinicalbert", model, run_id, n, f"{case_id}.json")
+        return os.path.join(base, "clinicalbert", model, n, f"{case_id}.json")
+    if method == "rule_based":
+        return os.path.join(base, "rule_based", n, f"{case_id}.json")
+    raise ValueError(f"unknown method: {method!r}")
+
+
+def list_predictions(ws_root: str, dataset: str) -> list[tuple[str, str | None, str | None]]:
+    """Discover available predictions under ``{ws_root}/results/predictions/{dataset}/``.
+
+    Returns a sorted list of ``(method, model, run_id)`` triples. ``model``
+    is ``None`` for ``rule_based`` and ``run_id`` is ``None`` when the
+    method/model combination has no run-id sub-folders (e.g. some
+    clinicalbert single-run layouts).
+    """
+    out: list[tuple[str, str | None, str | None]] = []
+    base = os.path.join(ws_root, "results", "predictions", dataset)
+    if not os.path.isdir(base):
+        return out
+
+    # rule_based: leaf is rule_based/{n}/{case}.json
+    rb_dir = os.path.join(base, "rule_based")
+    if os.path.isdir(rb_dir):
+        out.append(("rule_based", None, None))
+
+    # llm: llm/{model}/{run_id}/{n}/{case}.json
+    llm_dir = os.path.join(base, "llm")
+    if os.path.isdir(llm_dir):
+        for model in sorted(os.listdir(llm_dir)):
+            mdir = os.path.join(llm_dir, model)
+            if not os.path.isdir(mdir):
+                continue
+            for run_id in sorted(os.listdir(mdir)):
+                rdir = os.path.join(mdir, run_id)
+                if os.path.isdir(rdir):
+                    out.append(("llm", model, run_id))
+
+    # clinicalbert: clinicalbert/{model}[/{run_id}]/{n}/{case}.json
+    cb_dir = os.path.join(base, "clinicalbert")
+    if os.path.isdir(cb_dir):
+        for model in sorted(os.listdir(cb_dir)):
+            mdir = os.path.join(cb_dir, model)
+            if not os.path.isdir(mdir):
+                continue
+            run_subdirs = []
+            has_organ_subdir = False
+            for entry in sorted(os.listdir(mdir)):
+                full = os.path.join(mdir, entry)
+                if not os.path.isdir(full):
+                    continue
+                # An organ subdir (numeric) means there's no run-id layer.
+                if entry.isdigit():
+                    has_organ_subdir = True
+                else:
+                    run_subdirs.append(entry)
+            if has_organ_subdir and not run_subdirs:
+                out.append(("clinicalbert", model, None))
+            else:
+                for run_id in run_subdirs:
+                    out.append(("clinicalbert", model, run_id))
+
+    return out
