@@ -415,9 +415,39 @@ def _gold_input(field: FieldSpec, current_val, key: str, disabled: bool = False)
 
 # ── Consensus flat-field row renderer ──────────────────────────────────────────
 
-def _apply_override(key: str, val):
-    for suffix in ("", "__num", "__null", "__text", "__na"):
-        st.session_state.pop(key + suffix, None)
+def _set_gold_widget(field: FieldSpec, key_base: str, val) -> None:
+    """on_click callback: write ``val`` directly to the widget's session_state
+    key(s) so the next render shows it.
+
+    Streamlit's previous-run pop-then-rerun pattern is unreliable for resetting
+    widget state in 1.30+. Setting state inside an ``on_click`` callback is the
+    canonical fix because callbacks run BEFORE the script reruns and BEFORE
+    widgets are re-instantiated, so the assignment is observed when the widget
+    initialises from session_state.
+    """
+    if field.field_type == "bool":
+        # selectbox options are [NA_SENTINEL, True, False] — coerce None to NA.
+        st.session_state[key_base] = NA_SENTINEL if val is None else val
+    elif field.field_type in ("enum", "int_enum"):
+        st.session_state[key_base] = val
+    elif field.field_type == "int":
+        if val is None or val == NA_SENTINEL:
+            st.session_state[key_base + "__null"] = True
+        else:
+            st.session_state[key_base + "__null"] = False
+            st.session_state[key_base + "__num"] = int(val)
+    elif field.field_type == "string":
+        if val == NA_SENTINEL:
+            st.session_state[key_base + "__na"] = True
+            st.session_state[key_base + "__text"] = ""
+        else:
+            st.session_state[key_base + "__na"] = False
+            st.session_state[key_base + "__text"] = val or ""
+
+
+def _set_multiselect(key: str, val_list: list) -> None:
+    """on_click callback for the array-level Use A / Use B / Union buttons."""
+    st.session_state[key] = list(val_list) if val_list else []
 
 
 def _render_field_row_consensus(
@@ -455,15 +485,15 @@ def _render_field_row_consensus(
         if differs:
             btn_a, btn_b, _ = st.columns([1, 1, 3])
             with btn_a:
-                if st.button("⇐ Use A", key=key_base + "__usea"):
-                    _apply_override(key_base, a_val)
-                    gold_container[field.name] = a_val
-                    st.rerun()
+                st.button(
+                    "⇐ Use A", key=key_base + "__usea",
+                    on_click=_set_gold_widget, args=(field, key_base, a_val),
+                )
             with btn_b:
-                if st.button("⇐ Use B", key=key_base + "__useb"):
-                    _apply_override(key_base, b_val)
-                    gold_container[field.name] = b_val
-                    st.rerun()
+                st.button(
+                    "⇐ Use B", key=key_base + "__useb",
+                    on_click=_set_gold_widget, args=(field, key_base, b_val),
+                )
 
     st.markdown("<hr style='margin:6px 0; border:none; border-top:1px solid #eee;'>",
                 unsafe_allow_html=True)
@@ -527,30 +557,35 @@ def _render_array_consensus(
         with col_g:
             st.markdown("<div class='cell-head-g'>Gold</div>", unsafe_allow_html=True)
             current_gold = gold_container.get(afield) or []
+            ms_key = f"{key_prefix}__{afield}__ms__{sample_id}"
             picked = st.multiselect(
                 "Gold", options=section.array_item_enum_values,
                 default=[v for v in current_gold if v in section.array_item_enum_values],
-                key=f"{key_prefix}__{afield}__ms__{sample_id}",
+                key=ms_key,
                 label_visibility="collapsed",
             )
             gold_container[afield] = picked or None
             if differ:
+                allowed = set(section.array_item_enum_values)
                 b1, b2, b3 = st.columns(3)
                 with b1:
-                    if st.button("⇐ Use A", key=f"{key_prefix}_{afield}_usea_{sample_id}"):
-                        st.session_state.pop(f"{key_prefix}__{afield}__ms__{sample_id}", None)
-                        gold_container[afield] = list(a_list) or None
-                        st.rerun()
+                    st.button(
+                        "⇐ Use A", key=f"{key_prefix}_{afield}_usea_{sample_id}",
+                        on_click=_set_multiselect,
+                        args=(ms_key, [v for v in a_list if v in allowed]),
+                    )
                 with b2:
-                    if st.button("⇐ Use B", key=f"{key_prefix}_{afield}_useb_{sample_id}"):
-                        st.session_state.pop(f"{key_prefix}__{afield}__ms__{sample_id}", None)
-                        gold_container[afield] = list(b_list) or None
-                        st.rerun()
+                    st.button(
+                        "⇐ Use B", key=f"{key_prefix}_{afield}_useb_{sample_id}",
+                        on_click=_set_multiselect,
+                        args=(ms_key, [v for v in b_list if v in allowed]),
+                    )
                 with b3:
-                    if st.button("∪ Union", key=f"{key_prefix}_{afield}_union_{sample_id}"):
-                        st.session_state.pop(f"{key_prefix}__{afield}__ms__{sample_id}", None)
-                        gold_container[afield] = sorted(set(a_list) | set(b_list)) or None
-                        st.rerun()
+                    st.button(
+                        "∪ Union", key=f"{key_prefix}_{afield}_union_{sample_id}",
+                        on_click=_set_multiselect,
+                        args=(ms_key, sorted((set(a_list) | set(b_list)) & allowed)),
+                    )
         return
 
     a_list = list(a_container.get(afield) or [])
@@ -636,15 +671,17 @@ def _render_array_consensus(
                     if differs and item_a is not None and item_b is not None:
                         bA, bB, _ = st.columns([1, 1, 3])
                         with bA:
-                            if st.button("⇐ A", key=widget_key + "__usea"):
-                                _apply_override(widget_key, va)
-                                gold_list[slot_idx][field.name] = va
-                                st.rerun()
+                            st.button(
+                                "⇐ A", key=widget_key + "__usea",
+                                on_click=_set_gold_widget,
+                                args=(field, widget_key, va),
+                            )
                         with bB:
-                            if st.button("⇐ B", key=widget_key + "__useb"):
-                                _apply_override(widget_key, vb)
-                                gold_list[slot_idx][field.name] = vb
-                                st.rerun()
+                            st.button(
+                                "⇐ B", key=widget_key + "__useb",
+                                on_click=_set_gold_widget,
+                                args=(field, widget_key, vb),
+                            )
 
 
 def _render_array_eval(section: SectionSpec) -> None:
@@ -782,19 +819,15 @@ def _render_classification(mode: str) -> None:
                 if differs:
                     bA, bB, _ = st.columns([1, 1, 3])
                     with bA:
-                        if st.button("⇐ Use A", key=key + "__usea"):
-                            _apply_override(key, va)
-                            gold[field_name] = va
-                            if field_name == "cancer_category":
-                                gold.pop("cancer_data", None)
-                            st.rerun()
+                        st.button(
+                            "⇐ Use A", key=key + "__usea",
+                            on_click=_set_gold_widget, args=(field, key, va),
+                        )
                     with bB:
-                        if st.button("⇐ Use B", key=key + "__useb"):
-                            _apply_override(key, vb)
-                            gold[field_name] = vb
-                            if field_name == "cancer_category":
-                                gold.pop("cancer_data", None)
-                            st.rerun()
+                        st.button(
+                            "⇐ Use B", key=key + "__useb",
+                            on_click=_set_gold_widget, args=(field, key, vb),
+                        )
         else:
             _render_field_row_eval(field, va, vb)
         st.markdown("<hr style='margin:6px 0; border:none; border-top:1px solid #eee;'>",
