@@ -14,6 +14,7 @@ axes:
   A:  # Pipeline decomposition
     - dspy_modular
     - dspy_monolithic
+    - dspy_monolithic_no_jsonize
     - no_router
     - per_section
   B:  # Output structuring discipline
@@ -77,9 +78,10 @@ levels:
 # axis (B for str/free/constrained variants, C for CoT/minimal, F for
 # schema-specificity).
 factorial_skip:
-  str_outputs:      "axis_B level 'str' is outside the {dspy, raw_json, constrained} cube"
-  free_text_regex:  "degenerate B-axis baseline; B-level 'free_text' outside the cube"
-  chain_of_thought: "axis_C level 'cot' is outside the {zero_shot, fewshot_3, compiled} cube"
-  minimal_prompt:   "degenerate C-axis baseline; C-level 'minimal' outside the cube"
-  union_schema:     "F-axis only (schema specificity)"
-  flat_schema:      "F-axis only (schema specificity)"
+  str_outputs:                 "axis_B level 'str' is outside the {dspy, raw_json, constrained} cube"
+  free_text_regex:             "degenerate B-axis baseline; B-level 'free_text' outside the cube"
+  chain_of_thought:            "axis_C level 'cot' is outside the {zero_shot, fewshot_3, compiled} cube"
+  minimal_prompt:              "degenerate C-axis baseline; C-level 'minimal' outside the cube"
+  union_schema:                "F-axis only (schema specificity)"
+  flat_schema:                 "F-axis only (schema specificity)"
+  dspy_monolithic_no_jsonize:  "axis_A variant 'monolithic_no_jsonize' is outside the {modular, monolithic, no_router} cube; contributes only to per-axis Holm correction"

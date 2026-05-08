@@ -121,8 +121,6 @@ class MonolithicPipeline(dspy.Module):
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     _base.add_canonical_args(ap)
-    ap.add_argument("--skip-jsonize", action="store_true",
-                    help="ablation-of-ablation: also drop ReportJsonize")
     return ap.parse_args(argv)
 
 
@@ -137,7 +135,7 @@ def run(args: argparse.Namespace) -> int:
                 CELL_ID, args.model, paths.model_slug, run_name,
                 [o[0] for o in organs])
 
-    pipe = MonolithicPipeline(skip_jsonize=args.skip_jsonize)
+    pipe = MonolithicPipeline(skip_jsonize=False)
 
     def _predict(report_text: str, organ: str, case_id: str) -> dict:
         return pipe(report=report_text, logger=logger, fname=case_id)
@@ -146,8 +144,8 @@ def run(args: argparse.Namespace) -> int:
         paths, organs, run_name, model_alias=args.model,
         predict=_predict, args=args, logger=logger,
         decoding=lm_kwargs,
-        manifest_extra={"skip_jsonize": args.skip_jsonize},
-        extra_meta={"skip_jsonize": args.skip_jsonize,
+        manifest_extra={"skip_jsonize": False},
+        extra_meta={"skip_jsonize": False,
                     "dspy_lm_kwargs": lm_kwargs},
     )
 

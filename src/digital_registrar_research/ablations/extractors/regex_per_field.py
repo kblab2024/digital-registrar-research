@@ -210,10 +210,16 @@ class RegexExtractor:
         out["cancer_category"] = organ
 
         # Breast biomarkers — pull as a list of dicts so it round-trips
-        # through metrics.match_nested_list / score_case.
+        # through metrics.match_nested_list / score_case. Categories
+        # without a regex pattern (e.g. ``ki67``) are silently skipped:
+        # this is a degenerate ablation baseline, "missing key" is the
+        # correct signal for the cascade grader.
         biomarkers: list[dict] = []
         for cat in BREAST_BIOMARKERS:
-            m = _BIOMARKER_RES[cat].search(text)
+            pat = _BIOMARKER_RES.get(cat)
+            if pat is None:
+                continue
+            m = pat.search(text)
             if m:
                 expression = m.group(1).strip().lower()
                 # Map percentages and numeric scores to positive/negative.

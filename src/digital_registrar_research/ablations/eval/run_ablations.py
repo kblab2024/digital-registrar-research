@@ -842,8 +842,16 @@ def main(argv: list[str] | None = None) -> int:
 
     cascade_atomic = pd.concat(per_pair_atomics, ignore_index=True)
     cascade_atomic_path = results_root / "cascade_atomic.parquet"
+    # Route through scripts.eval._common.reporting.write_parquet — it
+    # coerces mixed-type object columns (bool gold_value in Stage A
+    # rows, str gold_value in Stage C scalar rows) to JSON strings so
+    # pyarrow can serialise them without a type-inference failure. The
+    # per-pair parquets already use this helper; the master parquet
+    # must too.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
+    from eval._common.reporting import write_parquet  # noqa: E402
     try:
-        cascade_atomic.to_parquet(cascade_atomic_path)
+        write_parquet(cascade_atomic, cascade_atomic_path)
         print(f"Wrote {cascade_atomic_path}  ({len(cascade_atomic)} rows)")
     except Exception as exc:
         print(f"[aggregate][warn] failed to write {cascade_atomic_path}: {exc!r}",
@@ -858,7 +866,7 @@ def main(argv: list[str] | None = None) -> int:
 
     atomic_path = results_root / "atomic.parquet"
     try:
-        grid_df.to_parquet(atomic_path)
+        write_parquet(grid_df, atomic_path)
         print(f"Wrote {atomic_path}  ({len(grid_df)} rows)")
     except Exception as exc:
         print(f"[aggregate][warn] failed to write {atomic_path}: {exc!r}",

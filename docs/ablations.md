@@ -111,8 +111,9 @@ work the design says it should.
 src/digital_registrar_research/ablations/
 ├── runners/
 │   ├── _base.py              # canonical args, path resolution, run loop
-│   ├── reuse_baseline.py     # Cell A — copy pipeline outputs into ablations tree
+│   ├── reuse_baseline.py     # Cell A — copy pipeline outputs into ablations tree (supports --source-runs / --all-source-runs)
 │   ├── dspy_monolithic.py    # Cell B — one DSPy signature per organ
+│   ├── dspy_monolithic_no_jsonize.py  # A3 — Cell B variant without ReportJsonize (own folder)
 │   ├── raw_json.py           # Cell C — raw OpenAI-compatible chat API + JSON mode
 │   ├── no_router.py          # A4 — drop the is_cancer router
 │   ├── per_section.py        # A5 — per-section decomposition
@@ -171,7 +172,7 @@ what's wired up as a TODO in [run_grid.py](../scripts/ablations/run_grid.py).
 |---|---|---|
 | A1 | Full modular (5–7 signatures per organ) | Cell A — implemented |
 | A2 | Monolithic single signature per organ | Cell B — implemented |
-| A3 | Monolithic, no `ReportJsonize` | Cell B `--skip-jsonize` |
+| A3 | Monolithic, no `ReportJsonize` | `runners/dspy_monolithic_no_jsonize.py` — implemented (separate cell so output lands at `dspy_monolithic_no_jsonize/{model_slug}/...` and does not collide with A2) |
 | A4 | Monolithic, no `is_cancer` router | `runners/no_router.py` — implemented (uses gold organ; upper-bound estimate of router contribution) |
 | A5 | Per-section decomposition (header / gross / micro / dx / comments) | `runners/per_section.py` — implemented |
 
@@ -218,24 +219,70 @@ Schema specificity (Axis 6) gets two new runners:
 The minimum-viable lesion study lives at
 [`configs/ablations/grid_1.yaml`](../configs/ablations/grid_1.yaml).
 
-Conditions:
+Conditions (each gets its own cell folder under
+`results/ablations/{dataset}/`):
 
 1. **Full pipeline** — modular DSPy + ReportJsonize + Literal enums
+   → `dspy_modular/`
 2. **Monolithic DSPy** — drops the modular per-section chain
+   → `dspy_monolithic/`
 3. **Monolithic DSPy without ReportJsonize** — also drops the
    intermediate JSON structuring step
+   → `dspy_monolithic_no_jsonize/`
 4. **No DSPy** — raw OpenAI-compatible JSON-mode against local Ollama
+   → `raw_json/`
 5. **No schema** — free-text generation + regex post-extractor
+   → `free_text_regex/`
+
+> **Note (2026-05).** Conditions 2 and 3 used to share the
+> `dspy_monolithic/` folder via a `--skip-jsonize` flag, which made the
+> aggregator misread them as two seeds of one condition. They are now
+> distinct cells with disjoint output paths; the `--skip-jsonize` flag
+> on `dspy_monolithic` has been removed. Use cell
+> `dspy_monolithic_no_jsonize` for A3.
 
 Single backbone (`gptoss` → `ollama_chat/gpt-oss:20b`), single seed for
-the first pass; for multi-seed reproducibility, invoke the script
-multiple times — each invocation auto-picks the next free `runNN` slot
-under each cell's directory, and decoding seeds come from
-[`configs/dspy_ollama_<alias>.yaml`](../configs/) (the
-`run_dspy_ollama_multirun.py` driver wraps multiple invocations with a
-master seed for reproducibility).
+the first pass; for multi-seed reproducibility see the **Multirun-aware
+grid** subsection below.
 
 Wall-clock estimate: ~2–3 days on a single 48 GB GPU.
+
+### Multirun-aware grid
+
+Each condition can be replicated across N seeds with
+[`scripts/ablations/run_grid_multirun.py`](../scripts/ablations/run_grid_multirun.py).
+Per-cell `runNN` slots are auto-allocated, so iteration k of the sweep
+lands at `<cell>/<model_slug>/runNN-<machine_slug>/` for each cell:
+
+```bash
+python scripts/ablations/run_grid_multirun.py \
+    --config configs/ablations/grid_1.yaml \
+    --n 3 --master-seed 42
+```
+
+Cell A (`dspy_modular`) is a special case — it doesn't run inference,
+it copies an existing pipeline run. To stack multiple modular pipeline
+runs against the multi-seed monolithic / raw_json runs (so the
+aggregator can compute paired CIs across all conditions), pass
+`all_source_runs: true` in the YAML:
+
+```yaml
+- cell: dspy_modular
+  model: gptoss
+  args: {all_source_runs: true}    # imports every completed pipeline run
+```
+
+or pin specific source runs:
+
+```yaml
+- cell: dspy_modular
+  model: gptoss
+  args: {source_runs: [run01-alpha2, run02-alpha2, run03-alpha2]}
+```
+
+Each imported source run lands in its own ablation `runNN` slot. The
+aggregator's per-(cell, model) cascade invocation discovers them
+automatically and treats them as the modular multirun.
 
 ## Smoke runners — pre-flight before a multi-day sweep
 
@@ -373,6 +420,71 @@ To regenerate the stats pack from an existing grid run:
 python scripts/ablations/run_stats.py --results-root workspace/results/ablations
 ```
 
+## Multi-machine aggregation
+
+Running the same grid in parallel on multiple machines and merging the
+results into one combined stats pack is a first-class workflow. The
+[`scripts/_run_id.py`](../scripts/_run_id.py) helper already gives each
+machine collision-free run-id slots: machine "alpha2" writes
+`run01-alpha2`, machine "beta2" writes `run01-beta2`, so per-cell `runNN`
+namespaces are disjoint at rsync time.
+
+End-to-end recipe:
+
+1. **Set a unique `machine_id` per host.** Either via env var
+   `DRR_MACHINE_ID=alpha2` (one-shot) or via
+   [`configs/local/runtime.yaml`](../configs/local/) — the `local/` tree
+   is gitignored so this stays per-checkout. The slug must match
+   `^[a-z0-9][a-z0-9-]{0,11}$` (validated at `_run_id.machine_slug`).
+
+2. **Run the same grid spec on each machine.** Use the same
+   `--master-seed` so the seed sequence is reproducible across machines:
+
+   ```bash
+   python scripts/ablations/run_grid_multirun.py \
+       --config configs/ablations/grid_1.yaml \
+       --n 3 --master-seed 42
+   ```
+
+3. **Rsync per-machine results into a single tree.** On the analysis
+   machine:
+
+   ```bash
+   rsync -av alpha2:/.../workspace/results/ablations/cmuh/ \
+       ./workspace/results/ablations/cmuh/
+   rsync -av beta2:/.../workspace/results/ablations/cmuh/  \
+       ./workspace/results/ablations/cmuh/
+   ```
+
+   The slug suffixes guarantee no `runNN-*` collisions. Top-level
+   `_grid_meta.json` from each machine survives one of the rsyncs;
+   per-cell `_manifest.yaml` files are stale (they list only the writer
+   machine's runs) — that's expected, the next step rebuilds them.
+
+4. **Manual aggregation + stats** via
+   [`scripts/ablations/run_aggregate_and_stat.py`](../scripts/ablations/run_aggregate_and_stat.py).
+   The script rebuilds every per-cell `_manifest.yaml` from the on-disk
+   runs (so it sees runs from every contributing machine), writes a
+   thin `_grid_meta_combined.json` listing per-machine provenance, then
+   delegates to the canonical aggregator for cascade + stats:
+
+   ```bash
+   python scripts/ablations/run_aggregate_and_stat.py \
+       --folder workspace --dataset cmuh
+   ```
+
+   The output is one combined stats pack with multirun CIs that span
+   every contributing machine. The script prints a per-(cell, model)
+   summary at the end showing how many runs landed per machine slug.
+
+> **Caveat.** The gold-annotation tree (`data/{dataset}/annotations/gold/`)
+> and reports tree (`data/{dataset}/reports/`) MUST match across all
+> contributing machines. Running the aggregator on a tree where
+> machine A scored against gold v1 and machine B against gold v2
+> silently mixes scoring regimes; record the SHA-256 of the gold tree
+> on each machine before kicking off, and verify they match before
+> aggregating. See the **Pre-registration discipline** section.
+
 ## Reading the ablation result for the paper
 
 The headline figure is the **lesion table**: full → −Decomposition →
@@ -407,6 +519,13 @@ Before kicking off a real grid:
    ([`scripts/eval/_common/stats_extra.py`](../scripts/eval/_common/stats_extra.py)).
 4. Reference the locked endpoint config (with git SHA) in the paper
    Methods section.
+5. **Multi-machine sweeps**: if the grid is split across hosts, verify
+   the SHA-256 of the `data/{dataset}/annotations/gold/` and
+   `data/{dataset}/reports/` trees match across all contributing
+   machines before running `run_aggregate_and_stat.py`. The aggregator
+   blindly trusts that every contributing run was scored against the
+   same gold; mismatched gold versions will silently mix scoring
+   regimes.
 
 ## Related documentation
 

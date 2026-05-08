@@ -89,7 +89,6 @@ def _build_args(cell_id: str, args: argparse.Namespace,
         verbose=args.verbose,
         # Cell-specific defaults (the runner Namespaces are tolerant of
         # extras; argparse-built Namespaces are dicts).
-        skip_jsonize=False,
         include_jsonize=False,
         n_shots=3,
         api_base=args.api_base,
@@ -98,6 +97,8 @@ def _build_args(cell_id: str, args: argparse.Namespace,
         cot_everywhere=False,
         compiled=getattr(args, "compiled", None),
         source_run=getattr(args, "source_run", None),
+        source_runs=getattr(args, "source_runs", None),
+        all_source_runs=getattr(args, "all_source_runs", False),
     )
 
 

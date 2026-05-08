@@ -21,10 +21,9 @@ YAML format
       - cell: raw_json
         model: gptoss
         args: {}
-      - cell: dspy_monolithic
+      - cell: dspy_monolithic_no_jsonize
         model: gptoss
-        args:
-          skip_jsonize: true
+        args: {}
 
 Usage
 -----
@@ -50,12 +49,13 @@ from _config_loader import resolve_folder  # noqa: E402
 
 CELL_DISPATCH = {
     # Cells A/B/C (originals).
-    "dspy_modular":         "digital_registrar_research.ablations.runners.reuse_baseline",
-    "dspy_monolithic":      "digital_registrar_research.ablations.runners.dspy_monolithic",
-    "raw_json":             "digital_registrar_research.ablations.runners.raw_json",
+    "dspy_modular":              "digital_registrar_research.ablations.runners.reuse_baseline",
+    "dspy_monolithic":           "digital_registrar_research.ablations.runners.dspy_monolithic",
+    "dspy_monolithic_no_jsonize": "digital_registrar_research.ablations.runners.dspy_monolithic_no_jsonize",
+    "raw_json":                  "digital_registrar_research.ablations.runners.raw_json",
     # Axis 1.
-    "no_router":            "digital_registrar_research.ablations.runners.no_router",
-    "per_section":          "digital_registrar_research.ablations.runners.per_section",
+    "no_router":                 "digital_registrar_research.ablations.runners.no_router",
+    "per_section":               "digital_registrar_research.ablations.runners.per_section",
     # Axis 2.
     "str_outputs":          "digital_registrar_research.ablations.runners.str_outputs",
     "constrained_decoding": "digital_registrar_research.ablations.runners.constrained_decoding",
@@ -103,10 +103,15 @@ def _build_args_for_cell(cell: str, model: str, experiment_root: Path,
     )
     if cell == "dspy_modular":
         return argparse.Namespace(
-            **common, source_run=extra.get("source_run"))
+            **common,
+            source_run=extra.get("source_run"),
+            source_runs=extra.get("source_runs"),
+            all_source_runs=extra.get("all_source_runs", False),
+        )
     if cell == "dspy_monolithic":
-        return argparse.Namespace(
-            **common, skip_jsonize=extra.get("skip_jsonize", False))
+        return argparse.Namespace(**common)
+    if cell == "dspy_monolithic_no_jsonize":
+        return argparse.Namespace(**common)
     if cell == "raw_json":
         return argparse.Namespace(**common, api_base=extra.get("api_base"))
     if cell == "no_router":

@@ -77,7 +77,6 @@ def main() -> int:
             overwrite=True,
             tolerate_errors=False,
             verbose=args.verbose,
-            skip_jsonize=False,
             include_jsonize=False,
             n_shots=3 if short == "c2" else (5 if short == "c3" else 3),
             api_base=args.api_base,
@@ -86,6 +85,8 @@ def main() -> int:
             cot_everywhere=False,
             compiled=args.compiled,
             source_run=None,
+            source_runs=None,
+            all_source_runs=False,
         )
         module = importlib.import_module(CELL_DISPATCH[cell_id])
         rc = module.run(ns) or 0

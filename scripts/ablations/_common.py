@@ -36,6 +36,7 @@ CELL_MAP: dict[str, str] = {
     # Existing baselines (Cells A/B/C)
     "a": "dspy_modular",
     "b": "dspy_monolithic",
+    "b_no_jsonize": "dspy_monolithic_no_jsonize",   # axis A3
     "c": "raw_json",
     # Axis 1 — Pipeline decomposition extensions
     "a4": "no_router",

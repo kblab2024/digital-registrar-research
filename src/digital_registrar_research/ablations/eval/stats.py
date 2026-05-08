@@ -181,7 +181,8 @@ def _split_method(method: str, *,
 # ``free``. Keep in sync with ``runners/`` directory.
 _KNOWN_CELL_IDS: tuple[str, ...] = tuple(sorted((
     "chain_of_thought", "compiled_dspy", "constrained_decoding",
-    "dspy_modular", "dspy_monolithic", "fewshot_demos", "flat_schema",
+    "dspy_modular", "dspy_monolithic", "dspy_monolithic_no_jsonize",
+    "fewshot_demos", "flat_schema",
     "free_text_regex", "minimal_prompt", "no_router", "per_section",
     "raw_json", "reuse_baseline", "str_outputs", "union_schema",
 ), key=len, reverse=True))
@@ -233,6 +234,15 @@ def _adapt_cascade_atomic_for_stats(df: pd.DataFrame) -> pd.DataFrame:
     - ``seed`` ← ``run_id`` (so :func:`_detect_seed_column` finds a
       seed dimension; multi-run ablation cells use ``run_id`` as
       their seed identifier)
+
+    Schema audit (vs. cascade builder at scripts/eval/cascade/run_cascade.py
+    ``_build_atomic_and_ledger``): cascade emits ``run_id, method, model,
+    annotator, case_id, organ_idx, organ, subgroup, dataset, cell,
+    model_slug, cascade_stage, gate_pass, others_disposition, field,
+    field_kind, gold_present, attempted, correct, wrong, field_missing,
+    parse_error, error_mode, gold_value, pred_value``. Every column read
+    below exists in cascade output. Value sets: ``cascade_stage`` ∈
+    {"A", "B", "C"}; ``field_kind`` ∈ {"binary", "nominal", "nested_list"}.
     """
     if df.empty:
         return df
@@ -328,6 +338,35 @@ def _coerce_correct(series: pd.Series) -> pd.Series:
 # 1. Paired deltas vs baseline
 # ---------------------------------------------------------------------------
 
+def _collapse_runs_per_case_field(df: pd.DataFrame) -> pd.DataFrame:
+    """Reduce a (case_id, field, run_id, ...) frame to one row per
+    (case_id, field) by averaging ``correct_f`` and OR-reducing
+    ``attempted`` across runs.
+
+    Required for paired-Δ semantics under multirun: per-run pairing
+    would inflate ``n_paired`` with non-independent observations
+    (75 cases × 3 runs read as 225 paired draws), under-covering the
+    bootstrap. Collapsing first means ``a, b ∈ [0, 1]`` carry the
+    per-case probability-of-correct across runs — meaningful and
+    matches the "paired *case* deltas" docstring promise.
+
+    Multi-machine multirun grids (``run_id`` like ``run01-alpha2`` /
+    ``run02-beta2``) collapse the same way: the slug suffix is part of
+    ``run_id`` but doesn't affect the (case_id, field) key.
+    """
+    if df.empty:
+        return df.assign(correct_f=pd.Series(dtype=float))
+    work = df.copy()
+    work["correct_f"] = _coerce_correct(work["correct"])
+    work["attempted"] = work["attempted"].astype(bool)
+    grouped = (
+        work.groupby(["case_id", "field"], as_index=False)
+            .agg(correct_f=("correct_f", "mean"),
+                 attempted=("attempted", "any"))
+    )
+    return grouped
+
+
 def paired_deltas_vs_baseline(
     grid_df: pd.DataFrame,
     *,
@@ -343,14 +382,25 @@ def paired_deltas_vs_baseline(
     columns: ``cell, model, field, n_paired, baseline_acc, target_acc,
     delta, ci_lo, ci_hi, mcnemar_b, mcnemar_c, mcnemar_stat,
     mcnemar_p, mcnemar_method``.
+
+    Multirun semantics: when either side has multiple ``run_id`` per
+    (case_id, field), runs are collapsed to one row per (case_id, field)
+    via ``mean(correct_f)`` (probability-of-correct across runs) and
+    ``any(attempted)``. The bootstrap then operates on per-case
+    probabilities ``a, b ∈ [0, 1]``. For McNemar, each case is
+    threshold-collapsed at ``correct >= 0.5`` (majority-vote-correct,
+    ties counted as correct), then discordant counts are computed on
+    the resulting binary vectors. The per-run variance is reported
+    separately by the cascade chapter ``multirun_consistency.csv``
+    outputs — not duplicated here.
     """
     if baseline_method not in grid_df["method"].unique():
         logger.warning("baseline %r not present in grid — skipping deltas",
                        baseline_method)
         return pd.DataFrame()
 
-    base_df = grid_df[grid_df["method"] == baseline_method].copy()
-    base_df["correct_f"] = _coerce_correct(base_df["correct"])
+    base_df = _collapse_runs_per_case_field(
+        grid_df[grid_df["method"] == baseline_method].copy())
     base_lookup = base_df.set_index(["case_id", "field"])["correct_f"]
     base_attempt = base_df.set_index(["case_id", "field"])["attempted"]
 
@@ -363,9 +413,8 @@ def paired_deltas_vs_baseline(
             model = str(group["model"].iloc[0])
         else:
             cell, model = _split_method(method)
-        group = group.copy()
-        group["correct_f"] = _coerce_correct(group["correct"])
-        for field, sub in group.groupby("field"):
+        target_df = _collapse_runs_per_case_field(group)
+        for field, sub in target_df.groupby("field"):
             sub = sub.set_index("case_id")
             try:
                 base_for_field = base_lookup.xs(field, level="field")
@@ -375,11 +424,13 @@ def paired_deltas_vs_baseline(
             common = sub.index.intersection(base_for_field.index)
             if not len(common):
                 continue
+            # `common` is unique post-collapse; .loc returns one row per
+            # case_id on both sides, so the boolean mask matches `common`.
             attempted_both = (
-                sub.loc[common, "attempted"].astype(bool)
-                & base_attempt_for_field.loc[common].astype(bool)
+                sub.loc[common, "attempted"].astype(bool).to_numpy()
+                & base_attempt_for_field.loc[common].astype(bool).to_numpy()
             )
-            common_attempted = common[attempted_both.values]
+            common_attempted = common[attempted_both]
             if not len(common_attempted):
                 continue
             a = base_for_field.loc[common_attempted].to_numpy(dtype=float)
@@ -404,14 +455,18 @@ def paired_deltas_vs_baseline(
                 "ci_lo": res.lo,
                 "ci_hi": res.hi,
             }
-            # McNemar for binary correctness fields
+            # McNemar — threshold at >= 0.5 (majority-vote-correct,
+            # ties→correct) so multirun probability-of-correct collapses
+            # cleanly to binary discordance counts.
+            a_bin = (a >= 0.5).astype(float)
+            b_bin = (b >= 0.5).astype(float)
             is_binary = (
                 field in PRIMARY_BINARY_FIELDS
-                or set(np.unique(np.concatenate([a, b]))) <= {0.0, 1.0}
+                or set(np.unique(np.concatenate([a_bin, b_bin]))) <= {0.0, 1.0}
             )
             if is_binary:
-                disc_b = int(np.sum((a == 1.0) & (b == 0.0)))
-                disc_c = int(np.sum((a == 0.0) & (b == 1.0)))
+                disc_b = int(np.sum((a_bin == 1.0) & (b_bin == 0.0)))
+                disc_c = int(np.sum((a_bin == 0.0) & (b_bin == 1.0)))
                 mc = mcnemar_test(disc_b, disc_c)
                 row.update({
                     "mcnemar_b": disc_b, "mcnemar_c": disc_c,
