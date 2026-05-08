@@ -87,3 +87,7 @@ configs/local/*
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Scratch space for Claude research/debugging — readable by Claude (no deny
+# rule in .claude/settings.json), never committed.
+/researchtemp/
