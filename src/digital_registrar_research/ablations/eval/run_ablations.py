@@ -390,7 +390,22 @@ def _score_pair_via_cascade(
         raise RuntimeError(
             f"cascade did not produce {parquet} (cell={cell} model={model})",
         )
-    return pd.read_parquet(parquet)
+    df = pd.read_parquet(parquet)
+    # Older per-pair parquets were JSON-stringified by `write_parquet`
+    # because the cascade `correct` / `wrong` columns mix bool (Stage
+    # A/B/scalar-C) with float (Stage C nested F1). Restore numeric
+    # typing so the downstream remap / summary / canonical_stats /
+    # paired-bootstrap layers all see ``correct ∈ {0.0, 1.0, [0,1]}``
+    # rather than ``"true"`` / ``"false"`` / ``"0.5"`` strings.
+    for _col in ("correct", "wrong"):
+        if _col in df.columns and df[_col].dtype == object:
+            df[_col] = pd.to_numeric(
+                df[_col].replace(
+                    {"true": 1.0, "false": 0.0, "True": 1.0, "False": 0.0},
+                ),
+                errors="coerce",
+            )
+    return df
 
 
 def _remap_cascade_to_legacy_grid(df: pd.DataFrame) -> pd.DataFrame:
@@ -818,11 +833,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.experiment_root is not None
         else _infer_experiment_root(results_root)
     )
-    if experiment_root is None:
-        raise SystemExit(
-            "could not infer experiment root for cascade scoring; "
-            "pass --folder explicitly.",
-        )
 
     # Group runs by (cell, model) and delegate one cascade invocation per pair.
     by_pair: dict[tuple[str, str], list[str]] = {}
@@ -833,11 +843,36 @@ def main(argv: list[str] | None = None) -> int:
     device = getattr(args, "device", "cpu")
     for (cell, model), run_ids in by_pair.items():
         cascade_out = results_root / cell / model / "_cascade_eval"
-        atomic = _score_pair_via_cascade(
-            cell=cell, model=model, run_ids=sorted(set(run_ids)),
-            experiment_root=experiment_root, dataset=dataset,
-            out_dir=cascade_out, device=device,
-        )
+        cached = cascade_out / "cascade_atomic.parquet"
+        if cached.is_file():
+            # A previous cascade run on this (cell, model) pair already
+            # produced the per-pair atomic. Reuse it so the aggregator
+            # works on a merged-from-multiple-machines tree where the
+            # canonical experiment root isn't reconstructable. Restore
+            # numeric typing on `correct` / `wrong` for old parquets
+            # written before the write_parquet fix.
+            print(f"[aggregate] reusing cached cascade output: {cached}")
+            atomic = pd.read_parquet(cached)
+            for _col in ("correct", "wrong"):
+                if _col in atomic.columns and atomic[_col].dtype == object:
+                    atomic[_col] = pd.to_numeric(
+                        atomic[_col].replace(
+                            {"true": 1.0, "false": 0.0,
+                             "True": 1.0, "False": 0.0},
+                        ),
+                        errors="coerce",
+                    )
+        else:
+            if experiment_root is None:
+                raise SystemExit(
+                    "could not infer experiment root for cascade scoring; "
+                    "pass --folder explicitly.",
+                )
+            atomic = _score_pair_via_cascade(
+                cell=cell, model=model, run_ids=sorted(set(run_ids)),
+                experiment_root=experiment_root, dataset=dataset,
+                out_dir=cascade_out, device=device,
+            )
         per_pair_atomics.append(atomic)
 
     cascade_atomic = pd.concat(per_pair_atomics, ignore_index=True)
