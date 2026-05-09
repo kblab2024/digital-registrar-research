@@ -821,6 +821,13 @@ def main(argv: list[str] | None = None) -> int:
                     help="also call ablations.eval.stats.run_all "
                          "(default: ON for real results-root, OFF for _smoke_)")
     ap.add_argument("--no-stats", dest="with_stats", action="store_false")
+    ap.add_argument("--with-chapter-outputs", dest="with_chapter_outputs",
+                    action="store_true", default=None,
+                    help="emit cross-cell 5-chapter cascade rollup under "
+                         "results_root/chapterN_*/ (default: ON for real "
+                         "results-root, OFF for _smoke_)")
+    ap.add_argument("--no-chapter-outputs", dest="with_chapter_outputs",
+                    action="store_false")
     ap.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"),
                     default="cpu",
                     help="Device for the canonical_stats and ablations.stats "
@@ -891,6 +898,7 @@ def main(argv: list[str] | None = None) -> int:
         by_pair.setdefault((cell, model), []).append(run_id)
 
     per_pair_atomics: list[pd.DataFrame] = []
+    per_pair_nested: list[pd.DataFrame] = []
     device = getattr(args, "device", "cpu")
     for (cell, model), run_ids in by_pair.items():
         cascade_out = results_root / cell / model / "_cascade_eval"
@@ -925,6 +933,17 @@ def main(argv: list[str] | None = None) -> int:
                 out_dir=cascade_out, device=device,
             )
         per_pair_atomics.append(atomic)
+        # Collect the nested sidecar emitted alongside cascade_atomic
+        # (run_cascade.py:246). Required input for chapter4/5 reducers
+        # in the cross-cell rollup. Pairs that produced no nested rows
+        # (e.g. cells with no margins / LN content) simply skip.
+        nested_path = cascade_out / "cascade_nested.parquet"
+        if nested_path.is_file():
+            try:
+                per_pair_nested.append(pd.read_parquet(nested_path))
+            except Exception as exc:
+                print(f"[aggregate][warn] failed to read {nested_path}: {exc!r}",
+                      file=sys.stderr)
 
     cascade_atomic = pd.concat(per_pair_atomics, ignore_index=True)
     cascade_atomic = _coerce_correctness_columns(cascade_atomic)
@@ -946,6 +965,22 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         print(f"[aggregate][warn] failed to write {cascade_atomic_path}: {exc!r}",
               file=sys.stderr)
+
+    # Master nested sidecar — concat the per-pair cascade_nested.parquet
+    # files so the chapter4 (margins) and chapter5 (LN) reducers have a
+    # single-source-of-truth input for the cross-cell rollup.
+    cascade_nested = (
+        pd.concat(per_pair_nested, ignore_index=True)
+        if per_pair_nested else pd.DataFrame()
+    )
+    if not cascade_nested.empty:
+        cascade_nested_path = results_root / "cascade_nested.parquet"
+        try:
+            write_parquet(cascade_nested, cascade_nested_path)
+            print(f"Wrote {cascade_nested_path}  ({len(cascade_nested)} rows)")
+        except Exception as exc:
+            print(f"[aggregate][warn] failed to write {cascade_nested_path}: "
+                  f"{exc!r}", file=sys.stderr)
 
     # Backward-compat outputs: legacy ablation_grid schema for
     # canonical_stats and the legacy summary/pivot tables.
@@ -990,6 +1025,29 @@ def main(argv: list[str] | None = None) -> int:
         eff.to_csv(results_root / "efficiency.csv", index=False)
         print(f"Wrote {results_root / 'efficiency.csv'}")
 
+    is_smoke = results_root.name.startswith("_smoke")
+
+    # Cross-cell 5-chapter cascade rollup (mirrors production cascade
+    # tree). Emits chapter1..chapter5 directories under results_root.
+    # Wrapped in try/except so a regression here doesn't fail the
+    # existing flat-output pipeline.
+    with_chapter_outputs = (
+        args.with_chapter_outputs if args.with_chapter_outputs is not None
+        else not is_smoke
+    )
+    if with_chapter_outputs:
+        try:
+            from . import chapter_aggregation
+            chapter_aggregation.emit_chapter_outputs(
+                cascade_atomic, cascade_nested,
+                out_root=results_root,
+                baseline_method=args.baseline,
+            )
+            print(f"[aggregate] wrote 5-chapter rollup under {results_root}")
+        except Exception as exc:
+            print(f"[aggregate][warn] chapter emission failed: {exc!r}",
+                  file=sys.stderr)
+
     # Canonical statistics suite — runs against the legacy long-form
     # grid (already remapped from cascade_atomic above). ``method``
     # column is built as f"{cell}_{model}"; the modular baseline
@@ -1003,7 +1061,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[aggregate][warn] canonical stats layer failed: {exc!r}",
               file=sys.stderr)
 
-    is_smoke = results_root.name.startswith("_smoke")
     with_stats = args.with_stats if args.with_stats is not None else not is_smoke
     if with_stats:
         from . import stats as ablation_stats

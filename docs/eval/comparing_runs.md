@@ -211,3 +211,62 @@ Caveat: cases don't pair across datasets (different `case_id` namespaces). The p
 ```
 
 For "where do they disagree?" follow with Recipe 4. For cross-dataset, switch to Recipe 5 + the `cross_dataset` subcommand.
+
+---
+
+## Recipe 6 — "Compare ablation cells"
+
+For ablation studies (`run_grid` / `run_ablations`), the cross-cell comparison is emitted automatically as a 5-chapter rollup that mirrors the production cascade tree. After running the aggregator:
+
+```bash
+python -m digital_registrar_research.ablations.eval.run_ablations \
+    --folder workspace --dataset cmuh \
+    --baseline dspy_modular_gpt_oss_20b
+```
+
+The aggregator already shells out to `cli cascade` per `(cell, model)` pair, so each pair has its own per-pair chapter tree at `{results}/{cell}/{model}/_cascade_eval/chapterN_*/`. In addition, the cross-cell rollup lives directly under the results root:
+
+```
+{results_root}/
+  cascade_atomic.parquet                          (master, all cells × models)
+  cascade_nested.parquet                          (master nested sidecar)
+  chapter1_eligibility/
+    overall.csv                                   one row per <cell>_<model_slug>
+    confusion.csv                                 per-method 2×2
+    pairwise.csv                                  every cell vs --baseline
+    multirun_consistency.csv                      (only with n_runs ≥ 2)
+  chapter2_organ_classification/
+    overall.csv, confusion_per_class.csv,
+    confusion_per_class_compare.csv, pairwise.csv,
+    multirun_consistency.csv
+  chapter3_field_extraction/
+    per_field_overall.csv, per_field_by_organ.csv,
+    per_organ_overall.csv, nested_per_field_per_organ.csv,
+    nested_per_attribute_per_organ.csv,
+    biomarker_per_category.csv, pairwise.csv,
+    multirun_consistency.csv
+  chapter4_margins/
+    overall.csv, per_attribute.csv, per_category.csv,
+    confusion_matrices.csv, missingness.csv,
+    pairwise.csv, multirun_consistency.csv
+  chapter5_lymph_nodes/
+    overall.csv, per_attribute.csv, per_category.csv,
+    per_station.csv, confusion_matrices.csv,
+    missingness.csv, pairwise.csv, multirun_consistency.csv
+```
+
+The headlines come from the same `chapter*_*` reducers that production cascade uses (`scripts/eval/cascade/reductions.py`, `nested_reductions.py`); the pairwise tables reuse the cascade compare CLI's builders re-exported in `scripts/eval/cascade/compare_components.py`. Any consumer that walks `chapter*_*/` works identically against a production cascade tree and an ablation results-root.
+
+Pairwise scope is **target vs baseline only** by default — every non-baseline `<cell>_<model_slug>` produces one comparison row against the configured `--baseline`. Disable the rollup with `--no-chapter-outputs` for fast smoke runs.
+
+CI methodology follows [`ci_methods.md`](ci_methods.md): Wilson on per-method proportions, paired bootstrap on Δ accuracy, BCa on F1 / MAE. Holm and Benjamini-Hochberg adjusted p-values are appended to chapter-1/2/4/5 pairwise tables (one family per chapter, across non-baseline targets); chapter 3 inherits the cascade compare CLI's per-`(run_a, run_b)`-family Holm/BH columns across fields.
+
+**Δ-sign convention** — inherited from `compare_runs`:
+
+| Chapter | Column | Definition | Negative when |
+|---|---|---|---|
+| 1, 2 | `delta_acc_b_minus_a` | target − baseline | target worse |
+| 3 | `delta_acc` | baseline − target | target **better** |
+| 4, 5 | `delta_f1_b_minus_a` | target − baseline | target worse |
+
+Watch the chapter-3 sign carefully — a positive `delta_acc` means the ablation target accuracy *dropped* from baseline.
