@@ -487,6 +487,7 @@ def _remap_cascade_to_legacy_grid(df: pd.DataFrame) -> pd.DataFrame:
             "cell", "model", "run", "case_id", "organ", "field",
             "correct", "attempted", "cancer_category_mismatch", "method",
             "case_status", "case_flags", "field_status", "field_error_detail",
+            "cascade_stage", "field_kind",
         ])
     out = df.copy()
     # `model_slug` is set by the cascade walker for ablation runs; fall
@@ -533,6 +534,14 @@ def _remap_cascade_to_legacy_grid(df: pd.DataFrame) -> pd.DataFrame:
         "cell", "model", "run", "case_id", "organ", "field",
         "correct", "attempted", "cancer_category_mismatch", "method",
         "case_status", "case_flags", "field_status", "field_error_detail",
+        # Carry cascade staging through to the legacy grid so downstream
+        # consumers (canonical_stats) can restrict to Stage-C scalar
+        # rows. Without these, the per-method headlines flatten Stage A,
+        # Stage B, Stage-C scalar, and nested-list rows together — which
+        # inflates ``gold_missing`` because Stage-C emits a row per
+        # in-scope field even when the gold cancer_data lacks that key
+        # (gold sparseness, not a model defect).
+        "cascade_stage", "field_kind",
     ]
     return out[[c for c in keep if c in out.columns]].copy()
 

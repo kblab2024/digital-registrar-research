@@ -294,3 +294,133 @@ def test_run_canonical_stats_handles_empty_atomic(tmp_path):
     for name in ("headline.csv", "failure_modes.csv",
                  "canonical_stats_report.md"):
         assert (tmp_path / name).is_file()
+
+
+# ---------------------------------------------------------------------------
+# Cascade conformance — the canonical_stats reductions must restrict to
+# Stage-C scalar rows AND exclude gold_missing rows (gold sparseness, not
+# a model defect) when the cascade columns are present in the grid.
+# ---------------------------------------------------------------------------
+
+
+def _cascade_row(case_id: str, organ: str, method: str, run: str,
+                 field: str, *, cascade_stage: str, field_kind: str = "scalar",
+                 correct=None, attempted: bool = True,
+                 case_status: str = "ok",
+                 field_status: str = "correct",
+                 gold_present: bool = True) -> dict:
+    return {
+        "case_id": case_id, "organ": organ, "method": method, "run": run,
+        "field": field,
+        "cascade_stage": cascade_stage, "field_kind": field_kind,
+        "correct": correct, "attempted": attempted,
+        "gold_present": gold_present,
+        "case_status": case_status,
+        "case_flags": case_status,
+        "field_status": field_status,
+        "field_error_detail": "",
+    }
+
+
+def _cascade_atomic_with_pollution() -> pd.DataFrame:
+    """Synthetic cascade-shaped grid that mixes Stage A/B/C scalar/nested
+    rows plus a chunk of ``gold_missing`` Stage-C rows.
+
+    Each method has, per case:
+      * 1 Stage A row (cancer_excision_report) — correct
+      * 1 Stage B row (cancer_category) — correct
+      * 1 Stage-C scalar row (pt_category) — correct
+      * 1 Stage-C scalar row (grade) — wrong
+      * 1 Stage-C scalar row (lvi) — gold_missing
+      * 1 Stage-C nested row (margins) — float F1 = 0.7
+
+    With cascade conformance:
+      * Stage A/B excluded → headline reflects Stage-C scalar accuracy.
+      * gold_missing excluded → defect rate / failure_modes don't
+        report a "gold_missing" category.
+      * Nested-list excluded → no float-correct rows polluting the
+        boolean accuracy.
+
+    Without conformance, ``failure_modes`` would emit a
+    ``gold_missing`` row at fraction = 1/6 ≈ 16.7% per method.
+    """
+    rows: list[dict] = []
+    for run in ("r0",):
+        for case_n in range(1, 11):  # 10 cases
+            cid = f"c{case_n}"
+            for method in ("modular", "alt"):
+                # Stage A: always correct
+                rows.append(_cascade_row(
+                    cid, "breast", method, run, "cancer_excision_report",
+                    cascade_stage="A", correct=True, attempted=True))
+                # Stage B: always correct
+                rows.append(_cascade_row(
+                    cid, "breast", method, run, "cancer_category",
+                    cascade_stage="B", correct=True, attempted=True))
+                # Stage-C scalar: pt_category correct, grade wrong, lvi gold_missing
+                rows.append(_cascade_row(
+                    cid, "breast", method, run, "pt_category",
+                    cascade_stage="C", field_kind="scalar",
+                    correct=True, attempted=True))
+                rows.append(_cascade_row(
+                    cid, "breast", method, run, "grade",
+                    cascade_stage="C", field_kind="scalar",
+                    correct=False, attempted=True,
+                    field_status="wrong_value"))
+                rows.append(_cascade_row(
+                    cid, "breast", method, run, "lvi",
+                    cascade_stage="C", field_kind="scalar",
+                    correct=None, attempted=False,
+                    gold_present=False, field_status="gold_missing"))
+                # Stage-C nested: float F1
+                rows.append(_cascade_row(
+                    cid, "breast", method, run, "margins",
+                    cascade_stage="C", field_kind="nested_list",
+                    correct=0.7, attempted=True))
+    return pd.DataFrame(rows)
+
+
+def test_failure_modes_excludes_gold_missing_under_cascade():
+    """Cascade-conformant ``_failure_modes`` doesn't surface
+    ``gold_missing`` as a defect category (gold sparseness ≠ model
+    error) and ignores Stage A/B and nested-list rows.
+    """
+    atomic = _cascade_atomic_with_pollution()
+    fm = _failure_modes(atomic)
+    assert not fm.empty
+    # gold_missing must not appear in the field_status taxonomy.
+    assert "gold_missing" not in set(fm["field_status"])
+    # Per method, only Stage-C scalar rows count: pt_category (correct)
+    # + grade (wrong_value) = 2 rows × 10 cases = 20 rows per method.
+    for method, sub in fm.groupby("method"):
+        assert int(sub["n_total"].iloc[0]) == 20, (
+            f"{method}: expected 20 Stage-C scalar rows, got {sub['n_total'].iloc[0]}")
+        # Correct + wrong_value should sum to n_total.
+        statuses = dict(zip(sub["field_status"], sub["n"]))
+        assert statuses.get("correct", 0) == 10
+        assert statuses.get("wrong_value", 0) == 10
+
+
+def test_headline_uses_cascade_scope():
+    """``_headline`` accuracy uses Stage-C scalar attempted rows only."""
+    atomic = _cascade_atomic_with_pollution()
+    h = _headline(atomic, modular_method="modular")
+    # Two methods, one row each.
+    assert set(h["method"]) == {"modular", "alt"}
+    # Stage-C scalar attempted: pt_category (10 correct) + grade (10
+    # wrong) = 20 attempted, 10 correct ⇒ accuracy_att = 0.5.
+    for _, row in h.iterrows():
+        assert int(row["n_attempted"]) == 20
+        assert int(row["n_correct"]) == 10
+        assert row["accuracy_att"] == pytest.approx(0.5, abs=1e-9)
+
+
+def test_cascade_columns_optional_for_legacy_grids(synthetic_atomic):
+    """Existing tests use grids without ``cascade_stage`` /
+    ``field_kind``. The new mask must be all-True for those, so the
+    legacy outputs don't change."""
+    h_legacy = _headline(synthetic_atomic, modular_method="modular")
+    fm_legacy = _failure_modes(synthetic_atomic)
+    # Same shape as before the cascade-mask change.
+    assert "method" in h_legacy.columns
+    assert not fm_legacy.empty

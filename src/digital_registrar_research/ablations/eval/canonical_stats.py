@@ -139,17 +139,55 @@ def _odds_ratio_with_ci(a: int, b: int, c: int, d: int,
 # Per-method scoreable subsets
 # ---------------------------------------------------------------------------
 
+def _cascade_scope_mask(df: pd.DataFrame) -> pd.Series:
+    """Rows in the cascade-conformant Stage-C scalar evaluation scope.
+
+    When the input carries ``cascade_stage`` and ``field_kind`` (the
+    cascade-conformant ablation grid produced by
+    :func:`run_ablations._remap_cascade_to_legacy_grid`), restrict to
+    Stage-C scalar rows — the same scope the cascade chapter-3
+    reducers use for per-field accuracy. This excludes:
+
+      * Stage A (``cancer_excision_report``) and Stage B
+        (``cancer_category``) rows, which are scored separately in
+        chapters 1 and 2 and do NOT belong in a per-field accuracy
+        denominator.
+      * Nested-list rows (``margins`` / ``regional_lymph_node`` /
+        ``biomarkers``) whose ``correct`` column carries a continuous
+        F1 in [0, 1] rather than a binary outcome; they're scored in
+        chapters 4 / 5.
+
+    Without these columns (e.g. a legacy non-cascade grid) the mask
+    is all-True so the suite stays usable on older inputs.
+    """
+    mask = pd.Series([True] * len(df), index=df.index)
+    if "cascade_stage" in df.columns:
+        mask &= df["cascade_stage"] == "C"
+    if "field_kind" in df.columns:
+        mask &= df["field_kind"] != "nested_list"
+    return mask
+
+
 def _scoreable_mask(df: pd.DataFrame) -> pd.Series:
     """Rows that are eligible for accuracy scoring.
 
-    A row is eligible when ``case_status`` denotes a gradable case AND
-    the field is not skipped. We KEEP defective cases in the eligible
-    set per the project decision "defects count as wrong"; their
-    correctness is False (correct=None → coerced to 0 for accuracy).
+    A row is eligible when:
+      * the case is not ``skipped_intentional`` (defective cases are
+        kept — they count as wrong),
+      * the row is in cascade Stage-C scalar scope when staging
+        columns are present (see :func:`_cascade_scope_mask`),
+      * the row's ``field_status`` is not ``gold_missing`` — gold
+        sparseness (annotator didn't fill in this in-scope field for
+        the case) is not a model defect and inflates ``gold_missing``
+        rates and per-field denominators if not filtered.
     """
+    mask = pd.Series([True] * len(df), index=df.index)
     if "case_status" in df.columns:
-        return df["case_status"] != "skipped_intentional"
-    return pd.Series([True] * len(df), index=df.index)
+        mask &= df["case_status"] != "skipped_intentional"
+    mask &= _cascade_scope_mask(df)
+    if "field_status" in df.columns:
+        mask &= df["field_status"] != "gold_missing"
+    return mask
 
 
 def _accuracy_pair(df_method: pd.DataFrame) -> tuple[int, int, int, int]:
@@ -196,11 +234,15 @@ def _headline(atomic: pd.DataFrame, modular_method: str,
     methods = sorted(atomic["method"].dropna().unique().tolist())
     rows: list[dict] = []
 
-    # Build a paired-correctness pivot: index=(case_id, organ, field, run)
-    # if 'run' exists else (case_id, organ, field). Columns=method.
+    # Build a paired-correctness pivot on cascade-conformant rows only:
+    # index=(case_id, organ, field, run) if 'run' exists else
+    # (case_id, organ, field). Columns=method. The McNemar / paired-
+    # bootstrap / odds-ratio derived below all read from this pivot,
+    # so they share the Stage-C scalar scope used by ``_accuracy_pair``.
+    paired_atomic = atomic[_scoreable_mask(atomic)]
     key_cols = [c for c in ("case_id", "organ", "field", "run")
-                if c in atomic.columns]
-    paired = (atomic[key_cols + ["method", "correct"]]
+                if c in paired_atomic.columns]
+    paired = (paired_atomic[key_cols + ["method", "correct"]]
               .copy())
     paired["acc01"] = _correct_to_acc01(paired["correct"])
     paired_pivot = paired.pivot_table(
@@ -319,13 +361,17 @@ def _headline(atomic: pd.DataFrame, modular_method: str,
 def _failure_modes(atomic: pd.DataFrame) -> pd.DataFrame:
     """Per-(method, field_status) counts and rates with Wilson CIs.
 
-    Denominator excludes ``skipped_intentional``.
+    Restricted to the cascade-conformant Stage-C scalar scope (see
+    :func:`_scoreable_mask`). ``gold_missing`` rows — the
+    annotator-didn't-fill-this-field rows — are excluded from both
+    numerator and denominator because they reflect gold sparseness,
+    not model defects, and previously inflated the reported defect
+    rate (a typical ablation grid showed >20% ``gold_missing`` purely
+    from out-of-scope organ fields and unannotated optional fields).
     """
     if "field_status" not in atomic.columns or atomic.empty:
         return pd.DataFrame()
-    df = atomic.copy()
-    if "case_status" in df.columns:
-        df = df[df["case_status"] != "skipped_intentional"]
+    df = atomic[_scoreable_mask(atomic)].copy()
     if df.empty:
         return pd.DataFrame()
     counts = (df.groupby(["method", "field_status"]).size()
