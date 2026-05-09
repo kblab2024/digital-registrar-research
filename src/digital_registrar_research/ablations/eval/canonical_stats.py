@@ -53,6 +53,23 @@ from ...benchmarks.eval.scope import STATS_EXCLUDED_FIELDS
 logger = logging.getLogger(__name__)
 
 
+def _correct_to_acc01(correct: pd.Series) -> pd.Series:
+    """Coerce a ``correct`` column to numeric float in [0, 1].
+
+    Pre-b7478ef parquets stored ``correct`` as JSON-stringified bools
+    (``"true"`` / ``"false"``) which would silently coerce to NaN→0
+    via ``pd.to_numeric``, collapsing every row to "wrong". Map
+    stringy bools to numeric tokens before to_numeric so a stale
+    upstream parquet can't poison every accuracy reduction here.
+    """
+    if pd.api.types.is_numeric_dtype(correct) and not pd.api.types.is_bool_dtype(correct):
+        return pd.to_numeric(correct, errors="coerce")
+    s = (correct.astype("string").str.strip().str.lower()
+         .replace({"true": "1.0", "false": "0.0",
+                   "nan": pd.NA, "none": pd.NA, "": pd.NA}))
+    return pd.to_numeric(s, errors="coerce")
+
+
 # ---------------------------------------------------------------------------
 # p-value adjustment (Holm-Bonferroni)
 # ---------------------------------------------------------------------------
@@ -147,10 +164,10 @@ def _accuracy_pair(df_method: pd.DataFrame) -> tuple[int, int, int, int]:
     """
     eligible = df_method[_scoreable_mask(df_method)]
     n_eligible = len(eligible)
-    correct = eligible["correct"]
-    # ``correct`` may be bool, float (nested f1), or NaN/None.
-    n_correct = int(((correct == True) | (correct == 1.0) |  # noqa: E712
-                     (pd.to_numeric(correct, errors="coerce") >= 1.0)).sum())
+    # ``correct`` may be bool, float (nested f1), NaN/None, or — on
+    # pre-b7478ef parquets — JSON-stringified bool.
+    acc01 = _correct_to_acc01(eligible["correct"])
+    n_correct = int((acc01 >= 1.0).sum())
     n_attempted = int((eligible["attempted"] == True).sum())  # noqa: E712
     if "case_status" in eligible.columns:
         n_defective = int(eligible["case_status"]
@@ -185,7 +202,7 @@ def _headline(atomic: pd.DataFrame, modular_method: str,
                 if c in atomic.columns]
     paired = (atomic[key_cols + ["method", "correct"]]
               .copy())
-    paired["acc01"] = pd.to_numeric(paired["correct"], errors="coerce")
+    paired["acc01"] = _correct_to_acc01(paired["correct"])
     paired_pivot = paired.pivot_table(
         index=key_cols, columns="method", values="acc01",
         aggfunc="first")
@@ -345,8 +362,7 @@ def _per_field(atomic: pd.DataFrame, modular_method: str,
     df = df[~df["field"].isin(STATS_EXCLUDED_FIELDS)]
     if df.empty:
         return pd.DataFrame()
-    df = df.assign(acc01=pd.to_numeric(df["correct"],
-                                       errors="coerce").fillna(0.0))
+    df = df.assign(acc01=_correct_to_acc01(df["correct"]).fillna(0.0))
 
     methods = sorted(df["method"].dropna().unique().tolist())
     fields = sorted(df["field"].dropna().unique().tolist())
@@ -437,8 +453,7 @@ def _per_organ(atomic: pd.DataFrame, modular_method: str,
     df = df[~df["field"].isin(STATS_EXCLUDED_FIELDS)]
     if df.empty:
         return pd.DataFrame()
-    df = df.assign(acc01=pd.to_numeric(df["correct"],
-                                       errors="coerce").fillna(0.0))
+    df = df.assign(acc01=_correct_to_acc01(df["correct"]).fillna(0.0))
     rows: list[dict] = []
     for (m, organ), sub in df.groupby(["method", "organ"]):
         n = len(sub)
@@ -518,8 +533,7 @@ def _seed_consistency(atomic: pd.DataFrame) -> pd.DataFrame:
     df = df[~df["field"].isin(STATS_EXCLUDED_FIELDS)]
     if df.empty:
         return pd.DataFrame()
-    df = df.assign(acc01=pd.to_numeric(df["correct"],
-                                       errors="coerce").fillna(0.0))
+    df = df.assign(acc01=_correct_to_acc01(df["correct"]).fillna(0.0))
     rows: list[dict] = []
     for (m, f), sub in df.groupby(["method", "field"]):
         runs = sub["run"].nunique()
@@ -591,8 +605,7 @@ def _modularity_advantage(atomic: pd.DataFrame,
     df = df[~df["field"].isin(STATS_EXCLUDED_FIELDS)]
     if df.empty or modular_method not in df["method"].unique():
         return pd.DataFrame()
-    df = df.assign(acc01=pd.to_numeric(df["correct"],
-                                       errors="coerce").fillna(0.0))
+    df = df.assign(acc01=_correct_to_acc01(df["correct"]).fillna(0.0))
     fields = sorted(df["field"].dropna().unique().tolist())
 
     rows: list[dict] = []
@@ -701,8 +714,7 @@ def _low_performer_diagnostics(atomic: pd.DataFrame,
     df = df[~df["field"].isin(STATS_EXCLUDED_FIELDS)]
     if df.empty:
         return pd.DataFrame()
-    df = df.assign(acc01=pd.to_numeric(df["correct"],
-                                       errors="coerce").fillna(0.0))
+    df = df.assign(acc01=_correct_to_acc01(df["correct"]).fillna(0.0))
     rows: list[dict] = []
     for f, sub in df.groupby("field"):
         n = len(sub)

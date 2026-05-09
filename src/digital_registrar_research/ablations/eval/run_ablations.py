@@ -338,6 +338,55 @@ def _short_pred_gold(gold_value, pred_value) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Stale-install guard + correctness coercion
+# ---------------------------------------------------------------------------
+
+
+def _assert_package_consistent_with_repo() -> None:
+    """Fail loud if the imported package isn't from this file's src/.
+
+    A stale `pip install -e` pointing at a sibling checkout silently
+    loads code missing recent fixes (e.g. b7478ef's parquet-roundtrip
+    coercion), and the failure mode is opaque (0% accuracy in
+    per_field.csv). Catch it at startup instead.
+    """
+    import digital_registrar_research as pkg
+    pkg_src = Path(pkg.__file__).resolve().parent.parent
+    expected_src = Path(__file__).resolve().parents[3]
+    if pkg_src != expected_src:
+        raise SystemExit(
+            "[aggregate] package import mismatch — refusing to run.\n"
+            f"  imported digital_registrar_research from: {pkg_src}\n"
+            f"  but this run_ablations.py lives under:    {expected_src}\n"
+            "This usually means an editable install is pointing at a "
+            "sibling checkout. Run `pip install -e .` from the working-"
+            "tree root and retry."
+        )
+
+
+def _coerce_correctness_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Force ``correct`` / ``wrong`` to numeric float regardless of source dtype.
+
+    Pre-b7478ef per-pair ``_cascade_eval/cascade_atomic.parquet`` files hold
+    these columns as JSON-stringified bools (``"true"`` / ``"false"``) and
+    floats (``"0.5"``). Some pandas/pyarrow versions return StringDtype
+    rather than object dtype, so we coerce unconditionally — ``to_numeric``
+    on already-numeric data is a no-op.
+    """
+    for col in ("correct", "wrong"):
+        if col not in df.columns:
+            continue
+        s = df[col]
+        if pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s):
+            continue
+        s2 = s.astype("string").str.strip().str.lower()
+        s2 = s2.replace({"true": "1.0", "false": "0.0",
+                         "nan": pd.NA, "none": pd.NA, "": pd.NA})
+        df[col] = pd.to_numeric(s2, errors="coerce")
+    return df
+
+
+# ---------------------------------------------------------------------------
 # Cascade-delegated scoring
 # ---------------------------------------------------------------------------
 #
@@ -730,6 +779,7 @@ def compute_cell_deltas(long_df: pd.DataFrame,
     if "field_kind" in df.columns:
         df = df[df["field_kind"] != "nested_list"]
     df = df[df["attempted"] == True]  # noqa: E712
+    df = _coerce_correctness_columns(df)
     df["accuracy"] = pd.to_numeric(df["correct"], errors="coerce")
 
     # Per-method × field mean accuracy.
@@ -749,6 +799,7 @@ def compute_cell_deltas(long_df: pd.DataFrame,
 # ---------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    _assert_package_consistent_with_repo()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--folder", dest="experiment_root", default=None,
                     type=Path,
@@ -876,6 +927,10 @@ def main(argv: list[str] | None = None) -> int:
         per_pair_atomics.append(atomic)
 
     cascade_atomic = pd.concat(per_pair_atomics, ignore_index=True)
+    cascade_atomic = _coerce_correctness_columns(cascade_atomic)
+    print(f"[aggregate] correct dtype after coerce: "
+          f"{cascade_atomic['correct'].dtype}; "
+          f"sample: {cascade_atomic['correct'].head(5).tolist()}")
     cascade_atomic_path = results_root / "cascade_atomic.parquet"
     # Route through scripts.eval._common.reporting.write_parquet — it
     # coerces mixed-type object columns (bool gold_value in Stage A
@@ -1007,6 +1062,7 @@ def _summary_from_cascade_atomic(df: pd.DataFrame) -> pd.DataFrame:
                      "coverage", "accuracy_attempted"],
         )
     sub = df.copy()
+    sub = _coerce_correctness_columns(sub)
     if "cascade_stage" in sub.columns:
         sub = sub[sub["cascade_stage"] == "C"]
     if "field_kind" in sub.columns:
