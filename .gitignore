@@ -89,5 +89,8 @@ configs/local/*
 .ipynb_checkpoints/
 
 # Scratch space for Claude research/debugging — readable by Claude (no deny
-# rule in .claude/settings.json), never committed.
-/researchtemp/
+# rule in .claude/settings.json), contents never committed. Also holds the
+# out-of-source OpenAI API key at researchtemp/env/.env (ignored, never
+# pushed). Folder skeleton is preserved via .gitkeep.
+/researchtemp/*
+!/researchtemp/.gitkeep

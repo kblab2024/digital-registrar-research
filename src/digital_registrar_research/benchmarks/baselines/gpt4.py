@@ -15,7 +15,12 @@ on CMUH, so there is no in-corpus split to honor.
 
 Requires:
     pip install dspy-ai openai
-    set OPENAI_API_KEY=sk-...
+
+The OpenAI API key is read from ``<repo_root>/researchtemp/env/.env``
+(the ``researchtemp/`` tree is git-ignored except for ``.gitkeep``).
+The file uses dotenv ``KEY=VALUE`` syntax — at minimum a single line:
+``OPENAI_API_KEY=sk-...``. ``OPENAI_API_KEY`` in the process
+environment takes precedence if set.
 
 Usage:
     python -m digital_registrar_research.benchmarks.baselines.gpt4 \\
@@ -27,7 +32,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import time
 from pathlib import Path
 
@@ -35,6 +39,7 @@ import dspy
 
 from ...paths import BENCHMARKS_RESULTS
 from ...pipeline import CancerPipeline
+from ...util.secrets import load_openai_key
 from .. import organs as _organs
 from ._data import load_predict_cases
 
@@ -44,10 +49,7 @@ DEFAULT_ORGANS = list(_organs.common_organs("cmuh", "tcga"))
 
 
 def setup_gpt4(model_id: str = DEFAULT_MODEL) -> CancerPipeline:
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY not set. Provision the key before running.")
+    api_key = load_openai_key()
     lm = dspy.LM(
         model=model_id,
         api_key=api_key,

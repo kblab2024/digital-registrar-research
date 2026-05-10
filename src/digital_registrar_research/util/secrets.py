@@ -1,16 +1,13 @@
-"""Out-of-repo secret loading for hosted-LLM runners.
+"""Secret loading for hosted-LLM runners.
 
-The OpenAI API key is intentionally stored *outside* the repository tree
-(at ``~/.config/digital-registrar/.env``) so it cannot be committed,
-shipped in a tarball, or read by repo-rooted tooling that scans for
-secrets. Existing in-repo paths (``.env`` at repo root, ``secrets/``)
-are git-ignored but still live alongside source code; the out-of-repo
-location is one level safer.
+The OpenAI API key lives at ``<repo_root>/researchtemp/env/.env``. The
+``researchtemp/`` tree is fully git-ignored (only ``.gitkeep`` is
+tracked), so the file is never committed or shipped in a tarball, while
+keeping the secret co-located with the code that needs it.
 
 Resolution order for ``OPENAI_API_KEY`` (first non-empty wins):
   1. ``OPENAI_API_KEY`` already in process env (CI / one-shot override).
-  2. ``OPENAI_API_KEY=...`` line in ``$XDG_CONFIG_HOME/digital-registrar/.env``
-     (falls back to ``~/.config/digital-registrar/.env``).
+  2. ``OPENAI_API_KEY=...`` line in ``<repo_root>/researchtemp/env/.env``.
 
 The loader never prints the key. Callers should also avoid logging it.
 
@@ -24,20 +21,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-_ENV_FILENAME = ".env"
-_CONFIG_SUBDIR = "digital-registrar"
+from ..paths import REPO_ROOT
 
-
-def _config_dir() -> Path:
-    """Return the directory that holds the secrets ``.env`` file.
-
-    Honours ``XDG_CONFIG_HOME`` per the XDG Base Directory Spec; otherwise
-    falls back to ``~/.config`` (the spec's default). Works on Windows too:
-    ``Path.home()`` resolves to ``C:\\Users\\<user>``.
-    """
-    xdg = os.environ.get("XDG_CONFIG_HOME", "").strip()
-    base = Path(xdg) if xdg else Path.home() / ".config"
-    return base / _CONFIG_SUBDIR
+API_KEY_FILE: Path = REPO_ROOT / "researchtemp" / "env" / ".env"
 
 
 def _parse_env_file(text: str) -> dict[str, str]:
@@ -60,7 +46,7 @@ def _parse_env_file(text: str) -> dict[str, str]:
 
 
 def load_openai_key() -> str:
-    """Return the OpenAI API key, reading from env or the out-of-repo file.
+    """Return the OpenAI API key, reading from env or the in-repo secrets file.
 
     Caches the value in ``os.environ["OPENAI_API_KEY"]`` after first read so
     repeated calls within one process do not re-parse the file. Raises
@@ -71,23 +57,22 @@ def load_openai_key() -> str:
     if env_key:
         return env_key
 
-    path = _config_dir() / _ENV_FILENAME
-    if not path.is_file():
+    if not API_KEY_FILE.is_file():
         raise RuntimeError(
-            "OPENAI_API_KEY is not set and no out-of-repo secrets file was "
-            f"found at {path}. Create it with one line:\n"
+            "OPENAI_API_KEY is not set and no secrets file was found at "
+            f"{API_KEY_FILE}. Create it with one line:\n"
             "    OPENAI_API_KEY=sk-...\n"
             "or export OPENAI_API_KEY in your shell before running.")
 
-    parsed = _parse_env_file(path.read_text(encoding="utf-8"))
+    parsed = _parse_env_file(API_KEY_FILE.read_text(encoding="utf-8"))
     key = parsed.get("OPENAI_API_KEY", "").strip()
     if not key:
         raise RuntimeError(
-            f"OPENAI_API_KEY not found in {path}. The file exists but does "
-            "not contain a non-empty 'OPENAI_API_KEY=...' line.")
+            f"OPENAI_API_KEY not found in {API_KEY_FILE}. The file exists "
+            "but does not contain a non-empty 'OPENAI_API_KEY=...' line.")
 
     os.environ["OPENAI_API_KEY"] = key
     return key
 
 
-__all__ = ["load_openai_key"]
+__all__ = ["load_openai_key", "API_KEY_FILE"]
