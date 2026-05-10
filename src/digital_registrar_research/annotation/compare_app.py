@@ -743,6 +743,13 @@ def _render_classification(mode: str) -> None:
                 # If the category changes, drop cancer_data so it gets re-seeded
                 if field_name == "cancer_category" and new_val != gold.get(field_name):
                     gold.pop("cancer_data", None)
+                # If excision flips to False, drop cancer_data — UI will collapse
+                if (
+                    field_name == "cancer_excision_report"
+                    and new_val is False
+                    and gold.get(field_name) is not False
+                ):
+                    gold.pop("cancer_data", None)
                 gold[field_name] = new_val
 
                 if differs:
@@ -773,28 +780,46 @@ def _get_sections(cancer_type: str) -> list[SectionSpec]:
 def _render_cancer_sections(mode: str) -> None:
     a = st.session_state.annotation_a
     b = st.session_state.annotation_b
-    cat_a = a.get("cancer_category")
-    cat_b = b.get("cancer_category")
 
-    # If top-level disagrees on whether this is cancer at all, skip cancer-specific.
-    if a.get("cancer_excision_report") is False and b.get("cancer_excision_report") is False:
-        st.info("兩位 annotator 皆標記為非 cancer excision report — 無 cancer-specific 欄位。")
-        return
-
-    # Choose category to drive section layout: prefer agreement, otherwise A.
-    cat = cat_a if cat_a else cat_b
-    if not cat or cat == "others" or not CANCER_TO_FILE.get(cat):
-        if cat_a != cat_b:
+    if mode == "consensus":
+        # Consensus: collapse decision is driven by the committee (gold) values.
+        gold = st.session_state.gold_annotation
+        gold_excision = gold.get("cancer_excision_report")
+        gold_cat = gold.get("cancer_category")
+        if gold_excision is False:
+            st.info("Committee 已決定為非 cancer excision report — 無 cancer-specific 欄位將被儲存。")
+            gold.pop("cancer_data", None)
+            return
+        if gold_excision is None:
+            st.warning("先在 Classification 區決定 Cancer Excision Report (Gold) 後，cancer-specific 欄位才會顯示。")
+            return
+        if not gold_cat or gold_cat == "others" or not CANCER_TO_FILE.get(gold_cat):
+            if gold_cat == "others":
+                st.info("Committee 已決定 cancer_category = 'others' — 無 cancer-specific 欄位將被儲存。")
+                gold.pop("cancer_data", None)
+            elif not gold_cat:
+                st.warning("先在 Classification 區決定 Cancer Category (Gold)。")
+            return
+        cat = gold_cat
+    else:
+        # Evaluation (Ref vs Machine): no gold; keep A/B-driven display heuristic.
+        cat_a = a.get("cancer_category")
+        cat_b = b.get("cancer_category")
+        if a.get("cancer_excision_report") is False and b.get("cancer_excision_report") is False:
+            st.info("兩位 annotator 皆標記為非 cancer excision report — 無 cancer-specific 欄位。")
+            return
+        cat = cat_a if cat_a else cat_b
+        if not cat or cat == "others" or not CANCER_TO_FILE.get(cat):
+            if cat_a != cat_b:
+                st.warning(
+                    f"A 與 B 的 cancer_category 不同（A={cat_a}, B={cat_b}）。"
+                    "先在 Classification 區達成共識後，cancer-specific 欄位才會顯示。"
+                )
+            return
+        if cat_a and cat_b and cat_a != cat_b:
             st.warning(
-                f"A 與 B 的 cancer_category 不同（A={cat_a}, B={cat_b}）。"
-                "先在 Classification 區達成共識後，cancer-specific 欄位才會顯示。"
+                f"Categories differ: A={cat_a}, B={cat_b}. Tabs below follow A's schema."
             )
-        return
-
-    if cat_a and cat_b and cat_a != cat_b:
-        st.warning(
-            f"Categories differ: A={cat_a}, B={cat_b}. Tabs below follow A's schema."
-        )
 
     sections = _get_sections(cat)
     if not sections:
