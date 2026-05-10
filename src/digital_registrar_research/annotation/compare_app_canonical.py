@@ -376,35 +376,42 @@ def _gold_input(field: FieldSpec, current_val, key: str, disabled: bool = False)
             label_visibility="collapsed", disabled=disabled,
         )
     if field.field_type == "int":
-        col_num, col_null = st.columns([3, 1])
-        is_null = current_val is None or current_val == NA_SENTINEL
-        with col_null:
-            null_checked = st.checkbox("N/A", value=is_null,
-                                       key=key + "__null", disabled=disabled)
-        with col_num:
-            num_init = (
+        null_key = key + "__null"
+        num_key = key + "__num"
+        if null_key not in st.session_state:
+            st.session_state[null_key] = current_val is None or current_val == NA_SENTINEL
+        if num_key not in st.session_state:
+            st.session_state[num_key] = (
                 int(current_val)
                 if isinstance(current_val, int) and not isinstance(current_val, bool)
                 else 0
             )
+        col_num, col_null = st.columns([3, 1])
+        with col_null:
+            null_checked = st.checkbox("N/A", key=null_key, disabled=disabled)
+        with col_num:
             num_val = st.number_input(
-                "Gold", value=num_init,
+                "Gold",
                 min_value=0, step=1, disabled=null_checked or disabled,
-                key=key + "__num", help=help_text,
+                key=num_key, help=help_text,
                 label_visibility="collapsed",
             )
         return NA_SENTINEL if null_checked else int(num_val)
     if field.field_type == "string":
-        col_text, col_na = st.columns([3, 1])
+        na_key = key + "__na"
+        text_key = key + "__text"
         is_na = current_val == NA_SENTINEL
+        if na_key not in st.session_state:
+            st.session_state[na_key] = is_na
+        if text_key not in st.session_state:
+            st.session_state[text_key] = "" if is_na else (current_val or "")
+        col_text, col_na = st.columns([3, 1])
         with col_na:
-            na_checked = st.checkbox("N/A", value=is_na,
-                                     key=key + "__na", disabled=disabled)
+            na_checked = st.checkbox("N/A", key=na_key, disabled=disabled)
         with col_text:
-            text_init = "" if is_na else (current_val or "")
             raw = st.text_input(
-                "Gold", value=text_init,
-                key=key + "__text", help=help_text,
+                "Gold",
+                key=text_key, help=help_text,
                 label_visibility="collapsed", disabled=na_checked or disabled,
             )
         if na_checked:
@@ -558,9 +565,12 @@ def _render_array_consensus(
             st.markdown("<div class='cell-head-g'>Gold</div>", unsafe_allow_html=True)
             current_gold = gold_container.get(afield) or []
             ms_key = f"{key_prefix}__{afield}__ms__{sample_id}"
+            if ms_key not in st.session_state:
+                st.session_state[ms_key] = [
+                    v for v in current_gold if v in section.array_item_enum_values
+                ]
             picked = st.multiselect(
                 "Gold", options=section.array_item_enum_values,
-                default=[v for v in current_gold if v in section.array_item_enum_values],
                 key=ms_key,
                 label_visibility="collapsed",
             )
@@ -608,7 +618,7 @@ def _render_array_consensus(
 
     for slot_idx, (item_a, item_b, key_val) in enumerate(slots):
         key_suffix = str(key_val).replace(" ", "_") if key_val is not None else f"slot{slot_idx}"
-        slot_key_prefix = f"{key_prefix}_{afield}_{key_suffix}"
+        slot_key_prefix = f"{key_prefix}_{afield}_{slot_idx}_{key_suffix}"
 
         both = item_a is not None and item_b is not None
         if both:
