@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -50,12 +51,15 @@ from transformers import (
     AutoModelForQuestionAnswering,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
+    set_seed,
 )
 
 from ...paths import BENCHMARKS_RESULTS
 from .. import organs as _organs
 from ..eval.scope import get_field_value
-from ._data import load_cases, per_dataset_counts
+from ._data import load_cases, load_predict_cases, per_dataset_counts
+
+_LOGGER = logging.getLogger(__name__)
 
 MODEL_ID = "emilyalsentzer/Bio_ClinicalBERT"
 MAX_LEN = 512
@@ -189,6 +193,8 @@ def parse_csv(s: str) -> list[str]:
 
 
 def train(args) -> None:
+    seed = int(getattr(args, "seed", 42))
+    set_seed(seed)  # random / numpy / torch (CPU + all CUDA devices) before head init
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
     model = AutoModelForQuestionAnswering.from_pretrained(MODEL_ID).to(DEVICE)
 
@@ -210,7 +216,8 @@ def train(args) -> None:
     if len(ds) == 0:
         raise SystemExit("no silver-aligned training examples — every gold value was "
                          "missing from its report. Check --data-root or the question bank.")
-    loader = DataLoader(ds, batch_size=8, shuffle=True)
+    g = torch.Generator(); g.manual_seed(seed)
+    loader = DataLoader(ds, batch_size=8, shuffle=True, generator=g, num_workers=0)
 
     opt = torch.optim.AdamW(model.parameters(), lr=3e-5)
     scheduler = get_linear_schedule_with_warmup(
@@ -242,6 +249,7 @@ def train(args) -> None:
         "organs": sorted(organs),
         "n_train_cases": len(cases),
         "per_dataset_counts": counts,
+        "seed": seed,
     }
     (Path(args.ckpt) / "_train_meta.json").write_text(
         json.dumps(train_meta, indent=2), encoding="utf-8",
@@ -272,13 +280,14 @@ def predict(args) -> None:
                     f"({sorted(train_datasets)})."
                 )
     else:
-        print(f"[warn] {train_meta_path} not found — leakage guard "
-              f"disabled. Retrain with the current train_bert.py to enable.")
+        _LOGGER.warning(
+            "%s not found — leakage guard disabled. Retrain with the "
+            "current train_bert.py to enable.", train_meta_path)
 
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
 
-    cases = load_cases(
+    cases = load_predict_cases(
         datasets=datasets,
         root=Path(args.data_root),
         organs=organs,
@@ -287,6 +296,12 @@ def predict(args) -> None:
     pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
     print(f"Predicting on {len(cases)} cases ({pretty})  "
           f"organs={sorted(organs)}")
+    if not cases:
+        reports_dir = Path(args.data_root) / "data" / datasets[0] / "reports"
+        raise SystemExit(
+            f"refusing to predict on 0 cases for {datasets} — check that "
+            f"{reports_dir} is populated and --organs={sorted(organs)} "
+            f"matches non-empty organ_n dirs there.")
 
     for case in tqdm(cases, desc="predict"):
         report = Path(case["report_path"]).read_text(encoding="utf-8")
@@ -350,6 +365,8 @@ def main() -> None:
     ap.add_argument("--dataset", default="both",
                     choices=["cmuh", "tcga", "both"],
                     help="Predict-time dataset selector. 'both' uses --datasets.")
+    ap.add_argument("--seed", type=int, default=42,
+                    help="Random seed for head init + data-shuffle order.")
     args = ap.parse_args()
 
     if args.phase == "train":

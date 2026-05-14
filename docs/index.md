@@ -15,6 +15,7 @@ This package wraps four research concerns around the slim production extractor:
 | [experiment protocol](experiment_protocol.md) | 2026-04 experiment cross-product, evaluation questions, invariants |
 | [branching strategy](branching_strategy.md) | 12-branch working model (testing / refactor / experiment state) |
 | [evaluation pipeline](eval/index.md) | Paper-grade metric explanations, recipes, and citations |
+| [DSPy deep dive](dspy_deep_dive.md) | Why the strict-schema protocol works on `gpt-oss:20b`, deeper DSPy concepts, phased dev roadmap |
 | [obfuscated workspace](obfuscation.md) | Schema-conformant synthetic copy of `workspace/` for PHI-free debugging |
 
 ## Why this exists

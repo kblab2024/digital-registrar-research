@@ -149,6 +149,7 @@ def delta_kappa_table(
     records: list[PairedRecord],
     *,
     n_boot: int, seed: int,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """One row per (organ, field) with κ_with, κ_without, Δκ + paired CI."""
     rows: list[dict] = []
@@ -158,7 +159,8 @@ def delta_kappa_table(
     grouped = df.groupby(["organ", "field"], dropna=False)
     for (organ, field), sub in grouped:
         recs = [PairedRecord(**r) for r in sub.to_dict(orient="records")]
-        result = paired_delta_kappa(recs, n_boot=n_boot, random_state=seed)
+        result = paired_delta_kappa(recs, n_boot=n_boot, random_state=seed,
+                                     device=device)
         rows.append({
             "organ": organ, "field": field,
             "field_kind": classify_field(field, organ),
@@ -198,6 +200,7 @@ def anchoring_index_table(records: list[PairedRecord]) -> pd.DataFrame:
 
 def disagreement_reduction_table(
     records: list[DualPairedRecord], *, n_boot: int, seed: int,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """Δ-disagreement (with vs without preann) per (organ, field)."""
     rows: list[dict] = []
@@ -207,7 +210,8 @@ def disagreement_reduction_table(
     grouped = df.groupby(["organ", "field"], dropna=False)
     for (organ, field), sub in grouped:
         recs = [DualPairedRecord(**r) for r in sub.to_dict(orient="records")]
-        result = disagreement_reduction(recs, n_boot=n_boot, random_state=seed)
+        result = disagreement_reduction(recs, n_boot=n_boot, random_state=seed,
+                                         device=device)
         rows.append({"organ": organ, "field": field, **result})
     return pd.DataFrame(rows)
 

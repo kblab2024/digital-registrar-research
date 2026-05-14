@@ -2,6 +2,18 @@
 
 Copy-paste examples for every common evaluation task. All examples assume you're at the repo root.
 
+> **Cascade-redesign note (2026-05).** Recipes that reference `cli non_nested` or `cli nested` should be replaced with `cli cascade` — the cascade subcommand is the unified replacement. See [CHANGELOG.md](CHANGELOG.md) for the migration map. New canonical recipe:
+>
+> ```bash
+> # Cascade run on cmuh, single model, two runs.
+> python -m scripts.eval.cli cascade \
+>     --root workspace --dataset cmuh --annotator gold \
+>     --method llm --model gpt_oss_20b --run-ids run01 run02 \
+>     --out workspace/results/eval/cascade/cmuh_gpt_oss_20b
+> ```
+>
+> Output: `chapter1_eligibility/`, `chapter2_organ_classification/` (with `others/` ledger), `chapter3_field_extraction/` (with `cascade_funnel.csv`), and `cascade_atomic.parquet` at the root.
+
 ## Score one model on /dummy
 
 ```
@@ -101,6 +113,71 @@ python -m scripts.eval.cli iaa \
     --pairs gold:nhc_with_preann gold:kpc_with_preann \
             nhc_with_preann:kpc_with_preann \
     --out workspace/results/eval/iaa
+```
+
+## Pair-focused IAA (overall κ + roll-ups for one pair)
+
+Use `iaa_pair` when you want a single overall Cohen's κ (and per-section / per-organ roll-ups, confusion matrices, and a markdown summary) scoped to one or more specific annotator pairs. The general `iaa` subcommand stops at per-field κ + Krippendorff α; `iaa_pair` fills the headline gap. See [iaa_basics.md](iaa_basics.md#pair-focused-headline-iaa_pair) for what each headline statistic means.
+
+### Inter-observer variance — gold vs human
+
+```
+python -m scripts.eval.cli iaa_pair \
+    --root workspace --dataset cmuh \
+    --pair gold:nhc_with_preann \
+    --pair gold:kpc_with_preann \
+    --out workspace/results/eval/iaa_pair/inter_observer
+```
+
+### Inter-observer variance — human vs human
+
+```
+python -m scripts.eval.cli iaa_pair \
+    --root workspace --dataset cmuh \
+    --pair kpc_with_preann:nhc_with_preann \
+    --out workspace/results/eval/iaa_pair/human_vs_human
+```
+
+### Pre-annotation effect (descriptive — same human, with vs without preann)
+
+```
+python -m scripts.eval.cli iaa_pair \
+    --root workspace --dataset cmuh \
+    --pair kpc_with_preann:kpc_without_preann \
+    --pair nhc_with_preann:nhc_without_preann \
+    --out workspace/results/eval/iaa_pair/preann_effect_descriptive
+```
+
+The summary.md auto-flags within-annotator preann pairs and points to the `iaa preann/` outputs for the **causal** Δκ-vs-gold and anchoring analyses. `iaa_pair` only describes magnitude of change here; it does not answer "does preann help?".
+
+### All pairs the user typically wants in one shot
+
+```
+python -m scripts.eval.cli iaa_pair \
+    --root workspace --dataset cmuh \
+    --pair gold:nhc_with_preann \
+    --pair gold:kpc_with_preann \
+    --pair kpc_with_preann:nhc_with_preann \
+    --pair kpc_with_preann:kpc_without_preann \
+    --pair nhc_with_preann:nhc_without_preann \
+    --out workspace/results/eval/iaa_pair --n-boot 2000 --seed 0
+ls workspace/results/eval/iaa_pair/
+# pair_gold_vs_nhc_with_preann/  pair_gold_vs_kpc_with_preann/  ...
+cat workspace/results/eval/iaa_pair/pair_gold_vs_nhc_with_preann/headline.csv
+```
+
+### Tweak knobs
+
+```
+# Smoke run with fast bootstrap (CI noisier but point estimate exact).
+python -m scripts.eval.cli iaa_pair --root dummy --dataset cmuh \
+    --pair gold:nhc_with_preann --n-boot 100 --seed 0 \
+    --out /tmp/iaa_pair_smoke
+
+# More confusion matrices in the output (default 20).
+python -m scripts.eval.cli iaa_pair --root workspace --dataset cmuh \
+    --pair gold:nhc_with_preann --n-confusion 50 \
+    --out workspace/results/eval/iaa_pair/full_confusion
 ```
 
 ## Compare humans with vs without preann (preann-effect headline)

@@ -27,6 +27,7 @@ from typing import Iterable
 
 import pandas as pd
 
+from digital_registrar_research.benchmarks.eval.ci_gpu import pick_device
 from digital_registrar_research.benchmarks.eval.completeness import (
     aggregate_missingness, method_pair_deltas,
     position_in_schema_correlation, refusal_calibration,
@@ -80,6 +81,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 def _main(args: argparse.Namespace) -> int:
     setup_logging(args.verbose)
+    requested_device = getattr(args, "device", "cpu")
+    resolved_device = pick_device(requested_device)
+    logger.info("device: requested=%s resolved=%s",
+                requested_device, resolved_device)
+    args.resolved_device = resolved_device
+
     paths = from_args(args.root, args.dataset)
     paths.assert_exists()
     organs = parse_organs(args)
@@ -146,7 +153,9 @@ def _main(args: argparse.Namespace) -> int:
         write_csv(em, args.out / "error_mode_decomposition.csv")
 
     # --- Method-pair Δ ---------------------------------------------------
-    deltas = _method_pair_deltas_using_label(atomic, by=("field", "organ"))
+    deltas = _method_pair_deltas_using_label(
+        atomic, by=("field", "organ"), device=resolved_device,
+    )
     if not deltas.empty:
         write_csv(deltas, args.out / "method_pairwise_deltas.csv")
 
@@ -176,12 +185,11 @@ def _main(args: argparse.Namespace) -> int:
 
     # --- Schema conformance Δ between methods ----------------------------
     # Skip when the atomic table doesn't carry pred_value (lightweight
-    # build path); user can re-run non_nested for this dimension.
+    # build path).
     if "pred_value" in atomic.columns:
-        from scripts.eval.non_nested.metrics_non_nested import schema_conformance
         sc_rows = []
         for method, sub in atomic.groupby("method_label"):
-            f = schema_conformance(sub)
+            f = _schema_conformance(sub)
             if not f.empty:
                 f["method_label"] = method
                 sc_rows.append(f)
@@ -210,6 +218,8 @@ def _main(args: argparse.Namespace) -> int:
         extra={
             "method_specs": [_describe_spec(s) for s in method_specs],
             "n_atomic_rows": int(len(atomic)),
+            "device_requested": requested_device,
+            "device_resolved": resolved_device,
         },
     )
     logger.info("done. outputs in %s", args.out)
@@ -281,10 +291,6 @@ def _build_atomic_for_method(
             for field in fields:
                 if field.startswith("biomarker_") and organ != "breast":
                     continue
-                # Use the same biomarker-aware classifier path as non_nested.
-                from scripts.eval.non_nested.run_non_nested import (
-                    _classify_biomarker,
-                )
                 if field.startswith("biomarker_"):
                     out = _classify_biomarker(gold, case_load, field)
                 else:
@@ -315,14 +321,133 @@ def _build_atomic_for_method(
     return pd.DataFrame(rows), n_per_organ
 
 
-def _method_pair_deltas_using_label(df: pd.DataFrame, *, by) -> pd.DataFrame:
+def _method_pair_deltas_using_label(df: pd.DataFrame, *, by,
+                                     device: str = "cpu") -> pd.DataFrame:
     """Wrapper to call src/.../eval/completeness.method_pair_deltas with
     ``method_label`` instead of ``method`` as the grouping column."""
     df = df.rename(columns={"method": "_orig_method", "method_label": "method"})
-    out = method_pair_deltas(df, by=by)
+    out = method_pair_deltas(df, by=by, device=device)
     if out.empty:
         return out
     return out
+
+
+# --- Inlined helpers (formerly imported from removed scripts.eval.non_nested) -
+
+
+def _schema_conformance(df: pd.DataFrame) -> pd.DataFrame:
+    """Per (field, organ) — out-of-vocabulary rate among attempted preds.
+
+    Lifted from the removed ``scripts.eval.non_nested.metrics_non_nested``
+    so the completeness pipeline doesn't depend on the legacy package.
+    For categorical fields only; pairs with the modularity-advantage
+    argument that schema-constrained pipelines should produce ~0% OOV.
+    """
+    from digital_registrar_research.benchmarks.eval.ci import wilson_ci
+    from digital_registrar_research.benchmarks.eval.scope import (
+        get_allowed_values,
+    )
+
+    rows: list[dict] = []
+    fields = df["field"].dropna().unique()
+    for field in fields:
+        for organ in [*sorted(df["organ"].dropna().unique()), "ALL"]:
+            organ_arg = organ if organ != "ALL" else None
+            allowed = get_allowed_values(field, organ_arg)
+            if not allowed:
+                continue
+            allowed_norm = {normalize(v) for v in allowed}
+            sub = df[(df["field"] == field) & df["attempted"]]
+            if organ != "ALL":
+                sub = sub[sub["organ"] == organ]
+            n_attempted = len(sub)
+            n_oov = int(sub["pred_value"].apply(
+                lambda v: normalize(v) not in allowed_norm and v is not None
+            ).sum())
+            if n_attempted == 0:
+                continue
+            lo, hi = wilson_ci(n_oov, n_attempted)
+            rows.append({
+                "field": field, "organ": organ,
+                "n_attempted": n_attempted, "n_oov": n_oov,
+                "oov_rate": n_oov / n_attempted,
+                "oov_rate_ci_lo": lo, "oov_rate_ci_hi": hi,
+            })
+    return pd.DataFrame(rows)
+
+
+def _classify_biomarker(gold, case_load, field: str):
+    """Classify biomarker_<X> outcome from breast biomarkers list.
+
+    Replaces the import of ``scripts.eval.non_nested.run_non_nested.
+    _classify_biomarker`` (the legacy module no longer exists). For
+    breast cases, looks up the named biomarker (e.g. ``biomarker_er``
+    → ``er``) inside ``cancer_data.biomarkers`` and classifies as:
+
+      - ``parse_error`` if the case failed to load
+      - ``gold_present == False`` if no gold biomarker exists for this category
+      - ``attempted`` if the prediction names this category
+      - ``correct`` if the predicted expression matches gold
+
+    Returns the same :class:`Outcome` dataclass that
+    :func:`classify_outcome` produces.
+    """
+    from .._common.outcome import Outcome
+
+    biomarker_key = field[len("biomarker_"):]
+
+    def _find(bm_list, key):
+        if not isinstance(bm_list, list):
+            return None
+        for item in bm_list:
+            if not isinstance(item, dict):
+                continue
+            if normalize(item.get("biomarker_category")) == normalize(key):
+                return item
+        return None
+
+    g_list = (gold.get("cancer_data") or {}).get("biomarkers")
+    g_item = _find(g_list, biomarker_key)
+    gold_present = g_item is not None
+
+    if not case_load.ok:
+        return Outcome(
+            kind="parse_error", gold_present=gold_present,
+            parse_error=True, field_missing=False,
+            attempted=False, correct=False, wrong=False,
+            error_mode=case_load.error_mode,
+        )
+
+    p = case_load.pred or {}
+    p_list = (p.get("cancer_data") or {}).get("biomarkers")
+    p_item = _find(p_list, biomarker_key)
+    attempted = p_item is not None
+
+    if not gold_present and not attempted:
+        return Outcome(
+            kind="ineligible", gold_present=False,
+            parse_error=False, field_missing=False,
+            attempted=False, correct=False, wrong=False,
+            error_mode=None,
+        )
+    if gold_present and not attempted:
+        return Outcome(
+            kind="field_missing", gold_present=True,
+            parse_error=False, field_missing=True,
+            attempted=False, correct=False, wrong=False,
+            error_mode=None,
+        )
+    # Attempted; compare expression as the headline scalar.
+    g_exp = normalize(g_item.get("expression")) if g_item else None
+    p_exp = normalize(p_item.get("expression"))
+    correct = (g_exp is not None and p_exp is not None and g_exp == p_exp)
+    return Outcome(
+        kind="correct" if correct else "wrong",
+        gold_present=gold_present,
+        parse_error=False, field_missing=False,
+        attempted=True, correct=correct, wrong=not correct,
+        error_mode=None,
+    )
 
 
 __all__ = ["register"]

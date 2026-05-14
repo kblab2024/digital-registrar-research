@@ -26,19 +26,16 @@ from dataclasses import dataclass
 import pandas as pd
 
 from digital_registrar_research.benchmarks.eval.iaa import (
-    CaseEntry, disagreement_resolution, pairwise_iaa,
-    whole_report_stats,
+    disagreement_resolution, pairwise_iaa, whole_report_stats,
 )
-from digital_registrar_research.benchmarks.eval.metrics import normalize
 
 from .._common.args import (
     add_common_args, add_iaa_args, parse_cases, parse_organs,
 )
-from .._common.loaders import load_json, ParseError
-from .._common.paths import Paths, from_args
+from .._common.paths import from_args
 from .._common.reporting import setup_logging, write_csv, write_manifest
-from .._common.stratify import organ_name
 from . import preann_effect
+from ._discovery import discover_cases_dir_layout
 
 logger = logging.getLogger("scripts.eval.iaa")
 
@@ -68,6 +65,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 def _main(args: argparse.Namespace) -> int:
     setup_logging(args.verbose)
+    from digital_registrar_research.benchmarks.eval.ci_gpu import pick_device
+    requested_device = getattr(args, "device", "cpu")
+    resolved_device = pick_device(requested_device)
+    logger.info("device: requested=%s resolved=%s",
+                requested_device, resolved_device)
+    args.resolved_device = resolved_device
+
     paths = from_args(args.root, args.dataset)
     paths.assert_exists()
     organs = parse_organs(args)
@@ -76,7 +80,7 @@ def _main(args: argparse.Namespace) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
 
     # --- Build CaseEntry dict from the new dir layout ---------------------
-    cases, n_per_organ = _discover_cases_dir_layout(
+    cases, n_per_organ = discover_cases_dir_layout(
         paths=paths, annotators=tuple(args.annotators),
         organs=tuple(organs), case_filter=case_filter,
     )
@@ -91,7 +95,8 @@ def _main(args: argparse.Namespace) -> int:
     for ann_a, ann_b in pair_specs:
         logger.info("scoring IAA: %s vs %s", ann_a, ann_b)
         df = pairwise_iaa(cases, ann_a=ann_a, ann_b=ann_b,
-                          n_boot=args.n_boot, random_state=args.seed)
+                          n_boot=args.n_boot, random_state=args.seed,
+                          device=resolved_device)
         write_csv(df, args.out / f"pair_{ann_a}_vs_{ann_b}.csv")
 
     # --- Whole-report headline -------------------------------------------
@@ -145,6 +150,7 @@ def _main(args: argparse.Namespace) -> int:
                     for r in sub.to_dict(orient="records")]
             dk = preann_effect.delta_kappa_table(
                 recs, n_boot=args.n_boot, seed=args.seed,
+                device=resolved_device,
             )
             if not dk.empty:
                 dk.insert(0, "annotator", annotator)
@@ -174,6 +180,7 @@ def _main(args: argparse.Namespace) -> int:
         )
         dr = preann_effect.disagreement_reduction_table(
             dual, n_boot=args.n_boot, seed=args.seed,
+            device=resolved_device,
         )
         if not dr.empty:
             write_csv(dr, preann_dir / "disagreement_reduction.csv")
@@ -190,48 +197,6 @@ def _main(args: argparse.Namespace) -> int:
     )
     logger.info("done. outputs in %s", args.out)
     return 0
-
-
-# --- Discovery (dir-based layout → CaseEntry) -------------------------------
-
-
-def _discover_cases_dir_layout(
-    *, paths: Paths, annotators: tuple[str, ...],
-    organs: tuple[int, ...], case_filter: set[str] | None,
-) -> tuple[dict[str, CaseEntry], dict[int, int]]:
-    """Walk every annotator subdir and group annotations by case_id.
-
-    Adapts the new dir-based layout
-    (``annotations/<annotator>/<organ_idx>/<case_id>.json``) to the
-    suffix-based ``CaseEntry`` shape that ``iaa.pairwise_iaa`` expects.
-
-    The annotator name is used as both the dict key AND the suffix
-    parameter for downstream helpers. ``classify_section`` etc. are
-    unaffected — they only look at field names.
-    """
-    cases: dict[str, CaseEntry] = {}
-    n_per_organ: dict[int, int] = {}
-    for annotator in annotators:
-        for organ_idx, case_id in paths.case_ids(annotator, organs):
-            if case_filter and case_id not in case_filter:
-                continue
-            ann_path = paths.annotation(annotator, organ_idx, case_id)
-            try:
-                ann = load_json(ann_path)
-            except ParseError as e:
-                logger.warning("skipping %s (%s): %s", case_id, annotator, e)
-                continue
-            organ = normalize(ann.get("cancer_category")) or organ_name(paths.dataset, organ_idx)
-            entry = cases.get(case_id)
-            if entry is None:
-                entry = CaseEntry(organ=organ, annotations={}, paths={})
-                cases[case_id] = entry
-                n_per_organ[organ_idx] = n_per_organ.get(organ_idx, 0) + 1
-            entry.annotations[annotator] = ann
-            entry.paths[annotator] = ann_path
-            if entry.organ is None and organ:
-                entry.organ = organ
-    return cases, n_per_organ
 
 
 # --- Pair expansion ----------------------------------------------------------

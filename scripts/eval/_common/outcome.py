@@ -265,24 +265,19 @@ def classify_outcome(
     p_value = get_field_value(pred, field_name)
 
     if is_list_literals:
-        # When gold is null on a list-of-literals field, the row is
-        # ineligible for accuracy but valid for refusal calibration —
-        # treat it like an attempted-but-not-scored row, and mark
-        # gold_present=False so downstream filters drop it from the
-        # accuracy denominator.
+        # Cascade redesign: when gold has no list to score against, the
+        # field is ``ineligible`` for accuracy. The legacy "empty pred =
+        # correct refusal" branch was dropped because it conflated
+        # silence with correct silence and inflated Stage-C accuracy.
         if not g_value_is_list:
-            # Gold has no list to score against; mark as wrong if
-            # pred is non-empty list (model over-asserted), else
-            # treat as a correct refusal proxy.
-            p_is_list = isinstance(p_value, list) and len(p_value) > 0
             return Outcome(
-                kind="wrong" if p_is_list else "correct",
+                kind="ineligible",
                 gold_present=False,
                 parse_error=False,
                 field_missing=False,
                 attempted=True,
-                correct=not p_is_list,
-                wrong=p_is_list,
+                correct=False,
+                wrong=False,
                 error_mode=None,
                 pred_value=p_value,
                 gold_value=g_value,

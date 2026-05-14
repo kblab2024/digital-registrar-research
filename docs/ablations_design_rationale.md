@@ -1,5 +1,7 @@
 # Design rationale
 
+> **Cascade-redesign note (2026-05).** The "how we measure success" question is now answered by the cascade chapter outputs (Stage A eligibility, Stage B organ classification, Stage C field extraction) rather than by a single flat correctness vector. Per-cell modular-vs-monolithic deltas in `cell_deltas.csv` are computed from the same restricted Stage-C cohort across all cells, so comparisons remain apples-to-apples. Cross-cell paired tests live in `model_pair_tests/` (McNemar + Cochran-Q + paired-bootstrap deltas). See [eval/CHANGELOG.md](eval/CHANGELOG.md) and [stat_methods.md](stat_methods.md) for details.
+
 This document records the reasoning behind each ablation cell and how
 the results should be read. Decisions here should carry forward if the
 ablation grid is extended.
@@ -282,7 +284,8 @@ the prior numbers uninterpretable. The relevant changes:
   try/catch (with `--continue-on-cell-error`) writes a
   `grid_failures.json` so re-runs only target the failed subset.
 * **`reference` folder shorthand.** `--folder reference` builds a
-  one-time symlink staging tree under `reference/_staged/` from
-  `reference/tcga_dataset_20251117/` and
-  `reference/tcga_annotation_20251117/` so M2-mac smoke runs use real
-  TCGA data without restructuring the on-disk source.
+  one-time symlink staging tree under `reference/_staged/` from the
+  canonical TCGA reports at `reference/reports/<organ_n>/*.txt` so
+  M2-mac smoke runs use real TCGA data without restructuring the
+  on-disk source. The reference checkout is reports-only; gold
+  annotations aren't staged.

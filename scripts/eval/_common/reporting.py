@@ -108,18 +108,48 @@ def write_csv(df: pd.DataFrame, path: Path, *, index: bool = False) -> Path:
 def write_parquet(df: pd.DataFrame, path: Path) -> Path:
     """Write a DataFrame to parquet (requires pyarrow).
 
-    Object columns with mixed types are coerced to JSON-encoded strings
-    so pyarrow can serialise them without a type-inference failure.
+    Numeric-mixed object columns (bool + int/float + None — e.g. the
+    cascade ``correct`` column where Stage A/B/scalar-C rows are bool
+    and nested-C rows are F1 floats) are coerced to ``float64``
+    (bool → ``{0.0, 1.0}``, None → ``NaN``) so downstream consumers
+    that reduce on numeric correctness keep working across the parquet
+    round-trip. Object columns with truly heterogeneous primitives
+    (str + bool + list — e.g. ``gold_value`` / ``pred_value``) are
+    JSON-encoded so pyarrow can serialise them without a type-inference
+    failure.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     out = df.copy()
     for col in out.select_dtypes(include="object").columns:
-        if _is_mixed_type(out[col]):
+        if _is_numeric_mixed(out[col]):
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+        elif _is_mixed_type(out[col]):
             out[col] = out[col].apply(_to_json_string)
     out.to_parquet(path, engine="pyarrow", index=False)
     logger.info("wrote %s (%d rows)", path, len(df))
     return path
+
+
+def _is_numeric_mixed(series: pd.Series) -> bool:
+    """True if every non-None value is a bool or numeric scalar.
+
+    Identifies columns whose mixed dtype is structurally numeric (bool +
+    float, e.g. the cascade ``correct`` column). Such columns survive
+    round-trip cleanly when written as ``float64`` rather than as
+    JSON-encoded strings.
+    """
+    saw_any = False
+    for v in series:
+        if v is None:
+            continue
+        saw_any = True
+        if isinstance(v, bool):
+            continue
+        if isinstance(v, (int, float)):
+            continue
+        return False
+    return saw_any
 
 
 def _is_mixed_type(series: pd.Series) -> bool:

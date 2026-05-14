@@ -1,5 +1,7 @@
 # Side-by-side comparison
 
+> **Cascade-redesign note (2026-05).** Output paths in this doc that mention `non_nested_<label>/` should be read as `cascade_<label>/`; the parquet retains the filename `correctness_table.parquet` for backwards compatibility with `run_compare`, but its content is the cascade atomic table. See [eval/CHANGELOG.md](../eval/CHANGELOG.md).
+
 ## Defaults (cross-corpus baseline)
 
 The convenience wrappers (`eval_rule_vs_llm`, `eval_bert_vs_llm`, `eval_rule_bert_llm`) default to:
@@ -89,17 +91,36 @@ python scripts/baselines/eval_bert_vs_llm.py \
 
 `--bert-head` accepts `cls`, `qa`, or `merged`. `merged` is the default — it's what the eval contract assumes.
 
-### Rule + BERT + LLM (three-way)
+### Rule + BERT + LLM (three- or four-way)
+
+This is the **canonical multirun-aware comparison wrapper**: one rule prediction set + K BERT seeds + K runs per LLM model, joined by case × field, with paired-bootstrap deltas + Wilson CIs + McNemar p-values across every method pair.
 
 ```bash
+# Three-way, auto-discover all BERT seeds and all LLM runs
 python scripts/baselines/eval_rule_bert_llm.py \
     --folder workspace --dataset tcga \
     --bert-head merged \
-    --llm-model gpt_oss_20b --llm-runs run01 run02 run03 \
+    --llm-models gpt_oss_20b \
     --out workspace/results/eval/rule_bert_llm_tcga
+
+# Same, but pin the seed/run sets explicitly (multirun BERT × multirun LLM × rule)
+python scripts/baselines/eval_rule_bert_llm.py \
+    --folder workspace --dataset tcga \
+    --bert-head merged --bert-runs run01 run02 run03 \
+    --llm-models gpt_oss_20b --llm-runs run01 run02 run03 \
+    --out workspace/results/eval/rule_bert_llm_3x3
+
+# Four-way (rule + bert + local LLM + hosted OpenAI LLM)
+python scripts/baselines/eval_rule_bert_llm.py \
+    --folder workspace --dataset tcga \
+    --bert-head merged \
+    --llm-models gpt_oss_20b gpt_5_4_mini \
+    --out workspace/results/eval/rule_bert_locallm_apillm
 ```
 
-Same flags as the two-way wrappers.
+`--llm-models` accepts one or more LLM slugs; `--bert-runs` and `--llm-runs` are both optional (default: auto-discover every `run*` subdir under `clinicalbert/<head>/` and `llm/<model>/` respectively). There is intentionally no `--rule-runs` flag — rule is deterministic and contributes a single prediction set. The rest of the flags match the two-way wrappers.
+
+**Provider-agnostic LLM discovery.** Auto-discovery for the LLM side keys only on `(method="llm", model_slug)` — Ollama and OpenAI runners write into the same canonical `llm/{model_slug}/run{NN}/` namespace, so `--llm-models gpt_5_4_mini` (an OpenAI hosted slug) finds every `run*` subdir under `llm/gpt_5_4_mini/` exactly as it does for `gpt_oss_20b` (Ollama). See [`run_cascade.py`](../../scripts/eval/cascade/run_cascade.py) `_autodiscover_runs`.
 
 ## Output layout (any of the above)
 
@@ -156,3 +177,24 @@ Each row is one (a_label, b_label) pair, organ, field cell. The `ALL/ALL` row at
 ## Filtering / customizing
 
 Pass `--organs` to either the convenience wrapper or the underlying `non_nested` calls to scope the comparison to a subset of organs. Pass `--n-boot 5000` for tighter delta CIs (slower).
+
+## Where do CIs come from in a multirun comparison?
+
+When you run `eval_rule_bert_llm.py` against multirun BERT + multirun LLM + rule, the pipeline emits **three different kinds of CI**, each answering a different question:
+
+1. **Within-method, per-field accuracy CI** — *"How precise is method X's accuracy estimate on this field?"*
+   - **Where**: `compare/headline.csv`, `compare/per_field.csv`.
+   - **What**: Wilson 95% on `(correct, attempted)` per (method, organ, field). When the method has K runs, cells are pooled across all K runs of that method (so the denominator scales with K).
+   - **For rule**: this is the *only* CI that exists, since rule contributes one deterministic prediction set.
+
+2. **Cross-method delta CI** — *"Is method A reliably better than method B on this field?"*
+   - **Where**: `compare/pairwise.csv`.
+   - **What**: paired bootstrap on the per-cell binary correctness vector (default 2000 replicates), plus a McNemar p-value. Pairing key is `(case_id, field)` — cells without a row in both methods are dropped from that field's pairing.
+   - **For rule vs multirun BERT/LLM**: the single rule prediction is paired against each (case, field) cell from each BERT/LLM run; the bootstrap resamples cases, treating run as a within-method nuisance source.
+
+3. **Within-method run variance** — *"How brittle is method X across its own seeds?"*
+   - **Where**: per-method `cascade_<label>/chapter*/multirun_consistency.csv` (one row per field per chapter).
+   - **What**: Fleiss κ across runs (agreement on correctness *and* on predicted value), flip rate (% cases where not all runs agreed), stability accuracy (accuracy on non-flipping cases), brittle-case rate (% cases where some runs are right and some wrong), and a per-run accuracy CI (Student-t over the K per-run accuracy vector — different from #1, which pools cells).
+   - **Only emitted when K > 1**: present for BERT-multirun and LLM, absent for rule. If you run BERT single-seed, this file is also absent for BERT.
+
+To summarize: rule contributes the **deterministic floor**, and its CI in the comparison is bootstrap-on-cases (not on runs). BERT and LLM each contribute a **K-run distribution** whose run-level variance shows up in `multirun_consistency.csv`, and whose pooled accuracy gets a Wilson CI in `headline.csv`. The cross-method `pairwise.csv` then says whether the differences between methods are larger than within-method noise.

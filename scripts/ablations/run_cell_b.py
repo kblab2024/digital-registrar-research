@@ -6,8 +6,11 @@ Backed by ``digital_registrar_research.ablations.runners.dspy_monolithic``.
 Usage::
 
     python scripts/ablations/run_cell_b.py --folder dummy --dataset tcga --model gptoss
-    python scripts/ablations/run_cell_b.py --folder dummy --dataset tcga \\
-        --model gptoss --skip-jsonize
+
+For the no-`ReportJsonize` variant (axis A3) use the dedicated cell wrapper
+``run_cell_b_no_jsonize.py`` (cell id ``dspy_monolithic_no_jsonize``) — it
+writes to a separate output folder so its predictions do not collide with
+this one.
 """
 from __future__ import annotations
 

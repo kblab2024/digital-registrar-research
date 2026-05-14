@@ -15,6 +15,7 @@ from digital_registrar_research.benchmarks.baselines._data import (
     _organ_n,
     _walk_dataset,
     load_cases,
+    load_predict_cases,
     per_dataset_counts,
 )
 
@@ -119,3 +120,74 @@ def test_per_dataset_counts(tmp_path: Path) -> None:
     cases = load_cases(datasets=["cmuh", "tcga"], root=tmp_path)
     counts = per_dataset_counts(cases)
     assert counts == {"cmuh": 1, "tcga": 2}
+
+
+# --- load_predict_cases (predict-side, gold-optional) ------------------------
+
+
+def _seed_report_only(
+    root: Path, dataset: str, organ_n: str, case_id: str,
+) -> None:
+    """Seed a reports-only case (no gold annotation)."""
+    rep_dir = root / "data" / dataset / "reports" / organ_n
+    rep_dir.mkdir(parents=True, exist_ok=True)
+    (rep_dir / f"{case_id}.txt").write_text("dummy report", encoding="utf-8")
+
+
+def test_load_predict_cases_walks_reports_without_gold(tmp_path: Path) -> None:
+    # No annotations/gold/ dir at all — predict-side discovery must still work.
+    _seed_report_only(tmp_path, "tcga", "1", "tcga1_1")
+    _seed_report_only(tmp_path, "tcga", "2", "tcga2_1")
+    cases = load_predict_cases(datasets=["tcga"], root=tmp_path)
+    assert sorted(c["id"] for c in cases) == ["tcga1_1", "tcga2_1"]
+    by_id = {c["id"]: c for c in cases}
+    assert by_id["tcga1_1"]["organ_name"] == "breast"
+    assert by_id["tcga1_1"]["cancer_category"] is None
+    assert by_id["tcga1_1"]["annotation_path"] is None
+    assert by_id["tcga2_1"]["organ_name"] == "colorectal"
+    assert by_id["tcga2_1"]["cancer_category"] is None
+    assert by_id["tcga2_1"]["annotation_path"] is None
+    for c in cases:
+        assert Path(c["report_path"]).exists()
+
+
+def test_load_predict_cases_filters_by_organ_name(tmp_path: Path) -> None:
+    _seed_report_only(tmp_path, "tcga", "1", "tcga1_1")  # breast
+    _seed_report_only(tmp_path, "tcga", "2", "tcga2_1")  # colorectal
+    _seed_report_only(tmp_path, "tcga", "5", "tcga5_1")  # liver
+    cases = load_predict_cases(
+        datasets=["tcga"], root=tmp_path, organs={"breast", "liver"},
+    )
+    assert sorted(c["id"] for c in cases) == ["tcga1_1", "tcga5_1"]
+
+
+def test_load_predict_cases_enriches_with_gold_when_present(
+    tmp_path: Path,
+) -> None:
+    # Both reports AND gold present — cancer_category should be populated
+    # for the case with gold, but None for the one without.
+    _seed_dummy_case(tmp_path, "tcga", "1", "tcga1_1", "breast")
+    _seed_report_only(tmp_path, "tcga", "1", "tcga1_2")  # no gold
+    cases = load_predict_cases(datasets=["tcga"], root=tmp_path)
+    by_id = {c["id"]: c for c in cases}
+    assert by_id["tcga1_1"]["cancer_category"] == "breast"
+    assert by_id["tcga1_1"]["annotation_path"] is not None
+    assert Path(by_id["tcga1_1"]["annotation_path"]).exists()
+    assert by_id["tcga1_2"]["cancer_category"] is None
+    assert by_id["tcga1_2"]["annotation_path"] is None
+
+
+def test_load_predict_cases_returns_empty_for_missing_reports(
+    tmp_path: Path,
+) -> None:
+    # No reports dir at all.
+    cases = load_predict_cases(datasets=["tcga"], root=tmp_path)
+    assert cases == []
+
+
+def test_load_predict_cases_skips_unknown_organ_n(tmp_path: Path) -> None:
+    # TCGA only has organs 1-5 in organ_code.yaml; 99 is unknown.
+    _seed_report_only(tmp_path, "tcga", "1", "tcga1_1")
+    _seed_report_only(tmp_path, "tcga", "99", "tcga99_1")
+    cases = load_predict_cases(datasets=["tcga"], root=tmp_path)
+    assert [c["id"] for c in cases] == ["tcga1_1"]

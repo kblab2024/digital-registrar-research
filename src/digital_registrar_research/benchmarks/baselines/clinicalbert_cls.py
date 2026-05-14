@@ -46,13 +46,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer, set_seed
 
 from ...paths import BENCHMARKS_RESULTS
 from .. import organs as _organs
@@ -61,7 +62,9 @@ from ..eval.scope import (
     CATEGORICAL_FIELDS,
     get_field_value,
 )
-from ._data import load_cases, per_dataset_counts
+from ._data import load_cases, load_predict_cases, per_dataset_counts
+
+_LOGGER = logging.getLogger(__name__)
 
 MODEL_ID = "emilyalsentzer/Bio_ClinicalBERT"
 MAX_LEN = 512
@@ -160,6 +163,8 @@ def parse_csv(s: str) -> list[str]:
 # --- Train / predict ----------------------------------------------------------
 
 def train(args) -> None:
+    seed = int(getattr(args, "seed", 42))
+    set_seed(seed)  # random / numpy / torch (CPU + all CUDA devices) before head init
     field_to_idx, card = build_field_vocab()
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
     model = MultiHeadClassifier(card).to(DEVICE)
@@ -183,9 +188,11 @@ def train(args) -> None:
     if not cases:
         raise SystemExit("no training cases — check --data-root, --datasets, --organs")
 
+    g = torch.Generator(); g.manual_seed(seed)
     train_loader = DataLoader(
         PathologyCases(cases, tok, field_to_idx),
         batch_size=4, shuffle=True, collate_fn=collate,
+        generator=g, num_workers=0,
     )
 
     model.train()
@@ -214,7 +221,8 @@ def train(args) -> None:
                 "organs": sorted(organs),
                 "datasets": datasets,
                 "n_train_cases": len(cases),
-                "per_dataset_counts": counts}, ckpt_path)
+                "per_dataset_counts": counts,
+                "seed": seed}, ckpt_path)
     print(f"Saved checkpoint to {ckpt_path}")
 
 
@@ -240,8 +248,9 @@ def predict(args) -> None:
     # train and predict corpora being disjoint (CMUH-train, TCGA-test).
     train_datasets = set(ckpt.get("datasets") or [])
     if not train_datasets:
-        print("[warn] checkpoint lacks 'datasets' metadata — leakage "
-              "guard disabled. Retrain with the current train_bert.py.")
+        _LOGGER.warning(
+            "checkpoint lacks 'datasets' metadata — leakage guard disabled. "
+            "Retrain with the current train_bert.py.")
     else:
         overlap = train_datasets & set(datasets)
         if overlap:
@@ -255,7 +264,7 @@ def predict(args) -> None:
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
 
-    cases = load_cases(
+    cases = load_predict_cases(
         datasets=datasets,
         root=Path(args.data_root),
         organs=organs,
@@ -264,6 +273,12 @@ def predict(args) -> None:
     pretty = ", ".join(f"{d}: {n}" for d, n in sorted(counts.items()))
     print(f"Predicting on {len(cases)} cases ({pretty})  "
           f"organs={sorted(organs)}")
+    if not cases:
+        reports_dir = Path(args.data_root) / "data" / datasets[0] / "reports"
+        raise SystemExit(
+            f"refusing to predict on 0 cases for {datasets} — check that "
+            f"{reports_dir} is populated and --organs={sorted(organs)} "
+            f"matches non-empty organ_n dirs there.")
 
     for case in tqdm(cases, desc="predict"):
         report = Path(case["report_path"]).read_text(encoding="utf-8")
@@ -318,6 +333,8 @@ def main() -> None:
         help="Drop cases where cancer_excision_report is False (no organ-specific "
              "fields to learn from).",
     )
+    ap.add_argument("--seed", type=int, default=42,
+                    help="Random seed for head init + data-shuffle order.")
     args = ap.parse_args()
 
     if args.phase == "train":

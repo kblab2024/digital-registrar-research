@@ -120,6 +120,19 @@ def _setup_logging(out_dir: Path, verbose: bool) -> logging.Logger:
     fh.setLevel(logging.DEBUG)
     logger.addHandler(fh)
     logger.propagate = False
+
+    # Fan out to the package logger so library modules' getLogger(__name__)
+    # calls (e.g. _data._LOGGER) reach the same console + _run.log. Without
+    # this, a "no reports under …" error from _walk_reports would land in
+    # the root logger's default handler (or be lost) and never make it to
+    # _run.log — exactly the silent-fail mode that hid the 0-cases bug.
+    pkg_logger = logging.getLogger("digital_registrar_research")
+    pkg_logger.handlers.clear()
+    pkg_logger.setLevel(logging.DEBUG)
+    pkg_logger.addHandler(console)
+    pkg_logger.addHandler(fh)
+    pkg_logger.propagate = False
+
     return logger
 
 
@@ -281,20 +294,45 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="Cancer-category names (breast, lung, ...) to keep.")
     ap.add_argument("--overwrite", action="store_true",
                     help="Reprocess cases even if a valid output exists.")
+    ap.add_argument("--run-id", default=None,
+                    help="If set (e.g. 'run01'), predictions land under "
+                         "{head}/{run_id}/{organ}/{case}.json instead of the "
+                         "single-run {head}/{organ}/{case}.json layout. Used "
+                         "by train_bert_multirun.py to write seeds into the "
+                         "runNN/ shape that cascade auto-discovers.")
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="Set console log level to DEBUG.")
     return ap.parse_args(argv)
 
 
 def _run_one_dataset(dataset: str, args: argparse.Namespace) -> int:
-    """Run cls/qa/merged for one dataset under canonical paths."""
+    """Run cls/qa/merged for one dataset under canonical paths.
+
+    With ``--run-id <slot>``, per-head outputs are written to
+    ``{pred_root}/{head}/{slot}/{organ}/{case}.json`` so that
+    ``scripts.eval.cascade.run_cascade`` can auto-discover the run via
+    ``Paths.discover_runs(model={head}, method='clinicalbert')`` after
+    the multi-run unlock. Without ``--run-id`` the legacy single-run
+    layout is preserved.
+    """
     pred_root = (args.experiment_root / "results" / "predictions"
                  / dataset / "clinicalbert")
-    cls_dir = pred_root / "cls"
-    qa_dir = pred_root / "qa"
-    merged_dir = pred_root / "merged"
+    run_slot = args.run_id  # may be None
+    if run_slot:
+        cls_dir = pred_root / "cls" / run_slot
+        qa_dir = pred_root / "qa" / run_slot
+        merged_dir = pred_root / "merged" / run_slot
+        # Side files live under the merged/ run dir so each seed has
+        # its own _summary / _run_meta / _run.log without clobbering
+        # siblings. merged is the canonical headline head.
+        side_dir = merged_dir
+    else:
+        cls_dir = pred_root / "cls"
+        qa_dir = pred_root / "qa"
+        merged_dir = pred_root / "merged"
+        side_dir = pred_root
 
-    logger = _setup_logging(pred_root, args.verbose)
+    logger = _setup_logging(side_dir, args.verbose)
     logger.info("experiment_root: %s", args.experiment_root)
     logger.info("dataset: %s", dataset)
     logger.info("heads: %s", args.heads)
@@ -327,8 +365,10 @@ def _run_one_dataset(dataset: str, args: argparse.Namespace) -> int:
 
     overall["finished_at"] = _utc_now_iso()
     overall["wall_time_s"] = round(time.perf_counter() - t_run, 1)
-    _atomic_write_json(pred_root / "_summary.json", overall)
-    _atomic_write_json(pred_root / "_run_meta.json", {
+    if run_slot:
+        overall["run_id"] = run_slot
+    _atomic_write_json(side_dir / "_summary.json", overall)
+    _atomic_write_json(side_dir / "_run_meta.json", {
         "method": "clinicalbert",
         "dataset": dataset,
         "experiment_root": str(args.experiment_root.resolve()),
@@ -336,6 +376,7 @@ def _run_one_dataset(dataset: str, args: argparse.Namespace) -> int:
         "ckpt_cls": str(args.ckpt_cls),
         "ckpt_qa": str(args.ckpt_qa),
         "organs": list(args.organs),
+        "run_id": run_slot,
         "started_at": started_at,
         "finished_at": overall["finished_at"],
         "git_sha": _git_sha(REPO_ROOT),
@@ -344,7 +385,7 @@ def _run_one_dataset(dataset: str, args: argparse.Namespace) -> int:
         "argv": sys.argv,
     })
 
-    print(f"[{dataset}] out dir: {pred_root}")
+    print(f"[{dataset}] out dir: {side_dir}")
     return 0
 
 

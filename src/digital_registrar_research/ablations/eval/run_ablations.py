@@ -1,38 +1,47 @@
 """
-Aggregate ablation cell predictions written under the canonical layout.
+Aggregate ablation cell predictions written under the canonical layout
+by delegating per-(cell, model) scoring to the cascade evaluator.
 
 Canonical layout (see ``runners/_base.py``):
 
     {root}/results/ablations/{dataset}/{cell_id}/{model_slug}/{run_id}/{organ_n}/{case_id}.json
 
-Per-cell × per-model × per-run grading reuses
-:mod:`benchmarks.eval.metrics`. Per-run results are emitted then
-aggregated across runs (mean per (cell, model, field)).
+Per-(cell, model) scoring runs ``scripts.eval.cli cascade --method
+ablation --cell <cell> --cell-model <model> ...`` which produces a
+``cascade_atomic.parquet`` under
+``{results_root}/{cell}/{model}/_cascade_eval/``. Each per-pair atomic
+already carries ``cell`` and ``model_slug`` columns (Phase D2 of the
+cascade-conformance migration). The orchestrator concatenates them
+into the master ``cascade_atomic.parquet`` and ``ablation_grid.csv``
+files used by the canonical-stats and ablation-stats layers.
 
 Output files, all under ``--results-root`` (default:
 ``{folder}/results/ablations/{dataset}/``):
 
+    cascade_atomic.parquet    full cascade atomic across (cell, model, run, case, field)
+    atomic.parquet            backward-compat alias (same content)
     ablation_grid.csv         long-form: one row per (cell, model, run, case, field)
     ablation_summary.csv      per-(cell, model, field): accuracy + coverage
     ablation_table.csv        pivot: rows=field, cols=<cell>_<model>, cells=accuracy
     cell_deltas.csv           per-field deltas vs the configured baseline
     efficiency.csv            mean / median latency, schema-error rate, parse-error rate
 
-Reviewer-grade statistical CSVs (``ablation_paired_deltas.csv`` etc.)
-are written by :mod:`stats` when ``--with-stats`` is on (default for
-non-smoke results-roots).
+Statistical CSVs (``ablation_paired_deltas.csv`` etc.) are written by
+:mod:`stats` when ``--with-stats`` is on (default for non-smoke
+results-roots).
 
 Usage::
 
     python -m digital_registrar_research.ablations.eval.run_ablations \\
         --folder dummy --dataset tcga
     python -m digital_registrar_research.ablations.eval.run_ablations \\
-        --results-root /custom/path/ablations
+        --results-root /custom/path/ablations --dataset tcga
 """
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -40,11 +49,14 @@ import pandas as pd
 
 from ...benchmarks.eval.metrics import (
     BREAST_BIOMARKERS,
+    # Legacy aggregator imports retained for the soft-fail / fallback
+    # path (`_grade_run`, `build_grid_dataframe`). The canonical scorer
+    # is now the cascade subprocess, but unit tests and any in-process
+    # caller that constructs grids directly still need these.
     FAIR_SCOPE,
     NESTED_LIST_FIELDS,
     match_nested_list,
     score_case,
-    summary_table,
 )
 from ...benchmarks.eval.scope import IMPLEMENTED_ORGANS
 
@@ -136,8 +148,407 @@ def _gold_for(case_id: str, organ_n: str, gold_root: Path) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Long-form scoring
+# Case- and field-level status classification
 # ---------------------------------------------------------------------------
+#
+# Mutually-exclusive case_status precedence. Earlier entries win when a
+# case carries multiple sentinels.
+CASE_STATUS_PRECEDENCE: tuple[str, ...] = (
+    "gold_missing",
+    "prediction_unreadable",
+    "pipeline_error",
+    "parse_error",
+    "schema_error",
+    "renest_error",
+    "b2_parse_error",
+    "section_error",
+    "skipped_intentional",
+    "ok",
+)
+
+# Case statuses under which a field can still be graded normally. The
+# others render every field unscoreable_due_to_case_error.
+_GRADABLE_CASE_STATUS: frozenset[str] = frozenset({
+    "ok",
+    "schema_error",
+    "renest_error",
+    "b2_parse_error",
+    "section_error",
+})
+
+
+def _classify_case(pred: dict | None,
+                   pred_unreadable_reason: str | None = None,
+                   gold_missing: bool = False,
+                   ) -> tuple[str, list[str]]:
+    """Resolve a case-level status from runner sentinel keys.
+
+    Reads the runner-emitted sentinels (``_pipeline_error``,
+    ``_parse_error`` / ``_error``, ``_schema_errors``,
+    ``_renest_errors``, ``_b2_parse_errors``, ``_per_section_errors``,
+    ``_skip_reason``) and resolves to a single ``case_status`` plus the
+    full list of truthy flags.
+
+    Args:
+        pred: parsed prediction dict, or None if unreadable.
+        pred_unreadable_reason: short repr of the parse exception, if
+            the prediction file failed to load. Forces
+            ``prediction_unreadable``.
+        gold_missing: whether the matching gold annotation is absent.
+            Forces ``gold_missing``.
+
+    Returns:
+        ``(case_status, flags)`` — ``flags`` is the list of every
+        truthy sentinel observed, in precedence order. Useful for
+        diagnostic columns; the chosen ``case_status`` is the first
+        entry of the precedence list that fired.
+    """
+    flags: list[str] = []
+    if gold_missing:
+        flags.append("gold_missing")
+    if pred_unreadable_reason is not None:
+        flags.append("prediction_unreadable")
+    if isinstance(pred, dict):
+        if pred.get("_pipeline_error"):
+            flags.append("pipeline_error")
+        if pred.get("_parse_error") or pred.get("_error"):
+            flags.append("parse_error")
+        if pred.get("_schema_errors"):
+            flags.append("schema_error")
+        if pred.get("_renest_errors"):
+            flags.append("renest_error")
+        if pred.get("_b2_parse_errors"):
+            flags.append("b2_parse_error")
+        if pred.get("_per_section_errors"):
+            flags.append("section_error")
+        if pred.get("_skip_reason") in ("not_cancer", "unknown_organ"):
+            flags.append("skipped_intentional")
+    if not flags:
+        flags.append("ok")
+    # Precedence resolution.
+    for status in CASE_STATUS_PRECEDENCE:
+        if status in flags:
+            return status, flags
+    return "ok", flags
+
+
+def _classify_field(case_status: str,
+                    gold: dict | None,
+                    pred: dict | None,
+                    field: str,
+                    scored: object,
+                    is_nested: bool = False,
+                    schema_errors: list[str] | None = None,
+                    ) -> tuple[str, str]:
+    """Resolve a field-level status given the case-level outcome and
+    the per-field scoring result from ``score_case`` / ``match_nested_list``.
+
+    Returns ``(field_status, field_error_detail)``. ``field_error_detail``
+    is ≤120 chars and is empty for ``correct`` rows.
+    """
+    if case_status not in _GRADABLE_CASE_STATUS:
+        return "unscoreable_due_to_case_error", ""
+
+    # Gold-presence check. Missing gold field is distinct from gold
+    # being null (which still scores against null).
+    g_value = None
+    if isinstance(gold, dict):
+        if field in gold:
+            g_value = gold.get(field)
+        else:
+            cd = gold.get("cancer_data") or {}
+            if field in cd:
+                g_value = cd.get(field)
+            else:
+                # biomarker_<X> fields live under cancer_data.biomarkers
+                if field.startswith("biomarker_"):
+                    bm = (cd.get("biomarkers") or {})
+                    if field[len("biomarker_"):] not in bm:
+                        return "gold_missing", ""
+                else:
+                    return "gold_missing", ""
+
+    # Nested fields (regional_lymph_node, margins): scored is a float
+    # F1 in (0, 1]. f1==1 → correct; f1==0 with any non-empty side →
+    # treat as wrong_value; in-between → misaligned_list.
+    if is_nested and isinstance(scored, (int, float)):
+        if scored >= 1.0:
+            return "correct", ""
+        if scored <= 0.0:
+            return "wrong_value", ""
+        return "misaligned_list", f"nested_f1={float(scored):.2f}"
+
+    # Scalar / list-of-literals fields.
+    if scored is True:
+        return "correct", ""
+    if scored is False:
+        # Distinguish wrong_type from wrong_value using schema errors
+        # that name this field.
+        detail = ""
+        if schema_errors:
+            for err in schema_errors:
+                if isinstance(err, str) and field in err:
+                    detail = err[:120]
+                    return "wrong_type", detail
+        return "wrong_value", _short_pred_gold(g_value, _pred_value(pred, field))
+    # scored is None: not attempted. Distinguish missing_key vs null_value.
+    if isinstance(pred, dict):
+        if _pred_has_key(pred, field):
+            return "null_value", ""
+        return "missing_key", ""
+    return "missing_key", ""
+
+
+def _pred_has_key(pred: dict, field: str) -> bool:
+    if field in pred:
+        return True
+    cd = pred.get("cancer_data") or {}
+    if field in cd:
+        return True
+    if field.startswith("biomarker_"):
+        bm = (cd.get("biomarkers") or {})
+        return field[len("biomarker_"):] in bm
+    return False
+
+
+def _pred_value(pred: dict | None, field: str):
+    if not isinstance(pred, dict):
+        return None
+    if field in pred:
+        return pred[field]
+    cd = pred.get("cancer_data") or {}
+    if field in cd:
+        return cd[field]
+    if field.startswith("biomarker_"):
+        bm = (cd.get("biomarkers") or {})
+        return bm.get(field[len("biomarker_"):])
+    return None
+
+
+def _short_pred_gold(gold_value, pred_value) -> str:
+    """Format a short ``gold=… pred=…`` description, ≤120 chars."""
+    g = repr(gold_value)
+    p = repr(pred_value)
+    if len(g) > 50:
+        g = g[:47] + "..."
+    if len(p) > 50:
+        p = p[:47] + "..."
+    out = f"gold={g} pred={p}"
+    return out[:120]
+
+
+# ---------------------------------------------------------------------------
+# Stale-install guard + correctness coercion
+# ---------------------------------------------------------------------------
+
+
+def _assert_package_consistent_with_repo() -> None:
+    """Fail loud if the imported package isn't from this file's src/.
+
+    A stale `pip install -e` pointing at a sibling checkout silently
+    loads code missing recent fixes (e.g. b7478ef's parquet-roundtrip
+    coercion), and the failure mode is opaque (0% accuracy in
+    per_field.csv). Catch it at startup instead.
+    """
+    import digital_registrar_research as pkg
+    pkg_src = Path(pkg.__file__).resolve().parent.parent
+    expected_src = Path(__file__).resolve().parents[3]
+    if pkg_src != expected_src:
+        raise SystemExit(
+            "[aggregate] package import mismatch — refusing to run.\n"
+            f"  imported digital_registrar_research from: {pkg_src}\n"
+            f"  but this run_ablations.py lives under:    {expected_src}\n"
+            "This usually means an editable install is pointing at a "
+            "sibling checkout. Run `pip install -e .` from the working-"
+            "tree root and retry."
+        )
+
+
+def _coerce_correctness_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Force ``correct`` / ``wrong`` to numeric float regardless of source dtype.
+
+    Pre-b7478ef per-pair ``_cascade_eval/cascade_atomic.parquet`` files hold
+    these columns as JSON-stringified bools (``"true"`` / ``"false"``) and
+    floats (``"0.5"``). Some pandas/pyarrow versions return StringDtype
+    rather than object dtype, so we coerce unconditionally — ``to_numeric``
+    on already-numeric data is a no-op.
+    """
+    for col in ("correct", "wrong"):
+        if col not in df.columns:
+            continue
+        s = df[col]
+        if pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s):
+            continue
+        s2 = s.astype("string").str.strip().str.lower()
+        s2 = s2.replace({"true": "1.0", "false": "0.0",
+                         "nan": pd.NA, "none": pd.NA, "": pd.NA})
+        df[col] = pd.to_numeric(s2, errors="coerce")
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Cascade-delegated scoring
+# ---------------------------------------------------------------------------
+#
+# The cascade evaluator is the canonical scorer. We loop over discovered
+# (cell, model) pairs and invoke ``python -m scripts.eval.cli cascade``
+# as a subprocess for each pair. The per-pair output lives under
+# ``_cascade_eval/`` so re-runs of run_ablations don't overwrite the
+# ablation prediction tree, and ``_discover_runs`` skips it via the
+# leading-underscore convention.
+
+
+def _score_pair_via_cascade(
+    *,
+    cell: str,
+    model: str,
+    run_ids: list[str],
+    experiment_root: Path,
+    dataset: str,
+    out_dir: Path,
+    device: str = "cpu",
+) -> pd.DataFrame:
+    """Run cascade for one (cell, model) pair and return its atomic frame.
+
+    Invokes ``python -m scripts.eval.cli cascade --method ablation``
+    in a subprocess. Reads the resulting ``cascade_atomic.parquet`` and
+    returns it as a DataFrame. Raises :class:`RuntimeError` if cascade
+    exits non-zero or the output parquet is missing.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        sys.executable, "-m", "scripts.eval.cli", "cascade",
+        "--root", str(experiment_root),
+        "--dataset", dataset,
+        "--method", "ablation",
+        "--cell", cell,
+        "--cell-model", model,
+        "--out", str(out_dir),
+        "--device", device,
+    ]
+    if run_ids:
+        cmd.extend(["--run-ids", *run_ids])
+    print(f"[aggregate] cascade: cell={cell} model={model} runs={run_ids or 'auto'}")
+    rc = subprocess.run(cmd, check=False).returncode
+    if rc != 0:
+        raise RuntimeError(
+            f"cascade subprocess for cell={cell} model={model} exited {rc}",
+        )
+    parquet = out_dir / "cascade_atomic.parquet"
+    if not parquet.is_file():
+        raise RuntimeError(
+            f"cascade did not produce {parquet} (cell={cell} model={model})",
+        )
+    df = pd.read_parquet(parquet)
+    # Older per-pair parquets were JSON-stringified by `write_parquet`
+    # because the cascade `correct` / `wrong` columns mix bool (Stage
+    # A/B/scalar-C) with float (Stage C nested F1). Restore numeric
+    # typing so the downstream remap / summary / canonical_stats /
+    # paired-bootstrap layers all see ``correct ∈ {0.0, 1.0, [0,1]}``
+    # rather than ``"true"`` / ``"false"`` / ``"0.5"`` strings.
+    for _col in ("correct", "wrong"):
+        if _col in df.columns and df[_col].dtype == object:
+            df[_col] = pd.to_numeric(
+                df[_col].replace(
+                    {"true": 1.0, "false": 0.0, "True": 1.0, "False": 0.0},
+                ),
+                errors="coerce",
+            )
+    return df
+
+
+def _remap_cascade_to_legacy_grid(df: pd.DataFrame) -> pd.DataFrame:
+    """Adapt cascade_atomic schema to the legacy ablation_grid columns.
+
+    Downstream consumers (canonical_stats, the legacy summary_table,
+    cell_deltas) expect: ``cell, model, run, case_id, organ, field,
+    correct, attempted, cancer_category_mismatch, method, case_status,
+    case_flags, field_status, field_error_detail``.
+
+    Mapping rules:
+      - ``method`` is composed as ``f"{cell}_{model_slug}"``.
+      - ``run`` <- ``run_id``.
+      - ``model`` <- ``model_slug`` (the underlying model, not the
+        composite). Preserves the legacy meaning of "model".
+      - ``cancer_category_mismatch`` <- True for Stage-C scalar rows
+        when ``cascade_stage == "C"`` and the case's Stage B was
+        wrong. Cascade gating means Stage-C only emits when Stage B
+        passed, so this column is always False — kept for schema
+        compatibility.
+      - ``case_status`` / ``case_flags``: derived from
+        ``parse_error`` / ``error_mode``.
+      - ``field_status`` / ``field_error_detail``: cascade's
+        ``field_kind``-aware mapping (parse_error,
+        unscoreable_due_to_case_error, gold_missing, missing_key,
+        correct, wrong_value).
+    """
+    if df.empty:
+        return pd.DataFrame(columns=[
+            "cell", "model", "run", "case_id", "organ", "field",
+            "correct", "attempted", "cancer_category_mismatch", "method",
+            "case_status", "case_flags", "field_status", "field_error_detail",
+            "cascade_stage", "field_kind",
+        ])
+    out = df.copy()
+    # `model_slug` is set by the cascade walker for ablation runs; fall
+    # back to `model` if missing (older atomics).
+    if "model_slug" not in out.columns:
+        out["model_slug"] = out["model"]
+    out["method"] = out["cell"].astype(str) + "_" + out["model_slug"].astype(str)
+    out["run"] = out["run_id"]
+    # Re-point `model` from the composite back to the underlying slug
+    # for legacy consumers that expect (method=composite, model=slug).
+    out["model"] = out["model_slug"]
+
+    def _row_status(r: pd.Series) -> tuple[str, str, str, str]:
+        """Returns (case_status, case_flags, field_status, field_error_detail)."""
+        if bool(r.get("parse_error")):
+            return ("parse_error", "parse_error",
+                    "unscoreable_due_to_case_error", "")
+        if not bool(r.get("gold_present", True)):
+            return ("ok", "ok", "gold_missing", "")
+        if bool(r.get("field_missing")):
+            return ("ok", "ok", "missing_key", "")
+        if r.get("correct") is True or r.get("correct") == 1:
+            return ("ok", "ok", "correct", "")
+        if r.get("correct") is False or r.get("correct") == 0:
+            gold_v = r.get("gold_value")
+            pred_v = r.get("pred_value")
+            detail = f"gold={gold_v!r} pred={pred_v!r}"[:120]
+            return ("ok", "ok", "wrong_value", detail)
+        # Float / nested F1 case (correct in [0, 1]).
+        c = r.get("correct")
+        if isinstance(c, (int, float)) and 0.0 < float(c) < 1.0:
+            return ("ok", "ok", "misaligned_list",
+                    f"nested_f1={float(c):.2f}")
+        return ("ok", "ok", "wrong_value", "")
+
+    statuses = out.apply(_row_status, axis=1)
+    out["case_status"] = [s[0] for s in statuses]
+    out["case_flags"] = [s[1] for s in statuses]
+    out["field_status"] = [s[2] for s in statuses]
+    out["field_error_detail"] = [s[3] for s in statuses]
+    out["cancer_category_mismatch"] = False  # gated to False under cascade
+
+    keep = [
+        "cell", "model", "run", "case_id", "organ", "field",
+        "correct", "attempted", "cancer_category_mismatch", "method",
+        "case_status", "case_flags", "field_status", "field_error_detail",
+        # Carry cascade staging through to the legacy grid so downstream
+        # consumers (canonical_stats) can restrict to Stage-C scalar
+        # rows. Without these, the per-method headlines flatten Stage A,
+        # Stage B, Stage-C scalar, and nested-list rows together — which
+        # inflates ``gold_missing`` because Stage-C emits a row per
+        # in-scope field even when the gold cancer_data lacks that key
+        # (gold sparseness, not a model defect).
+        "cascade_stage", "field_kind",
+    ]
+    return out[[c for c in keep if c in out.columns]].copy()
+
+
+# Legacy grading helpers retained for the soft-fail empty-grid path and
+# any unit tests that import them directly. The cascade walker is the
+# canonical scorer for live runs.
 
 def _grade_run(run_dir: Path, gold_root: Path,
                dataset: str | None = None) -> list[dict]:
@@ -158,19 +569,20 @@ def _grade_run(run_dir: Path, gold_root: Path,
         for pred_path in sorted(organ_dir.glob("*.json")):
             case_id = pred_path.stem
             gold = _gold_for(case_id, organ_n, gold_root)
-            if gold is None:
-                for field in FAIR_SCOPE:
-                    rows.append({
-                        "case_id": case_id, "organ": organ_n, "field": field,
-                        "correct": None, "attempted": False,
-                        "cancer_category_mismatch": False,
-                    })
-                continue
+            gold_missing = gold is None
+            pred: dict | object = {}
+            pred_unreadable_reason: str | None = None
             try:
                 with pred_path.open(encoding="utf-8") as f:
                     pred = json.load(f)
-            except Exception:
+            except Exception as exc:
                 pred = {}
+                pred_unreadable_reason = repr(exc)[:200]
+            case_status, case_flags = _classify_case(
+                pred if isinstance(pred, dict) else None,
+                pred_unreadable_reason=pred_unreadable_reason,
+                gold_missing=gold_missing,
+            )
             cc_mismatch = (
                 isinstance(pred, dict)
                 and isinstance(gold, dict)
@@ -182,31 +594,66 @@ def _grade_run(run_dir: Path, gold_root: Path,
                 print(f"[aggregate] cancer_category mismatch: case={case_id} "
                       f"folder={organ_n} gold={gold['cancer_category']!r} "
                       f"pred={pred['cancer_category']!r}")
-            if isinstance(pred, dict) and pred.get("_pipeline_error"):
+            schema_errors = (pred.get("_schema_errors")
+                             if isinstance(pred, dict) else None)
+            flags_str = "|".join(case_flags)
+
+            # When gold is missing OR the case is not gradable, emit
+            # FAIR_SCOPE rows with correct=None / attempted=False and
+            # the appropriate field_status.
+            if gold_missing or case_status not in _GRADABLE_CASE_STATUS:
                 for field in FAIR_SCOPE:
+                    f_status, f_detail = _classify_field(
+                        case_status, gold, pred if isinstance(pred, dict) else None,
+                        field, scored=None, is_nested=False,
+                        schema_errors=schema_errors,
+                    )
                     rows.append({
                         "case_id": case_id, "organ": organ_n, "field": field,
                         "correct": None, "attempted": False,
                         "cancer_category_mismatch": cc_mismatch,
+                        "case_status": case_status,
+                        "case_flags": flags_str,
+                        "field_status": f_status,
+                        "field_error_detail": f_detail,
                     })
                 continue
+
             result = score_case(gold, pred)
             for field in FAIR_SCOPE + [f"biomarker_{b}" for b in BREAST_BIOMARKERS]:
                 if field not in result:
                     continue
                 correct = result[field]
+                f_status, f_detail = _classify_field(
+                    case_status, gold, pred, field, scored=correct,
+                    is_nested=False, schema_errors=schema_errors,
+                )
                 rows.append({
                     "case_id": case_id, "organ": organ_n, "field": field,
                     "correct": (bool(correct) if correct is not None else None),
                     "attempted": correct is not None,
                     "cancer_category_mismatch": cc_mismatch,
+                    "case_status": case_status,
+                    "case_flags": flags_str,
+                    "field_status": f_status,
+                    "field_error_detail": f_detail,
                 })
             for nested_field, f1d in result.get("_nested", {}).items():
+                f1_val = f1d["f1"]
+                f_status, f_detail = _classify_field(
+                    case_status, gold, pred, nested_field,
+                    scored=f1_val, is_nested=True,
+                    schema_errors=schema_errors,
+                )
                 rows.append({
                     "case_id": case_id, "organ": organ_n,
                     "field": nested_field,
-                    "correct": f1d["f1"], "attempted": True,
+                    "correct": f1_val, "attempted": True,
                     "cancer_category_mismatch": cc_mismatch,
+                    "case_status": case_status,
+                    "case_flags": flags_str,
+                    "field_status": f_status,
+                    "field_error_detail": f_detail,
                 })
     return rows
 
@@ -326,10 +773,22 @@ def compute_cell_deltas(long_df: pd.DataFrame,
                         baseline_method: str) -> pd.DataFrame:
     """For each (model, field): Δ accuracy of every other cell vs the
     configured baseline. Point-estimate only; the rich CIs live in
-    ``ablation_paired_deltas.csv`` (written by :mod:`stats`)."""
+    ``ablation_paired_deltas.csv`` (written by :mod:`stats`).
+
+    Accepts either the cascade_atomic schema (with ``cascade_stage`` and
+    ``field_kind`` columns — filtered to Stage-C scalar before reduction)
+    or the legacy ablation_grid schema (no stage column — uses every
+    row).
+    """
     if long_df.empty or "method" not in long_df.columns:
         return pd.DataFrame()
-    df = long_df[long_df["attempted"] == True].copy()  # noqa: E712
+    df = long_df.copy()
+    if "cascade_stage" in df.columns:
+        df = df[df["cascade_stage"] == "C"]
+    if "field_kind" in df.columns:
+        df = df[df["field_kind"] != "nested_list"]
+    df = df[df["attempted"] == True]  # noqa: E712
+    df = _coerce_correctness_columns(df)
     df["accuracy"] = pd.to_numeric(df["correct"], errors="coerce")
 
     # Per-method × field mean accuracy.
@@ -349,6 +808,7 @@ def compute_cell_deltas(long_df: pd.DataFrame,
 # ---------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    _assert_package_consistent_with_repo()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--folder", dest="experiment_root", default=None,
                     type=Path,
@@ -370,6 +830,17 @@ def main(argv: list[str] | None = None) -> int:
                     help="also call ablations.eval.stats.run_all "
                          "(default: ON for real results-root, OFF for _smoke_)")
     ap.add_argument("--no-stats", dest="with_stats", action="store_false")
+    ap.add_argument("--with-chapter-outputs", dest="with_chapter_outputs",
+                    action="store_true", default=None,
+                    help="emit cross-cell 5-chapter cascade rollup under "
+                         "results_root/chapterN_*/ (default: ON for real "
+                         "results-root, OFF for _smoke_)")
+    ap.add_argument("--no-chapter-outputs", dest="with_chapter_outputs",
+                    action="store_false")
+    ap.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"),
+                    default="cpu",
+                    help="Device for the canonical_stats and ablations.stats "
+                         "paired-bootstrap layers. Default: cpu (safety net).")
     args = ap.parse_args(argv)
 
     # Resolve --folder via the same shortcut as the runners.
@@ -387,30 +858,172 @@ def main(argv: list[str] | None = None) -> int:
 
     runs = _discover_runs(results_root, cells=args.cells, models=args.models)
     if not runs:
-        sys.exit(f"No completed runs found under {results_root}.")
+        # Soft-fail: emit empty CSVs with full headers so downstream
+        # consumers (multirun, paper-table orchestrators) can still run
+        # to completion.
+        print(f"[aggregate][warn] No completed runs found under "
+              f"{results_root}. Writing empty summary scaffolding.",
+              file=sys.stderr)
+        results_root.mkdir(parents=True, exist_ok=True)
+        empty_grid_cols = [
+            "cell", "model", "run", "case_id", "organ", "field",
+            "correct", "attempted", "cancer_category_mismatch", "method",
+            "case_status", "case_flags", "field_status", "field_error_detail",
+        ]
+        pd.DataFrame(columns=empty_grid_cols).to_csv(
+            results_root / "ablation_grid.csv", index=False)
+        pd.DataFrame(columns=empty_grid_cols).to_parquet(
+            results_root / "atomic.parquet")
+        pd.DataFrame(columns=[
+            "method", "field", "attempted", "total",
+            "coverage", "accuracy_attempted",
+        ]).to_csv(results_root / "ablation_summary.csv", index=False)
+        return 0
 
     print(f"[aggregate] results_root={results_root}")
     print(f"[aggregate] gold_root={gold_root}")
     print(f"[aggregate] discovered {len(runs)} runs across "
           f"{len({(c, m) for c, m, _, _ in runs})} (cell, model) pairs")
 
-    grid_df = build_grid_dataframe(runs, gold_root, dataset=args.dataset)
+    # --- Cascade-delegated scoring per (cell, model) pair --------------
+    # Determine the dataset to pass to cascade. Prefer the explicit flag;
+    # otherwise infer from the results_root path (which is canonically
+    # ``{folder}/results/ablations/{dataset}``).
+    dataset = args.dataset or _infer_dataset(results_root)
+    if not dataset:
+        raise SystemExit(
+            "could not infer dataset for cascade scoring; "
+            "pass --dataset explicitly.",
+        )
+    experiment_root = (
+        Path(args.experiment_root)
+        if args.experiment_root is not None
+        else _infer_experiment_root(results_root)
+    )
+
+    # Group runs by (cell, model) and delegate one cascade invocation per pair.
+    by_pair: dict[tuple[str, str], list[str]] = {}
+    for cell, model, run_id, _run_dir in runs:
+        by_pair.setdefault((cell, model), []).append(run_id)
+
+    per_pair_atomics: list[pd.DataFrame] = []
+    per_pair_nested: list[pd.DataFrame] = []
+    device = getattr(args, "device", "cpu")
+    for (cell, model), run_ids in by_pair.items():
+        cascade_out = results_root / cell / model / "_cascade_eval"
+        cached = cascade_out / "cascade_atomic.parquet"
+        if cached.is_file():
+            # A previous cascade run on this (cell, model) pair already
+            # produced the per-pair atomic. Reuse it so the aggregator
+            # works on a merged-from-multiple-machines tree where the
+            # canonical experiment root isn't reconstructable. Restore
+            # numeric typing on `correct` / `wrong` for old parquets
+            # written before the write_parquet fix.
+            print(f"[aggregate] reusing cached cascade output: {cached}")
+            atomic = pd.read_parquet(cached)
+            for _col in ("correct", "wrong"):
+                if _col in atomic.columns and atomic[_col].dtype == object:
+                    atomic[_col] = pd.to_numeric(
+                        atomic[_col].replace(
+                            {"true": 1.0, "false": 0.0,
+                             "True": 1.0, "False": 0.0},
+                        ),
+                        errors="coerce",
+                    )
+        else:
+            if experiment_root is None:
+                raise SystemExit(
+                    "could not infer experiment root for cascade scoring; "
+                    "pass --folder explicitly.",
+                )
+            atomic = _score_pair_via_cascade(
+                cell=cell, model=model, run_ids=sorted(set(run_ids)),
+                experiment_root=experiment_root, dataset=dataset,
+                out_dir=cascade_out, device=device,
+            )
+        per_pair_atomics.append(atomic)
+        # Collect the nested sidecar emitted alongside cascade_atomic
+        # (run_cascade.py:246). Required input for chapter4/5 reducers
+        # in the cross-cell rollup. Pairs that produced no nested rows
+        # (e.g. cells with no margins / LN content) simply skip.
+        nested_path = cascade_out / "cascade_nested.parquet"
+        if nested_path.is_file():
+            try:
+                per_pair_nested.append(pd.read_parquet(nested_path))
+            except Exception as exc:
+                print(f"[aggregate][warn] failed to read {nested_path}: {exc!r}",
+                      file=sys.stderr)
+
+    cascade_atomic = pd.concat(per_pair_atomics, ignore_index=True)
+    cascade_atomic = _coerce_correctness_columns(cascade_atomic)
+    print(f"[aggregate] correct dtype after coerce: "
+          f"{cascade_atomic['correct'].dtype}; "
+          f"sample: {cascade_atomic['correct'].head(5).tolist()}")
+    cascade_atomic_path = results_root / "cascade_atomic.parquet"
+    # Route through scripts.eval._common.reporting.write_parquet — it
+    # coerces mixed-type object columns (bool gold_value in Stage A
+    # rows, str gold_value in Stage C scalar rows) to JSON strings so
+    # pyarrow can serialise them without a type-inference failure. The
+    # per-pair parquets already use this helper; the master parquet
+    # must too.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "scripts"))
+    from eval._common.reporting import write_parquet  # noqa: E402
+    try:
+        write_parquet(cascade_atomic, cascade_atomic_path)
+        print(f"Wrote {cascade_atomic_path}  ({len(cascade_atomic)} rows)")
+    except Exception as exc:
+        print(f"[aggregate][warn] failed to write {cascade_atomic_path}: {exc!r}",
+              file=sys.stderr)
+
+    # Master nested sidecar — concat the per-pair cascade_nested.parquet
+    # files so the chapter4 (margins) and chapter5 (LN) reducers have a
+    # single-source-of-truth input for the cross-cell rollup.
+    cascade_nested = (
+        pd.concat(per_pair_nested, ignore_index=True)
+        if per_pair_nested else pd.DataFrame()
+    )
+    if not cascade_nested.empty:
+        cascade_nested_path = results_root / "cascade_nested.parquet"
+        try:
+            write_parquet(cascade_nested, cascade_nested_path)
+            print(f"Wrote {cascade_nested_path}  ({len(cascade_nested)} rows)")
+        except Exception as exc:
+            print(f"[aggregate][warn] failed to write {cascade_nested_path}: "
+                  f"{exc!r}", file=sys.stderr)
+
+    # Backward-compat outputs: legacy ablation_grid schema for
+    # canonical_stats and the legacy summary/pivot tables.
+    grid_df = _remap_cascade_to_legacy_grid(cascade_atomic)
     grid_csv = results_root / "ablation_grid.csv"
     grid_df.to_csv(grid_csv, index=False)
     print(f"Wrote {grid_csv}  ({len(grid_df)} rows)")
 
-    summary = summary_table(grid_df.rename(columns={}))  # method col present
+    atomic_path = results_root / "atomic.parquet"
+    try:
+        write_parquet(grid_df, atomic_path)
+        print(f"Wrote {atomic_path}  ({len(grid_df)} rows)")
+    except Exception as exc:
+        print(f"[aggregate][warn] failed to write {atomic_path}: {exc!r}",
+              file=sys.stderr)
+
+    # Per-method × field summary derived from cascade_atomic. Replaces
+    # the legacy ``summary_table`` aggregator with a Stage-C scalar
+    # reduction.
+    summary = _summary_from_cascade_atomic(cascade_atomic)
     summary_path = results_root / "ablation_summary.csv"
     summary.to_csv(summary_path, index=False)
     print(f"Wrote {summary_path}")
 
-    pivot = summary.pivot_table(
-        index="field", columns="method",
-        values="accuracy_attempted", aggfunc="first")
-    pivot.to_csv(results_root / "ablation_table.csv")
-    print(f"Wrote {results_root / 'ablation_table.csv'}")
+    if not summary.empty:
+        pivot = summary.pivot_table(
+            index="field", columns="method",
+            values="accuracy_attempted", aggfunc="first")
+        pivot.to_csv(results_root / "ablation_table.csv")
+        print(f"Wrote {results_root / 'ablation_table.csv'}")
+    else:
+        pivot = pd.DataFrame()
 
-    deltas = compute_cell_deltas(grid_df, args.baseline)
+    deltas = compute_cell_deltas(cascade_atomic, args.baseline)
     if not deltas.empty:
         deltas_path = results_root / "cell_deltas.csv"
         deltas.to_csv(deltas_path, index=False)
@@ -422,20 +1035,130 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Wrote {results_root / 'efficiency.csv'}")
 
     is_smoke = results_root.name.startswith("_smoke")
+
+    # Cross-cell 5-chapter cascade rollup (mirrors production cascade
+    # tree). Emits chapter1..chapter5 directories under results_root.
+    # Wrapped in try/except so a regression here doesn't fail the
+    # existing flat-output pipeline.
+    with_chapter_outputs = (
+        args.with_chapter_outputs if args.with_chapter_outputs is not None
+        else not is_smoke
+    )
+    if with_chapter_outputs:
+        try:
+            from . import chapter_aggregation
+            chapter_aggregation.emit_chapter_outputs(
+                cascade_atomic, cascade_nested,
+                out_root=results_root,
+                baseline_method=args.baseline,
+            )
+            print(f"[aggregate] wrote 5-chapter rollup under {results_root}")
+        except Exception as exc:
+            print(f"[aggregate][warn] chapter emission failed: {exc!r}",
+                  file=sys.stderr)
+
+    # Canonical statistics suite — runs against the legacy long-form
+    # grid (already remapped from cascade_atomic above). ``method``
+    # column is built as f"{cell}_{model}"; the modular baseline
+    # supplied via --baseline becomes the comparator.
+    try:
+        from . import canonical_stats
+        canonical_stats.run_canonical_stats(
+            grid_df, modular_method=args.baseline, out_dir=results_root,
+            device=device)
+    except Exception as exc:
+        print(f"[aggregate][warn] canonical stats layer failed: {exc!r}",
+              file=sys.stderr)
+
     with_stats = args.with_stats if args.with_stats is not None else not is_smoke
     if with_stats:
         from . import stats as ablation_stats
         try:
             outputs = ablation_stats.run_all(
-                results_root, baseline_method=args.baseline)
+                results_root, baseline_method=args.baseline, device=device)
             for stage, path in outputs.items():
                 print(f"Wrote {path}  (stats: {stage})")
         except Exception as exc:
             print(f"[warn] stats layer failed: {exc!r}")
 
-    print("\nper-method mean accuracy:")
-    print(pivot.mean().to_string())
+    if not pivot.empty:
+        print("\nper-method mean accuracy:")
+        print(pivot.mean().to_string())
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Cascade-atomic helpers
+# ---------------------------------------------------------------------------
+
+def _infer_dataset(results_root: Path) -> str | None:
+    """Best-effort: parse the dataset from a canonical ablations path.
+
+    Canonical: ``{root}/results/ablations/{dataset}``. The trailing dir
+    name is the dataset. Returns None for non-canonical layouts.
+    """
+    name = results_root.name
+    if name in ("cmuh", "tcga"):
+        return name
+    return None
+
+
+def _infer_experiment_root(results_root: Path) -> Path | None:
+    """Best-effort: walk up from ``{root}/results/ablations/{dataset}`` to ``{root}``."""
+    parents = list(results_root.parents)
+    # Expect parents[0]=ablations, parents[1]=results, parents[2]=root.
+    if len(parents) >= 3 and parents[0].name == "ablations" and parents[1].name == "results":
+        return parents[2]
+    return None
+
+
+def _summary_from_cascade_atomic(df: pd.DataFrame) -> pd.DataFrame:
+    """Per (method, field) accuracy + coverage derived from cascade_atomic.
+
+    Returns a long-form DataFrame with columns:
+        method, field, attempted, total, coverage, accuracy_attempted
+
+    Filters to Stage-C scalar rows; nested-list F1 means are reported in
+    the chapter4/chapter5 outputs of each per-pair cascade run, not
+    here.
+    """
+    if df.empty:
+        return pd.DataFrame(
+            columns=["method", "field", "attempted", "total",
+                     "coverage", "accuracy_attempted"],
+        )
+    sub = df.copy()
+    sub = _coerce_correctness_columns(sub)
+    if "cascade_stage" in sub.columns:
+        sub = sub[sub["cascade_stage"] == "C"]
+    if "field_kind" in sub.columns:
+        sub = sub[sub["field_kind"] != "nested_list"]
+    # `method` for ablation atomics is just "ablation"; the joint key
+    # consumers rely on is `f"{cell}_{model_slug}"`.
+    if "model_slug" not in sub.columns:
+        sub = sub.assign(model_slug=sub.get("model"))
+    sub = sub.assign(
+        joint_method=sub["cell"].astype(str) + "_" + sub["model_slug"].astype(str),
+    )
+    rows: list[dict] = []
+    for (method, field), grp in sub.groupby(["joint_method", "field"]):
+        attempted = int(grp["attempted"].fillna(False).astype(bool).sum())
+        total = int(len(grp))
+        n_correct = int(
+            pd.to_numeric(
+                grp.loc[grp["attempted"].fillna(False).astype(bool), "correct"],
+                errors="coerce",
+            ).fillna(0).astype(bool).sum()
+        )
+        rows.append({
+            "method": method,
+            "field": field,
+            "attempted": attempted,
+            "total": total,
+            "coverage": (attempted / total) if total else float("nan"),
+            "accuracy_attempted": (n_correct / attempted) if attempted else float("nan"),
+        })
+    return pd.DataFrame(rows)
 
 
 if __name__ == "__main__":

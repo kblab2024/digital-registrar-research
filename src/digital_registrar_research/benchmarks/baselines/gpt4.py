@@ -7,14 +7,20 @@ isolates the contribution of model capacity from pipeline design: the
 signatures, prompts, and post-processing are all held constant.
 
 Cases are discovered the same way as the BERT baselines: walk
-``<folder>/data/<dataset>/annotations/gold/`` via
-``benchmarks.baselines._data.load_cases``. The cross-corpus contract
-is "predict on TCGA, full corpus" — TCGA is held out from any model
-that's trained on CMUH, so there is no in-corpus split to honor.
+``<folder>/data/<dataset>/reports/<organ_n>/*.txt`` via
+``benchmarks.baselines._data.load_predict_cases`` (gold annotations are
+optional for predict-side runs). The cross-corpus contract is "predict
+on TCGA, full corpus" — TCGA is held out from any model that's trained
+on CMUH, so there is no in-corpus split to honor.
 
 Requires:
     pip install dspy-ai openai
-    set OPENAI_API_KEY=sk-...
+
+The OpenAI API key is read from ``<repo_root>/researchtemp/env/.env``
+(the ``researchtemp/`` tree is git-ignored except for ``.gitkeep``).
+The file uses dotenv ``KEY=VALUE`` syntax — at minimum a single line:
+``OPENAI_API_KEY=sk-...``. ``OPENAI_API_KEY`` in the process
+environment takes precedence if set.
 
 Usage:
     python -m digital_registrar_research.benchmarks.baselines.gpt4 \\
@@ -26,7 +32,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import time
 from pathlib import Path
 
@@ -34,8 +39,9 @@ import dspy
 
 from ...paths import BENCHMARKS_RESULTS
 from ...pipeline import CancerPipeline
+from ...util.secrets import load_openai_key
 from .. import organs as _organs
-from ._data import load_cases
+from ._data import load_predict_cases
 
 DEFAULT_MODEL = "openai/gpt-4-turbo"  # swap to "openai/gpt-4o" if preferred
 DEFAULT_DATASETS = ("tcga",)
@@ -43,10 +49,7 @@ DEFAULT_ORGANS = list(_organs.common_organs("cmuh", "tcga"))
 
 
 def setup_gpt4(model_id: str = DEFAULT_MODEL) -> CancerPipeline:
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY not set. Provision the key before running.")
+    api_key = load_openai_key()
     lm = dspy.LM(
         model=model_id,
         api_key=api_key,
@@ -62,7 +65,7 @@ def run_on_dataset(folder: Path, datasets: list[str], out_dir: Path,
                    model_id: str = DEFAULT_MODEL,
                    organs: set[str] | None = None) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    cases = load_cases(datasets=datasets, root=folder, organs=organs)
+    cases = load_predict_cases(datasets=datasets, root=folder, organs=organs)
     if limit is not None:
         cases = cases[:limit]
 

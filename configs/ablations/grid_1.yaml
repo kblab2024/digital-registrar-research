@@ -28,11 +28,13 @@ runs:
     model: gptoss
     args: {}
 
-  # Condition 3: monolithic DSPy without ReportJsonize
-  - cell: dspy_monolithic
+  # Condition 3: monolithic DSPy without ReportJsonize.
+  # Separate cell so its output lands at
+  #   results/ablations/{dataset}/dspy_monolithic_no_jsonize/{model_slug}/...
+  # instead of colliding with condition 2's `dspy_monolithic` folder.
+  - cell: dspy_monolithic_no_jsonize
     model: gptoss
-    args:
-      skip_jsonize: true
+    args: {}
 
   # Condition 4: no DSPy at all — raw JSON-mode against local Ollama
   - cell: raw_json

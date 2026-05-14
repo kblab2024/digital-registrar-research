@@ -181,17 +181,31 @@ def _split_method(method: str, *,
 # ``free``. Keep in sync with ``runners/`` directory.
 _KNOWN_CELL_IDS: tuple[str, ...] = tuple(sorted((
     "chain_of_thought", "compiled_dspy", "constrained_decoding",
-    "dspy_modular", "dspy_monolithic", "fewshot_demos", "flat_schema",
+    "dspy_modular", "dspy_monolithic", "dspy_monolithic_no_jsonize",
+    "fewshot_demos", "flat_schema",
     "free_text_regex", "minimal_prompt", "no_router", "per_section",
     "raw_json", "reuse_baseline", "str_outputs", "union_schema",
 ), key=len, reverse=True))
 
 
 def _load_grid(results_root: Path) -> pd.DataFrame:
+    """Load the long-form correctness grid for stats consumption.
+
+    Prefers ``cascade_atomic.parquet`` (the canonical scorer output);
+    derives the legacy ``method``, ``cell``, ``model``, ``run``, and
+    ``seed`` columns from the cascade schema and filters to Stage-C
+    scalar rows (stats functions reduce on binary correctness, not
+    nested F1). Falls back to ``ablation_grid.csv`` when the parquet
+    is absent.
+    """
+    cascade_path = results_root / "cascade_atomic.parquet"
+    if cascade_path.exists():
+        return _adapt_cascade_atomic_for_stats(pd.read_parquet(cascade_path))
     grid_path = results_root / GRID_CSV
     if not grid_path.exists():
         raise FileNotFoundError(
-            f"{grid_path} not found — run the aggregator first.")
+            f"neither cascade_atomic.parquet nor {grid_path} found — "
+            f"run the aggregator first.")
     df = pd.read_csv(grid_path)
     # Prefer explicit cell/model columns when the aggregator emitted
     # them (current behaviour) — the underscore parsing is brittle
@@ -201,6 +215,96 @@ def _load_grid(results_root: Path) -> pd.DataFrame:
         df["cell"] = [c for c, _ in cells_models]
         df["model"] = [m for _, m in cells_models]
     return df
+
+
+def _adapt_cascade_atomic_for_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Project ``cascade_atomic`` rows onto the stats-consumer schema.
+
+    Stats functions reduce on binary correctness (``correct ∈ {0, 1}``)
+    keyed by ``(cell, model, field, case_id)``. Cascade atomic stores
+    F1 floats in nested-list rows and rows for Stage A/B that aren't
+    fields-of-interest here. Filter to Stage-C scalar, then derive the
+    legacy column names from cascade columns:
+
+    - ``method`` ← ``f"{cell}_{model_slug}"`` (joint key for the
+      stats consumers)
+    - ``model`` ← ``model_slug`` (revert from the composite that the
+      cascade walker stamped onto ``model`` for ablation runs)
+    - ``run``  ← ``run_id``
+    - ``seed`` ← ``run_id`` (so :func:`_detect_seed_column` finds a
+      seed dimension; multi-run ablation cells use ``run_id`` as
+      their seed identifier)
+
+    Schema audit (vs. cascade builder at scripts/eval/cascade/run_cascade.py
+    ``_build_atomic_and_ledger``): cascade emits ``run_id, method, model,
+    annotator, case_id, organ_idx, organ, subgroup, dataset, cell,
+    model_slug, cascade_stage, gate_pass, others_disposition, field,
+    field_kind, gold_present, attempted, correct, wrong, field_missing,
+    parse_error, error_mode, gold_value, pred_value``. Every column read
+    below exists in cascade output. Value sets: ``cascade_stage`` ∈
+    {"A", "B", "C"}; ``field_kind`` ∈ {"binary", "nominal", "nested_list"}.
+    """
+    if df.empty:
+        return df
+    sub = df.copy()
+    if "cascade_stage" in sub.columns:
+        sub = sub[sub["cascade_stage"] == "C"]
+    if "field_kind" in sub.columns:
+        sub = sub[sub["field_kind"] != "nested_list"]
+    if sub.empty:
+        return sub
+    if "model_slug" not in sub.columns:
+        sub["model_slug"] = sub.get("model", "")
+    sub["model"] = sub["model_slug"]
+    sub["method"] = (
+        sub["cell"].astype(str) + "_" + sub["model_slug"].astype(str)
+    )
+    sub["run"] = sub["run_id"]
+    if "seed" not in sub.columns:
+        sub["seed"] = sub["run_id"]
+    # When cascade_atomic was written via _common.reporting.write_parquet
+    # with mixed bool / float `correct` rows (scalar Stage C + nested
+    # Stage C in the same column), the helper JSON-stringifies the
+    # column ("true" / "false" / "0.5"). Stats consumers reduce on
+    # numeric correctness, so coerce back. Stage-C nested rows have
+    # already been dropped above.
+    sub["correct"] = _coerce_str_correct(sub["correct"])
+    sub["attempted"] = sub["attempted"].apply(_coerce_bool_str).astype(bool)
+    return sub
+
+
+def _coerce_str_correct(s: pd.Series) -> pd.Series:
+    """Map a possibly-stringified correctness column to floats in {0, 1}."""
+    def _one(v):
+        if v is None:
+            return float("nan")
+        if isinstance(v, bool):
+            return 1.0 if v else 0.0
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            lv = v.strip().lower()
+            if lv == "true":
+                return 1.0
+            if lv == "false":
+                return 0.0
+            try:
+                return float(lv)
+            except ValueError:
+                return float("nan")
+        return float("nan")
+    return s.apply(_one)
+
+
+def _coerce_bool_str(v) -> bool:
+    """Map "true" / True / 1 / etc. to bool; everything else to False."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str):
+        return v.strip().lower() == "true"
+    return False
 
 
 def _load_axes(path: Path = DEFAULT_AXES_PATH) -> dict[str, str]:
@@ -234,6 +338,35 @@ def _coerce_correct(series: pd.Series) -> pd.Series:
 # 1. Paired deltas vs baseline
 # ---------------------------------------------------------------------------
 
+def _collapse_runs_per_case_field(df: pd.DataFrame) -> pd.DataFrame:
+    """Reduce a (case_id, field, run_id, ...) frame to one row per
+    (case_id, field) by averaging ``correct_f`` and OR-reducing
+    ``attempted`` across runs.
+
+    Required for paired-Δ semantics under multirun: per-run pairing
+    would inflate ``n_paired`` with non-independent observations
+    (75 cases × 3 runs read as 225 paired draws), under-covering the
+    bootstrap. Collapsing first means ``a, b ∈ [0, 1]`` carry the
+    per-case probability-of-correct across runs — meaningful and
+    matches the "paired *case* deltas" docstring promise.
+
+    Multi-machine multirun grids (``run_id`` like ``run01-alpha2`` /
+    ``run02-beta2``) collapse the same way: the slug suffix is part of
+    ``run_id`` but doesn't affect the (case_id, field) key.
+    """
+    if df.empty:
+        return df.assign(correct_f=pd.Series(dtype=float))
+    work = df.copy()
+    work["correct_f"] = _coerce_correct(work["correct"])
+    work["attempted"] = work["attempted"].astype(bool)
+    grouped = (
+        work.groupby(["case_id", "field"], as_index=False)
+            .agg(correct_f=("correct_f", "mean"),
+                 attempted=("attempted", "any"))
+    )
+    return grouped
+
+
 def paired_deltas_vs_baseline(
     grid_df: pd.DataFrame,
     *,
@@ -241,6 +374,7 @@ def paired_deltas_vs_baseline(
     n_boot: int = 2000,
     alpha: float = 0.05,
     random_state: int = 0,
+    device: str = "cpu",
 ) -> pd.DataFrame:
     """For every (cell, model, field) ≠ baseline: paired-bootstrap Δ + McNemar.
 
@@ -248,14 +382,25 @@ def paired_deltas_vs_baseline(
     columns: ``cell, model, field, n_paired, baseline_acc, target_acc,
     delta, ci_lo, ci_hi, mcnemar_b, mcnemar_c, mcnemar_stat,
     mcnemar_p, mcnemar_method``.
+
+    Multirun semantics: when either side has multiple ``run_id`` per
+    (case_id, field), runs are collapsed to one row per (case_id, field)
+    via ``mean(correct_f)`` (probability-of-correct across runs) and
+    ``any(attempted)``. The bootstrap then operates on per-case
+    probabilities ``a, b ∈ [0, 1]``. For McNemar, each case is
+    threshold-collapsed at ``correct >= 0.5`` (majority-vote-correct,
+    ties counted as correct), then discordant counts are computed on
+    the resulting binary vectors. The per-run variance is reported
+    separately by the cascade chapter ``multirun_consistency.csv``
+    outputs — not duplicated here.
     """
     if baseline_method not in grid_df["method"].unique():
         logger.warning("baseline %r not present in grid — skipping deltas",
                        baseline_method)
         return pd.DataFrame()
 
-    base_df = grid_df[grid_df["method"] == baseline_method].copy()
-    base_df["correct_f"] = _coerce_correct(base_df["correct"])
+    base_df = _collapse_runs_per_case_field(
+        grid_df[grid_df["method"] == baseline_method].copy())
     base_lookup = base_df.set_index(["case_id", "field"])["correct_f"]
     base_attempt = base_df.set_index(["case_id", "field"])["attempted"]
 
@@ -268,9 +413,8 @@ def paired_deltas_vs_baseline(
             model = str(group["model"].iloc[0])
         else:
             cell, model = _split_method(method)
-        group = group.copy()
-        group["correct_f"] = _coerce_correct(group["correct"])
-        for field, sub in group.groupby("field"):
+        target_df = _collapse_runs_per_case_field(group)
+        for field, sub in target_df.groupby("field"):
             sub = sub.set_index("case_id")
             try:
                 base_for_field = base_lookup.xs(field, level="field")
@@ -280,11 +424,13 @@ def paired_deltas_vs_baseline(
             common = sub.index.intersection(base_for_field.index)
             if not len(common):
                 continue
+            # `common` is unique post-collapse; .loc returns one row per
+            # case_id on both sides, so the boolean mask matches `common`.
             attempted_both = (
-                sub.loc[common, "attempted"].astype(bool)
-                & base_attempt_for_field.loc[common].astype(bool)
+                sub.loc[common, "attempted"].astype(bool).to_numpy()
+                & base_attempt_for_field.loc[common].astype(bool).to_numpy()
             )
-            common_attempted = common[attempted_both.values]
+            common_attempted = common[attempted_both]
             if not len(common_attempted):
                 continue
             a = base_for_field.loc[common_attempted].to_numpy(dtype=float)
@@ -294,9 +440,12 @@ def paired_deltas_vs_baseline(
             n_paired = a.size
             if n_paired == 0:
                 continue
-            res = paired_bootstrap_diff(b, a,  # target − baseline
-                                        n_boot=n_boot, alpha=alpha,
-                                        random_state=random_state)
+            from digital_registrar_research.benchmarks.eval import ci_gpu
+            res = ci_gpu.paired_bootstrap_diff(
+                b, a,  # target − baseline
+                n_boot=n_boot, alpha=alpha,
+                random_state=random_state, device=device,
+            )
             row = {
                 "cell": cell, "model": model, "field": field,
                 "n_paired": n_paired,
@@ -306,14 +455,18 @@ def paired_deltas_vs_baseline(
                 "ci_lo": res.lo,
                 "ci_hi": res.hi,
             }
-            # McNemar for binary correctness fields
+            # McNemar — threshold at >= 0.5 (majority-vote-correct,
+            # ties→correct) so multirun probability-of-correct collapses
+            # cleanly to binary discordance counts.
+            a_bin = (a >= 0.5).astype(float)
+            b_bin = (b >= 0.5).astype(float)
             is_binary = (
                 field in PRIMARY_BINARY_FIELDS
-                or set(np.unique(np.concatenate([a, b]))) <= {0.0, 1.0}
+                or set(np.unique(np.concatenate([a_bin, b_bin]))) <= {0.0, 1.0}
             )
             if is_binary:
-                disc_b = int(np.sum((a == 1.0) & (b == 0.0)))
-                disc_c = int(np.sum((a == 0.0) & (b == 1.0)))
+                disc_b = int(np.sum((a_bin == 1.0) & (b_bin == 0.0)))
+                disc_c = int(np.sum((a_bin == 0.0) & (b_bin == 1.0)))
                 mc = mcnemar_test(disc_b, disc_c)
                 row.update({
                     "mcnemar_b": disc_b, "mcnemar_c": disc_c,
@@ -726,57 +879,28 @@ def effect_sizes_per_field(
     return pd.DataFrame(out_rows)
 
 
-def cancer_category_mismatch_stats(grid_df: pd.DataFrame) -> pd.DataFrame:
-    """Per (cell, model): count unique cases whose prediction's
-    ``cancer_category`` disagrees with gold's, plus the rate over
-    gradable cases.
-
-    Returns columns ``cell, model, n_cases, n_cancer_category_mismatch,
-    rate``. Empty DataFrame if the grid lacks the mismatch column
-    (older grid CSVs predating gold-vs-pred tracking).
-    """
-    if "cancer_category_mismatch" not in grid_df.columns:
-        return pd.DataFrame()
-    if grid_df.empty:
-        return pd.DataFrame()
-
-    out_rows: list[dict] = []
-    for (cell, model), group in grid_df.groupby(["cell", "model"]):
-        n_cases = int(group["case_id"].nunique())
-        if n_cases == 0:
-            continue
-        flagged_cases = (
-            group.loc[group["cancer_category_mismatch"], "case_id"]
-            .nunique()
-        )
-        n_mismatch = int(flagged_cases)
-        out_rows.append({
-            "cell": str(cell),
-            "model": str(model),
-            "n_cases": n_cases,
-            "n_cancer_category_mismatch": n_mismatch,
-            "rate": (n_mismatch / n_cases) if n_cases else float("nan"),
-        })
-    return pd.DataFrame(out_rows)
-
-
 # ---------------------------------------------------------------------------
 # Top-level orchestrator
 # ---------------------------------------------------------------------------
 
 def run_all(results_root: Path,
             *, baseline_method: str = "dspy_modular_gpt-oss",
-            n_boot: int = 2000) -> dict[str, Path]:
+            n_boot: int = 2000,
+            device: str = "cpu") -> dict[str, Path]:
     """Read ``ablation_grid.csv`` from ``results_root`` and write all stats CSVs.
 
     Returns a mapping of stage → output path.
+
+    ``device`` (``cpu`` | ``cuda`` | ``mps`` | ``auto``) routes the
+    paired-bootstrap call sites through :mod:`ci_gpu`. Default is
+    ``cpu`` (the safety-net path).
     """
     results_root = Path(results_root)
     grid_df = _load_grid(results_root)
     out: dict[str, Path] = {}
 
     deltas = paired_deltas_vs_baseline(grid_df, baseline_method=baseline_method,
-                                       n_boot=n_boot)
+                                       n_boot=n_boot, device=device)
     if not deltas.empty:
         path = results_root / "ablation_paired_deltas.csv"
         deltas.to_csv(path, index=False)
@@ -821,12 +945,12 @@ def run_all(results_root: Path,
         effect.to_csv(path, index=False)
         out["effect_sizes"] = path
 
-    cc_mismatch = cancer_category_mismatch_stats(grid_df)
-    if not cc_mismatch.empty:
-        path = results_root / "ablation_cancer_category_mismatch.csv"
-        cc_mismatch.to_csv(path, index=False)
-        out["cancer_category_mismatch"] = path
-
+    # NOTE: ``cancer_category_mismatch_stats`` was removed in the
+    # cascade-conformance migration. Cascade gating means Stage-C only
+    # emits when Stage B was correct, so the per-case mismatch rate is
+    # always 0.0 for Stage-C rows — the metric collapsed to Stage B
+    # accuracy, which is now reported by the ``compare`` subcommand's
+    # ``chapter2_organ_classification/comparison.csv``.
     return out
 
 

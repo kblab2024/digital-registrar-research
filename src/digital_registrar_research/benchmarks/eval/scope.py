@@ -150,7 +150,94 @@ FAIR_SCOPE: list[str] = [
     # these are scored conditionally in metrics.py via BREAST_BIOMARKERS.
 ]
 
-BREAST_BIOMARKERS: list[str] = ["er", "pr", "her2"]
+BREAST_BIOMARKERS: list[str] = ["er", "pr", "her2", "ki67"]
+
+
+# --- Cascade-wide eval exclusions -------------------------------------------
+#
+# Fields removed from EVERY metric in the cascade redesign — not just
+# stat-test layer. Replaces the old `STATS_EXCLUDED_FIELDS` which only
+# filtered at the test layer.
+
+# Top-level scalar fields inside `cancer_data` that are never scored.
+# These are version metadata or unstable free-text that should not appear
+# in any per-field accuracy table.
+EVAL_EXCLUDED_FIELDS: frozenset[str] = frozenset({
+    "ajcc_version",      # version metadata
+    "treatment_effect",  # free-text in practice; not a categorical endpoint
+})
+
+# Inner keys of nested list-of-dicts fields. Applied PER LIST ELEMENT,
+# i.e. for each item in `cancer_data.<field>[*]` the listed inner keys
+# are stripped before per-attribute comparison.
+#
+# Format: { "cancer_data.<field>[*].<inner_key>": "<reason>" }
+# The matcher only cares about the (field, inner_key) tuples — the path
+# notation is for human readability and grep-ability.
+EVAL_EXCLUDED_NESTED_INNER_KEYS: dict[str, str] = {
+    "cancer_data.margins[*].description":
+        "free-text — annotators wrote 'medial', 'Negative', etc.; not a categorical endpoint",
+    "cancer_data.regional_lymph_node[*].station_name":
+        "free-text identifier; aggregated-by-category scoring replaces bipartite-on-station_name",
+}
+
+
+def _build_inner_key_index() -> dict[str, frozenset[str]]:
+    """Index `EVAL_EXCLUDED_NESTED_INNER_KEYS` by field for fast lookup."""
+    out: dict[str, set[str]] = {}
+    prefix = "cancer_data."
+    for path in EVAL_EXCLUDED_NESTED_INNER_KEYS:
+        if not path.startswith(prefix):
+            continue
+        rest = path[len(prefix):]
+        # rest looks like "<field>[*].<inner>"
+        if "[*]." not in rest:
+            continue
+        field, inner = rest.split("[*].", 1)
+        out.setdefault(field, set()).add(inner)
+    return {k: frozenset(v) for k, v in out.items()}
+
+
+EXCLUDED_INNER_KEYS_BY_FIELD: dict[str, frozenset[str]] = _build_inner_key_index()
+
+
+# Biomarker whitelist by organ. Any biomarker entry whose
+# `biomarker_category` (after `normalize`) is not in the organ's whitelist
+# is dropped from gold AND prediction before scoring, on both sides.
+# This keeps the metric focused on the eight clinically-acted-on
+# biomarkers and ignores spurious or out-of-scope categories.
+BIOMARKER_WHITELIST: dict[str, frozenset[str]] = {
+    "breast":     frozenset({"er", "pr", "her2", "ki67"}),
+    "colorectal": frozenset({"msh2", "msh6", "pms2", "mlh1"}),
+}
+
+
+def biomarkers_for_organ(organ: str | None) -> frozenset[str]:
+    """Return the whitelisted biomarker categories for ``organ``.
+
+    Returns an empty frozenset for organs with no biomarker scoring
+    (e.g. lung, liver, thyroid) or for ``None`` / "others".
+    """
+    if not organ:
+        return frozenset()
+    return BIOMARKER_WHITELIST.get(organ, frozenset())
+
+
+# --- Deprecated: backward-compat alias for STATS_EXCLUDED_FIELDS -------------
+#
+# The cascade redesign replaces this single flat set with the more
+# expressive `EVAL_EXCLUDED_FIELDS` (top-level scalars) +
+# `EVAL_EXCLUDED_NESTED_INNER_KEYS` (per-list-element inner keys). The
+# alias below is the union of both sources so legacy callers that
+# filter a flat `field` column keep working until they migrate.
+#
+# DEPRECATED: do not introduce new uses. Migrate to the two new
+# structures.
+
+STATS_EXCLUDED_FIELDS: frozenset[str] = frozenset(
+    EVAL_EXCLUDED_FIELDS
+    | {inner for inners in EXCLUDED_INNER_KEYS_BY_FIELD.values() for inner in inners}
+)
 
 
 # --- Accessors ---------------------------------------------------------------
@@ -250,6 +337,12 @@ __all__ = [
     "LIST_OF_LITERALS_FIELDS",
     "FAIR_SCOPE",
     "BREAST_BIOMARKERS",
+    "EVAL_EXCLUDED_FIELDS",
+    "EVAL_EXCLUDED_NESTED_INNER_KEYS",
+    "EXCLUDED_INNER_KEYS_BY_FIELD",
+    "BIOMARKER_WHITELIST",
+    "biomarkers_for_organ",
+    "STATS_EXCLUDED_FIELDS",  # deprecated, see definition for migration target
     "get_allowed_values",
     "get_categorical_fields",
     "get_bool_fields",

@@ -28,10 +28,18 @@ from pathlib import Path
 import pandas as pd
 
 from .scope import (
+    BIOMARKER_WHITELIST,
     BREAST_BIOMARKERS,
+    EVAL_EXCLUDED_FIELDS,
+    EXCLUDED_INNER_KEYS_BY_FIELD,
     FAIR_SCOPE,
+    LIST_OF_LITERALS_FIELDS,
     NESTED_LIST_FIELDS,
+    SPAN_FIELDS,
+    biomarkers_for_organ,
     get_field_value,
+    get_list_of_literals_fields,
+    get_organ_scoreable_fields,
 )
 
 ScopeArg = Iterable[str] | Callable[[str | None], Iterable[str]] | None
@@ -59,13 +67,55 @@ def is_attempted(pred_annotation: dict, field: str) -> bool:
     return field in cd
 
 
-def field_correct(gold: dict, pred: dict, field: str) -> bool | None:
-    """Returns True/False on attempted predictions, None on non-attempts."""
+def _normalize_set(v) -> frozenset:
+    """Coerce a list-of-literals value to a normalised frozenset.
+
+    ``None`` and the empty list both map to ``frozenset()`` so they
+    compare equal — matches the ``outcome._normalize_set`` semantics
+    (replicated here to avoid a metrics→outcome import cycle).
+    """
+    if v is None:
+        return frozenset()
+    if isinstance(v, list):
+        return frozenset(normalize(x) for x in v if x is not None)
+    return frozenset({normalize(v)})
+
+
+def _is_list_of_literals_field(field: str, organ: str | None) -> bool:
+    """Organ-aware lookup of list-of-literals field membership.
+
+    The same name can be a list-of-literals in one organ and a regular
+    categorical in another (e.g. ``tumor_extent`` is a list-of-literals
+    only for liver). When ``organ`` is None, fall back to the
+    cross-organ union.
+    """
+    if organ is None:
+        return field in LIST_OF_LITERALS_FIELDS
+    return field in get_list_of_literals_fields(organ)
+
+
+def field_correct(
+    gold: dict, pred: dict, field: str, *, organ: str | None = None,
+) -> bool | None:
+    """Returns True/False on attempted predictions, None on non-attempts.
+
+    Field-kind dispatch:
+      * list-of-literals (organ-aware) — unordered set equality.
+      * span / numeric in :data:`scope.SPAN_FIELDS` — ±2 mm tolerance
+        when both sides are numeric, else exact (``None == None``).
+      * everything else — string equality after :func:`normalize`.
+
+    ``organ`` lets the cascade scorer pick the right enum-vs-list
+    interpretation. When omitted, falls back to ``gold.cancer_category``.
+    """
     if not is_attempted(pred, field):
         return None
     g = get_field_value(gold, field)
     p = get_field_value(pred, field)
-    if field == "tumor_size" and isinstance(g, (int, float)) and isinstance(p, (int, float)):
+    organ_arg = organ if organ is not None else normalize(gold.get("cancer_category"))
+    if _is_list_of_literals_field(field, organ_arg):
+        return _normalize_set(g) == _normalize_set(p)
+    if field in SPAN_FIELDS and isinstance(g, (int, float)) and isinstance(p, (int, float)):
         return abs(g - p) <= NUMERIC_TOLERANCE_MM
     return normalize(g) == normalize(p)
 
@@ -75,7 +125,11 @@ def field_correct(gold: dict, pred: dict, field: str) -> bool | None:
 NESTED_KEY = {
     "margins": "margin_category",
     "biomarkers": "biomarker_category",
-    "regional_lymph_node": "station_name",
+    # `regional_lymph_node` is intentionally absent: cascade redesign
+    # replaced bipartite-on-station_name with category-aggregation
+    # scoring (see :func:`nested_metrics.score_lymph_nodes`). Callers
+    # that score lymph nodes must invoke that function directly, not
+    # the bipartite ``match_nested_list``.
 }
 
 
@@ -144,6 +198,91 @@ def match_nested_list(gold_annotation: dict, pred_annotation: dict,
     return {"tp": tp, "fp": fp, "fn": fn, "f1": f1}
 
 
+# --- Filtered-list wrapper (cascade redesign) -------------------------------
+
+def _strip_excluded_inner(items: list, field: str) -> list[dict]:
+    """Strip excluded inner keys from each list item for ``field``.
+
+    Applied per-list-element so the bipartite matcher only sees keys
+    that are legitimate scoring endpoints. Non-dict items pass through
+    unchanged.
+    """
+    excluded = EXCLUDED_INNER_KEYS_BY_FIELD.get(field, frozenset())
+    if not excluded:
+        return list(items) if isinstance(items, list) else []
+    out: list[dict] = []
+    for it in items:
+        if isinstance(it, dict):
+            out.append({k: v for k, v in it.items() if k not in excluded})
+        else:
+            out.append(it)
+    return out
+
+
+def _filter_biomarkers_by_whitelist(items: list, organ: str | None) -> list[dict]:
+    """Drop biomarker entries whose ``biomarker_category`` is not in
+    the organ's whitelist.
+
+    Applies symmetrically to gold and prediction. An entry whose
+    category is not in the whitelist becomes invisible to the scorer —
+    neither rewarded nor penalised. Non-dict items are dropped.
+    """
+    if not isinstance(items, list):
+        return []
+    whitelist = biomarkers_for_organ(organ)
+    if not whitelist:
+        return []
+    return [
+        it for it in items
+        if isinstance(it, dict)
+        and normalize(it.get("biomarker_category")) in whitelist
+    ]
+
+
+def match_nested_list_filtered(
+    gold_annotation: dict,
+    pred_annotation: dict,
+    field: str,
+    *,
+    organ: str | None = None,
+) -> dict:
+    """Bipartite F1 over a nested list-of-dicts field, with cascade-wide
+    exclusions applied first.
+
+    For ``field == "biomarkers"`` the per-organ whitelist filters both
+    sides. For every field, excluded inner keys
+    (:data:`scope.EXCLUDED_INNER_KEYS_BY_FIELD`) are stripped from each
+    item before matching.
+
+    Returns the same ``{tp, fp, fn, f1}`` shape as
+    :func:`match_nested_list`. ``regional_lymph_node`` is rejected at
+    the boundary — callers must use
+    :func:`nested_metrics.score_lymph_nodes` for that field.
+    """
+    if field == "regional_lymph_node":
+        raise ValueError(
+            "regional_lymph_node uses category-aggregation scoring; "
+            "call nested_metrics.score_lymph_nodes instead."
+        )
+
+    gold_list = get_field_value(gold_annotation, field) or []
+    pred_list = get_field_value(pred_annotation, field) or []
+
+    if field == "biomarkers":
+        gold_list = _filter_biomarkers_by_whitelist(gold_list, organ)
+        pred_list = _filter_biomarkers_by_whitelist(pred_list, organ)
+
+    gold_list = _strip_excluded_inner(gold_list, field)
+    pred_list = _strip_excluded_inner(pred_list, field)
+
+    # Build a wrapper "annotation" so the existing matcher can read via
+    # ``get_field_value``. Top-level placement is fine because the matcher
+    # only consults ``get_field_value(annotation, field)``.
+    g_wrap = {field: gold_list}
+    p_wrap = {field: pred_list}
+    return match_nested_list(g_wrap, p_wrap, field)
+
+
 # --- Per-case + aggregation --------------------------------------------------
 
 def _resolve_scope(scope: ScopeArg, gold: dict) -> list[str]:
@@ -155,48 +294,176 @@ def _resolve_scope(scope: ScopeArg, gold: dict) -> list[str]:
 
 
 def score_case(gold: dict, pred: dict, scope: ScopeArg = None) -> dict:
-    """{field: True/False/None, '_nested': {field: f1dict}}
+    """Score a single (gold, pred) pair under cascade gating.
 
-    With ``scope=None`` (default) scores ``FAIR_SCOPE`` plus the
-    breast-biomarker columns and nested-list F1s — the original
-    publication scope. Pass a flat iterable of field names or a
-    ``(cancer_category) -> set[str]`` callable (e.g. ``bert_scope_for_organ``)
-    to score a custom subset; in that mode breast biomarkers and nested
-    fields are skipped (they are out of scope for the BERT comparison).
+    Returns a dict with the original flat shape plus three cascade
+    metadata keys:
+
+        out["stage_a"]          {"correct": bool/None, "gold": ..., "pred": ...}
+        out["stage_b"]          same; absent if Stage A failed.
+        out["stage_c_eligible"] bool; True iff Stage A and B both passed
+                                AND neither side is "others".
+        out[<field>]            field-level correctness for Stage-C scoring,
+                                only populated when ``stage_c_eligible``.
+        out["_nested"]          {field: {tp, fp, fn, f1}} for the nested
+                                fields (margins / biomarkers); LN is
+                                NOT here — callers invoke
+                                :func:`nested_metrics.score_lymph_nodes`
+                                directly so the cascade reductions can
+                                consume the richer dict it returns.
+        out["others_disposition"] one of "none", "gold_others", "pred_others",
+                                    "both_others".
+
+    Callers (cascade orchestrator, ablation aggregator) consume the
+    metadata to decide which rows to emit at each stage. Legacy
+    callers that pass ``scope=...`` get the legacy flat behavior with
+    no cascade gating — the cascade is opt-in via ``scope=None``.
+
+    The ``scope`` parameter retains its old semantics for backwards
+    compatibility:
+      * ``None`` (default) — full cascade with gating, exclusions, and
+        biomarker whitelist.
+      * iterable of field names — score every field on the list, no
+        cascade gating, no biomarker whitelisting (used by the
+        ClinicalBERT comparison).
+      * callable — same, but the callable returns the field set per
+        ``cancer_category``.
     """
+    if scope is not None:
+        # Legacy non-cascade path.
+        return _score_case_legacy(gold, pred, scope)
+
+    return _score_case_cascade(gold, pred)
+
+
+def _score_case_legacy(gold: dict, pred: dict, scope: ScopeArg) -> dict:
+    """Backwards-compatible flat scoring (no cascade gating)."""
     out: dict = {"_nested": {}}
     fields = _resolve_scope(scope, gold)
     for field in fields:
         out[field] = field_correct(gold, pred, field)
+    return out
 
-    if scope is None:
-        # Breast biomarkers: only score if gold cancer_category == breast.
-        if normalize(gold.get("cancer_category")) == "breast":
-            gold_bm = {
-                normalize(b.get("biomarker_category")): b
-                for b in (get_field_value(gold, "biomarkers") or [])
-            }
-            pred_bm = {
-                normalize(b.get("biomarker_category")): b
-                for b in (get_field_value(pred, "biomarkers") or [])
-            }
-            for cat in BREAST_BIOMARKERS:
-                g = gold_bm.get(cat)
-                p = pred_bm.get(cat)
-                if p is None:
-                    out[f"biomarker_{cat}"] = None
-                elif g is None:
-                    out[f"biomarker_{cat}"] = False
-                else:
-                    out[f"biomarker_{cat}"] = (
-                        normalize(g.get("expression")) == normalize(p.get("expression"))
-                    )
 
-        # Nested fields: f1 scores (generative-only — N/A for classifier/rules
-        # is indicated by absent key).
-        for field in NESTED_LIST_FIELDS:
-            if is_attempted(pred, field):
-                out["_nested"][field] = match_nested_list(gold, pred, field)
+def _score_case_cascade(gold: dict, pred: dict) -> dict:
+    """Cascade-gated scoring.
+
+    Stage A: ``cancer_excision_report``. Failure halts the cascade.
+    Stage B: ``cancer_category``. Failure halts. Both sides "others"
+        is recorded as a Stage-B match but does NOT advance to Stage C.
+    Stage C: ``cancer_data`` fields after exclusions and biomarker
+        whitelist. Only runs when both gates passed and neither side
+        is "others".
+    """
+    out: dict = {"_nested": {}}
+
+    # --- Stage A: eligibility triage ---
+    stage_a_correct = field_correct(gold, pred, "cancer_excision_report")
+    out["stage_a"] = {
+        "correct": stage_a_correct,
+        "gold": gold.get("cancer_excision_report"),
+        "pred": pred.get("cancer_excision_report"),
+    }
+    out["cancer_excision_report"] = stage_a_correct
+
+    # Determine "others" disposition before deciding whether to run Stage C.
+    g_org = normalize(gold.get("cancer_category"))
+    p_org = normalize(pred.get("cancer_category"))
+    if g_org == "others" and p_org == "others":
+        others_disposition = "both_others"
+    elif g_org == "others":
+        others_disposition = "gold_others"
+    elif p_org == "others":
+        others_disposition = "pred_others"
+    else:
+        others_disposition = "none"
+    out["others_disposition"] = others_disposition
+
+    # If Stage A failed (or wasn't attempted), stop here.
+    if stage_a_correct is None or not stage_a_correct:
+        out["stage_c_eligible"] = False
+        return out
+
+    # If gold says ineligible and pred agreed, Stage A passed but there's
+    # no cancer_data to score.
+    if not bool(gold.get("cancer_excision_report")):
+        out["stage_c_eligible"] = False
+        return out
+
+    # --- Stage B: organ classification ---
+    stage_b_correct = field_correct(gold, pred, "cancer_category")
+    out["stage_b"] = {
+        "correct": stage_b_correct,
+        "gold": gold.get("cancer_category"),
+        "pred": pred.get("cancer_category"),
+    }
+    out["cancer_category"] = stage_b_correct
+
+    if stage_b_correct is None or not stage_b_correct:
+        out["stage_c_eligible"] = False
+        return out
+
+    # Both-"others" passes Stage B (the labels match) but cannot enter
+    # Stage C — the schema for "others" cancers is not implemented.
+    if others_disposition != "none":
+        out["stage_c_eligible"] = False
+        return out
+
+    # --- Stage C: cancer_data field extraction ---
+    out["stage_c_eligible"] = True
+    organ = g_org
+
+    # Use the FULL per-organ scope, not FAIR_SCOPE. FAIR_SCOPE is only
+    # the head-to-head comparison set used by the legacy ClinicalBERT
+    # baselines; it deliberately excludes most categorical / bool /
+    # span / list-of-literals fields. Cascade chapter 3 must score
+    # everything in the schema for the organ.
+    fields = list(get_organ_scoreable_fields(organ).keys())
+    for field in fields:
+        # The two cascade gate fields are scored above; not part of Stage C.
+        if field in ("cancer_excision_report", "cancer_category"):
+            continue
+        if field in EVAL_EXCLUDED_FIELDS:
+            continue
+        out[field] = field_correct(gold, pred, field, organ=organ)
+
+    # Per-organ biomarkers (whitelist applied via biomarkers_for_organ).
+    whitelist = biomarkers_for_organ(organ)
+    if whitelist:
+        gold_bm = {
+            normalize(b.get("biomarker_category")): b
+            for b in (get_field_value(gold, "biomarkers") or [])
+            if isinstance(b, dict)
+        }
+        pred_bm = {
+            normalize(b.get("biomarker_category")): b
+            for b in (get_field_value(pred, "biomarkers") or [])
+            if isinstance(b, dict)
+        }
+        for cat in whitelist:
+            g = gold_bm.get(cat)
+            p = pred_bm.get(cat)
+            if p is None:
+                out[f"biomarker_{cat}"] = None
+            elif g is None:
+                out[f"biomarker_{cat}"] = False
+            else:
+                out[f"biomarker_{cat}"] = (
+                    normalize(g.get("expression")) == normalize(p.get("expression"))
+                )
+
+    # --- Nested-list F1 (margins, biomarkers; LN handled outside) ---
+    for field in NESTED_LIST_FIELDS:
+        if field == "regional_lymph_node":
+            # Cascade reductions call nested_metrics.score_lymph_nodes
+            # directly to consume the richer per-group return dict.
+            continue
+        if not is_attempted(pred, field):
+            continue
+        out["_nested"][field] = match_nested_list_filtered(
+            gold, pred, field, organ=organ,
+        )
+
     return out
 
 

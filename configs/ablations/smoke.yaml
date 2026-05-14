@@ -18,7 +18,9 @@ cells: ["b", "c", "b6", "c4", "c6", "f2", "f3"]
 cell_a:
   source_run: null                 # null → most recent completed pipeline run
 cell_b:
-  skip_jsonize: false
+  # No knobs — the no-`ReportJsonize` variant is its own cell now
+  # (`b_no_jsonize` / `dspy_monolithic_no_jsonize`).
+  {}
 cell_c:
   api_base: null                   # null → http://localhost:11434/v1
 cell_b4:

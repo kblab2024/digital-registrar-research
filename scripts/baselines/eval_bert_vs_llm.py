@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Compare ClinicalBERT vs LLM predictions side-by-side.
 
-Runs ``scripts.eval.cli non_nested`` for both methods (BERT defaults to
-the merged head), then joins the outputs with
-``scripts.eval.compare.run_compare`` into a wide-form CSV + pairwise
+Runs ``scripts.eval.cli cascade`` for both methods (BERT defaults to
+the merged head), then joins the outputs with ``scripts.eval.cli
+compare`` into chapter1-5 comparison folders + pairwise
 paired-bootstrap deltas.
 
 Usage
